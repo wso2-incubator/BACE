@@ -40,6 +40,35 @@ def extract_function_block(code_string: str) -> str:
     return '\n'.join(function_lines)
 
 
+def remove_comments(code):
+    """
+    Remove single line (#) and multiline (''' or \"\"\") comments from Python code.
+    """
+    # Remove multiline comments (triple quotes)
+    # This pattern matches ''' or """ followed by any content until the closing quotes
+    code = re.sub(r'(\'\'\'[\s\S]*?\'\'\'|\"\"\"[\s\S]*?\"\"\")', '', code)
+
+    # Remove single line comments (# comments)
+    # This pattern matches # and everything after it until the end of line
+    code = re.sub(r'#.*?$', '', code, flags=re.MULTILINE)
+
+    # Clean up extra whitespace and empty lines
+    lines = code.split('\n')
+    cleaned_lines = []
+
+    for line in lines:
+        stripped = line.rstrip()  # Remove trailing whitespace
+        # Keep line if not empty or previous line wasn't empty
+        if stripped or (cleaned_lines and cleaned_lines[-1].strip()):
+            cleaned_lines.append(stripped)
+
+    # Remove trailing empty lines
+    while cleaned_lines and not cleaned_lines[-1].strip():
+        cleaned_lines.pop()
+
+    return '\n'.join(cleaned_lines)
+
+
 def generate_one_completion(prompt: str, client: LLMClient) -> str:
     response: str = client.generate(prompt)
     pattern = re.compile(r'```(?:[Pp]ython|[Pp]y)\s*([\s\S]+?)\s*```')
@@ -52,7 +81,7 @@ def generate_one_completion(prompt: str, client: LLMClient) -> str:
         code = response
 
     # Extract the function block from def to return
-    completion_code: str = extract_function_block(code)
+    completion_code: str = remove_comments(extract_function_block(code))
     print("Generated Completion Code:\n", completion_code)  # Debug print
     return completion_code
 
