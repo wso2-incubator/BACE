@@ -58,10 +58,11 @@ class CodeProcessor:
             return match.group(1)
         return ""
 
-    def _find_functions_and_imports(self, lines: List[str]) -> Tuple[List[str], Dict[str, Tuple[int, int]]]:
+    def _find_functions_and_imports(self, lines: List[str]) -> Tuple[List[str], Dict[str, Tuple[int, int]], Dict[str, Tuple[int, int]]]:
         """Find all function definitions and import statements."""
-        import_lines = []
-        function_definitions = {}
+        import_lines: List[str] = []
+        function_definitions: Dict[str, Tuple[int, int]] = {}
+        class_definitions: Dict[str, Tuple[int, int]] = {}
 
         i = 0
         while i < len(lines):
@@ -71,6 +72,18 @@ class CodeProcessor:
             if stripped_line.startswith(('import ', 'from ')):
                 import_lines.append(lines[i])
                 i += 1
+                continue
+
+            # Collect Classes
+            if stripped_line.startswith('class '):
+                class_name = stripped_line.split(
+                    'class ')[1].split('(')[0].strip()
+                start_idx = i
+
+                # Find end of this class
+                end_idx = self._find_function_end(lines, i)
+                class_definitions[class_name] = (start_idx, end_idx)
+                i = end_idx + 1
                 continue
 
             # Find function definitions
@@ -86,7 +99,7 @@ class CodeProcessor:
             else:
                 i += 1
 
-        return import_lines, function_definitions
+        return import_lines, function_definitions, class_definitions
 
     def _find_function_end(self, lines: List[str], start_idx: int) -> int:
         """Find the end index of a function definition."""
@@ -139,7 +152,7 @@ class CodeProcessor:
     def extract_function_with_helpers(self, code_string: str, target_function_name: str) -> str:
         """Extract target function body with helper functions and imports."""
         lines = code_string.split('\n')
-        import_lines, function_definitions = self._find_functions_and_imports(
+        import_lines, function_definitions, class_definitions = self._find_functions_and_imports(
             lines)
 
         if target_function_name not in function_definitions:
