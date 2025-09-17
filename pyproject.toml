@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "APR-research-wso2"
+version = "0.1.0"
+description = "Automated Program Repair using LLMs"
+readme = "README.md"
+requires-python = ">=3.8"
+
+# List all external dependencies here
+dependencies = [
+    "notebook",
+    "pandas",
+]
+
+[tool.setuptools.packages.find]
+# This is the key part: it tells the installer to look for packages inside the 'src' directory
+where = ["src"]

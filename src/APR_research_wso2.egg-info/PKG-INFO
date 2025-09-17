@@ -1,0 +1,93 @@
+Metadata-Version: 2.4
+Name: APR-research-wso2
+Version: 0.1.0
+Summary: Automated Program Repair using LLMs
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: notebook
+Requires-Dist: pandas
+
+# APR - Automated Program Repair
+
+A multi-agent system for automated program repair and code generation using large language models.
+
+## Installation
+
+### From source (development mode)
+
+```bash
+git clone https://github.com/kaushithamsilva/APR.git
+cd APR
+
+# Install the package with human-eval dependency
+pip install -e .
+
+# Note: The human-eval package will be automatically installed from GitHub
+# If you have a local copy in ./human-eval/, you can also install it separately:
+# pip install -e ./human-eval/
+```
+
+### With optional dependencies
+
+```bash
+# For development
+pip install -e ".[dev]"
+
+# For notebooks
+pip install -e ".[notebooks]"
+
+# For OpenAI support
+pip install -e ".[openai]"
+
+# All dependencies
+pip install -e ".[dev,notebooks,openai]"
+```
+
+### Human-Eval Dependency
+
+This project depends on the [human-eval](https://github.com/openai/human-eval) package for code evaluation. You have two options:
+
+1. **Automatic installation** (recommended): The human-eval package will be installed automatically from GitHub when you install this package.
+
+2. **Local installation**: If you have a local copy of human-eval in your project:
+
+   ```bash
+   pip install -e ./human-eval/
+   ```
+
+## Quick Start
+
+```python
+# Import the main components
+from apr import CodeProcessor, LLMClient
+
+# Initialize components
+processor = CodeProcessor()
+client = LLMClient("ollama", "qwen2.5-coder:7b")
+
+# Use them in your code
+problem = '''def factorial(n: int) -> int:
+    """Calculate factorial of n."""
+    pass'''
+
+function_name = processor.extract_function_name_from_prompt(problem)
+print(f"Function name: {function_name}")
+```
+
+## Project Structure
+
+```
+src/
+├── common/              # Shared utilities
+│   ├── code_processor.py
+│   ├── llm_client.py
+│   └── config.py
+└── agentcoder_plus/     # AgentCoder+ implementation
+    ├── agents/
+    ├── memory/
+    └── workflows/
+```
+
+## License
+
+MIT License
