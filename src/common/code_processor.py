@@ -7,7 +7,7 @@ class CodeProcessor:
     A class to process and extract relevant code segments from a given code string.
     """
 
-    def extract_function_name_from_prompt(self, problem_prompt: str) -> str:
+    def extract_function_name_from_problem(self, problem_prompt: str) -> str:
         """
         Extracts the function name from the problem prompt.
         """
