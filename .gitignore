@@ -1,2 +1,3 @@
 *.pyc
 human-eval
+**/__pycache__
