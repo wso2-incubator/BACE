@@ -49,14 +49,14 @@ class CodeProcessor:
 
     def extract_code_block_from_response(self, response: str) -> str:
         """
-        Extracts the first Python code block from the LLM response.
-        If no code block is found, returns the entire response.
+        Extracts the first Python code block (```python ... ```) from the LLM response.
+        If no Python code block is found, returns an empty string.
         """
-        pattern = re.compile(r'```(?:[Pp]ython|[Pp]y)?\s*([\s\S]+?)\s*```')
+        pattern = re.compile(r'```[Pp]ython\s*([\s\S]+?)\s*```')
         match = pattern.search(response)
         if match:
             return match.group(1)
-        return response
+        return ""
 
     def _find_functions_and_imports(self, lines: List[str]) -> Tuple[List[str], Dict[str, Tuple[int, int]]]:
         """Find all function definitions and import statements."""
