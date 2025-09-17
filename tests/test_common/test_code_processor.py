@@ -161,6 +161,24 @@ def solution2(n):
         assert "solution1" in result
         assert "solution2" not in result
 
+    def test_extract_code_block_from_response_from_multile_non_python_blocks(self):
+        """Test extracting from multiple non-python code blocks."""
+        response = '''Here are two code blocks:
+```java
+public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+    }
+}
+```
+```python
+def solution(n):
+    return n + 1
+``` '''
+        result = self.processor.extract_code_block_from_response(response)
+        assert "solution" in result
+        assert "HelloWorld" not in result
+
     def test_extract_code_block_from_response_empty_string(self):
         """Test with empty string."""
         result = self.processor.extract_code_block_from_response("")
@@ -244,3 +262,18 @@ def calculate_distance(point1, point2):
         result = self.processor.extract_function_with_helpers(
             "", "some_function")
         assert result == ""
+
+    def test__find_functions_and_imports_empty_code(self):
+        """Test with empty code."""
+        result = self.processor._find_functions_and_imports(" ")
+        assert result == ([], {})
+
+    def test__find_functions_and_imports_function_only(self):
+        """Test with code that has only one funciton"""
+        code = "''def foo(): pass'''"
+        result = self.processor._find_functions_and_imports(code.split('\n'))
+        assert result == ([], {'foo': (0, 0)})
+
+
+if __name__ == "__main__":
+    pytest.main()
