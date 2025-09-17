@@ -1,12 +1,13 @@
+from tqdm import tqdm
 
 from human_eval.data import write_jsonl, read_problems
-from LLMClient import LLMClient
-from code_processor import CodeProcessor
+from common.llm_client import LLMClient
+from common.code_processor import CodeProcessor
 
 
 def generate_one_completion(prompt: str, client: LLMClient, code_processor: CodeProcessor) -> str:
     # Extract the target function name from the prompt
-    target_function_name: str = code_processor.extract_function_name_from_prompt(
+    target_function_name: str = code_processor.extract_function_name_from_problem(
         prompt)
     if not target_function_name:
         raise ValueError("No function definition found in the prompt.")
