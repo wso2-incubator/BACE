@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 
 class CodeProcessor:
@@ -58,8 +58,8 @@ class CodeProcessor:
             return match.group(1)
         return ""
 
-    def _find_functions_and_imports(self, lines: List[str]) -> Tuple[List[str], Dict[str, Tuple[int, int]], Dict[str, Tuple[int, int]]]:
-        """Find all function definitions and import statements."""
+    def _parse_code_structure(self, lines: List[str]) -> Dict[str, Union[List[str], Dict[str, Tuple[int, int]]]]:
+        """Parse code lines to find all import statements, function definitions, and class definitions."""
         import_lines: List[str] = []
         function_definitions: Dict[str, Tuple[int, int]] = {}
         class_definitions: Dict[str, Tuple[int, int]] = {}
@@ -99,7 +99,11 @@ class CodeProcessor:
             else:
                 i += 1
 
-        return import_lines, function_definitions, class_definitions
+        return {
+            'import_lines': import_lines,
+            'function_definitions': function_definitions,
+            'class_definitions': class_definitions
+        }
 
     def _find_function_end(self, lines: List[str], start_idx: int) -> int:
         """Find the end index of a function definition."""
@@ -152,8 +156,9 @@ class CodeProcessor:
     def extract_function_with_helpers(self, code_string: str, target_function_name: str) -> str:
         """Extract target function body with helper functions and imports."""
         lines = code_string.split('\n')
-        import_lines, function_definitions, class_definitions = self._find_functions_and_imports(
-            lines)
+        result = self._parse_code_structure(lines)
+        import_lines = result['import_lines']
+        function_definitions = result['function_definitions']
 
         if target_function_name not in function_definitions:
             return ""
@@ -171,3 +176,64 @@ class CodeProcessor:
             import_lines, helper_functions, function_definitions,
             target_body_lines, lines
         )
+
+    def extract_class_block(self, code_string: str) -> Optional[str]:
+        """Extract the first class block from the code string."""
+        lines = code_string.split('\n')
+        result = self._find_functions_and_imports(lines)
+        class_definitions = result['class_definitions']
+
+        if not class_definitions:
+            return None
+
+        # Get the first class defined
+        first_class_name = next(iter(class_definitions))
+        class_start, class_end = class_definitions[first_class_name]
+        class_lines = lines[class_start:class_end + 1]
+
+        return '\n'.join(class_lines)
+
+    def build_test_script(self, programmer_code: str, tester_code: str) -> str:
+        """Combine programmer and tester code into a single test script."""
+        script_lines: List[str] = []
+        programmer_code_structure = self._parse_code_structure(
+            programmer_code.split('\n'))
+        tester_code_structure = self._parse_code_structure(
+            tester_code.split('\n'))
+
+        # Handle Imports
+        programmer_imports: List[str] = programmer_code_structure['import_lines']
+        tester_imports: List[str] = tester_code_structure['import_lines']
+
+        # Combine and deduplicate imports
+        all_imports = list(dict.fromkeys(programmer_imports + tester_imports))
+        if all_imports:
+            script_lines.extend(all_imports)
+            script_lines.append('')  # Add a blank line after imports
+
+        # Add programmer code
+        script_lines.append('# Programmer Code')
+
+        # handling functions and helper function if any
+        programmer_functions = programmer_code_structure['function_definitions']
+        for func_name, (start, end) in programmer_functions.items():
+            func_lines = programmer_code.split('\n')[start:end + 1]
+            script_lines.extend(func_lines)
+            script_lines.append('')  # Blank line after each function
+
+        # Add tester code
+        script_lines.append('# Tester Code')
+
+        # Adding the tester classes if any
+        tester_classes = tester_code_structure['class_definitions']
+        for class_name, (start, end) in tester_classes.items():
+            class_lines = tester_code.split('\n')[start:end + 1]
+            script_lines.extend(class_lines)
+            script_lines.append('')  # Blank line after each class
+
+        # Add if __name__ == "__main__" block by default
+        script_lines.append('if __name__ == "__main__":')
+        script_lines.append('    unittest.main()')
+        script_lines.append('')  # Blank line at the end
+
+        return '\n'.join(script_lines)

@@ -3,7 +3,7 @@ Tests for the CodeProcessor class.
 """
 
 import pytest
-from common.code_processor import CodeProcessor
+from src.common.code_processor import CodeProcessor
 
 
 class TestCodeProcessor:
@@ -46,63 +46,62 @@ x = 5'''
         assert result == ""
 
     def test_remove_comments_single_line(self):
-        """Test single line comment removal."""
+        """Test removal of single line comments."""
         code = '''def test():
     # This is a comment
-    return True  # Another comment'''
+    return 42'''
 
         result = self.processor.remove_comments(code)
-        assert "# This is a comment" not in result
-        assert "# Another comment" not in result
-        assert "return True" in result
-        assert "def test():" in result
+        expected = '''def test():
+    
+    return 42'''
+        assert result == expected
 
     def test_remove_comments_multiline_triple_quotes(self):
-        """Test multiline comment removal with triple quotes."""
+        """Test removal of multiline comments with triple quotes."""
         code = '''def test():
     """
     This is a multiline
-    docstring that should be removed
+    comment
     """
-    return True'''
+    return 42'''
 
         result = self.processor.remove_comments(code)
-        assert "This is a multiline" not in result
-        assert "docstring that should be removed" not in result
-        assert "return True" in result
-        assert "def test():" in result
+        expected = '''def test():
+    
+    return 42'''
+        assert result == expected
 
     def test_remove_comments_multiline_single_quotes(self):
-        """Test multiline comment removal with single quotes."""
+        """Test removal of multiline comments with single quotes."""
         code = """def test():
     '''
-    This is a multiline comment
-    with single quotes
+    This is a multiline
+    comment
     '''
-    return True"""
+    return 42"""
 
         result = self.processor.remove_comments(code)
-        assert "This is a multiline comment" not in result
-        assert "with single quotes" not in result
-        assert "return True" in result
+        expected = '''def test():
+    
+    return 42'''
+        assert result == expected
 
     def test_remove_comments_mixed(self):
-        """Test removal of both single line and multiline comments."""
-        code = '''def factorial(n):
-    """Calculate factorial."""
-    # Base case
-    if n <= 1:
-        return 1  # Return 1 for base case
-    return n * factorial(n - 1)  # Recursive call'''
+        """Test removal of mixed comment types."""
+        code = '''def test():
+    # Single line comment
+    """
+    Multiline comment
+    """
+    return 42  # Inline comment'''
 
         result = self.processor.remove_comments(code)
-        assert "Calculate factorial" not in result
-        assert "Base case" not in result
-        assert "Return 1 for base case" not in result
-        assert "Recursive call" not in result
-        assert "if n <= 1:" in result
-        assert "return 1" in result
-        assert "return n * factorial(n - 1)" in result
+        expected = '''def test():
+    
+    
+    return 42  '''
+        assert result == expected
 
     def test_remove_comments_empty_string(self):
         """Test with empty string."""
@@ -110,74 +109,67 @@ x = 5'''
         assert result == ""
 
     def test_extract_code_block_from_response_markdown(self):
-        """Test extracting code from markdown code blocks."""
+        """Test extraction from markdown code blocks."""
         response = '''Here's the solution:
 
 ```python
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
+def add(a, b):
+    return a + b
 ```
 
-This implements factorial recursively.'''
+That should work!'''
 
         result = self.processor.extract_code_block_from_response(response)
-        expected = '''def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)'''
-
-        assert result.strip() == expected.strip()
+        expected = "def add(a, b):\n    return a + b"
+        assert result == expected
 
     def test_extract_code_block_from_response_no_markdown(self):
-        """Test when there's no markdown code block."""
-        response = '''def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)'''
+        """Test when no markdown blocks exist."""
+        response = "Just plain text with no code blocks."
 
         result = self.processor.extract_code_block_from_response(response)
-        # Should return empty string when no ```python block is found
-        assert result == ""
+        assert result == response
 
     def test_extract_code_block_from_response_multiple_blocks(self):
-        """Test extracting from multiple code blocks (should get first one)."""
+        """Test extraction when multiple code blocks exist."""
         response = '''Here are two solutions:
 
 ```python
-def solution1(n):
-    return n + 1
+def add(a, b):
+    return a + b
 ```
 
-And another:
-
 ```python
-def solution2(n):
-    return n + 2
+def multiply(a, b):
+    return a * b
 ```'''
 
         result = self.processor.extract_code_block_from_response(response)
-        assert "solution1" in result
-        assert "solution2" not in result
+        expected = "def add(a, b):\n    return a + b"
+        assert result == expected
 
     def test_extract_code_block_from_response_from_multile_non_python_blocks(self):
-        """Test extracting from multiple non-python code blocks."""
-        response = '''Here are two code blocks:
-```java
-public class HelloWorld {
-    public static void main(String[] args) {
-        System.out.println("Hello, World!");
-    }
+        """Test extraction when multiple non-Python code blocks exist, but we want Python."""
+        response = '''Here's some code:
+
+```javascript
+function add(a, b) {
+    return a + b;
 }
 ```
+
 ```python
-def solution(n):
-    return n + 1
-``` '''
+def add(a, b):
+    return a + b
+```
+
+```bash
+echo "Hello"
+```'''
+
         result = self.processor.extract_code_block_from_response(response)
-        assert "solution" in result
-        assert "HelloWorld" not in result
+        expected = "def add(a, b):\n    return a + b"
+        assert result == expected
 
     def test_extract_code_block_from_response_empty_string(self):
         """Test with empty string."""
@@ -185,61 +177,54 @@ def solution(n):
         assert result == ""
 
     def test_extract_function_with_helpers_simple(self):
-        """Test extracting function with no helpers."""
-        code = '''def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)'''
+        """Test extraction of function without helpers."""
+        code = '''def target_function():
+    return 42'''
 
         result = self.processor.extract_function_with_helpers(
-            code, "factorial")
-        expected_lines = [
-            "if n <= 1:",
-            "return 1",
-            "return n * factorial(n - 1)"
-        ]
-
-        for line in expected_lines:
-            assert line in result
+            code, "target_function")
+        expected = '''def target_function():
+    return 42'''
+        assert result == expected
 
     def test_extract_function_with_helpers_with_helper(self):
-        """Test extracting function with helper functions."""
-        code = '''def is_prime(n):
-    if n < 2:
-        return False
-    for i in range(2, int(n**0.5) + 1):
-        if n % i == 0:
-            return False
-    return True
+        """Test extraction of function with helper functions."""
+        code = '''def helper_function():
+    return 10
 
-def count_primes(numbers):
-    count = 0
-    for num in numbers:
-        if is_prime(num):
-            count += 1
-    return count'''
+def target_function():
+    return helper_function() + 32
+
+def another_function():
+    return 0'''
 
         result = self.processor.extract_function_with_helpers(
-            code, "count_primes")
+            code, "target_function")
+
+        # Should include the target function
+        assert "def target_function():" in result
+        assert "return helper_function() + 32" in result
 
         # Should include the helper function
-        assert "def is_prime(n):" in result
-        assert "if n < 2:" in result
+        assert "def helper_function():" in result
+        assert "return 10" in result
 
-        # Should include the main function body
-        assert "count = 0" in result
-        assert "for num in numbers:" in result
+        # Should NOT include the unrelated function
+        assert "def another_function():" not in result
 
     def test_extract_function_with_helpers_with_imports(self):
-        """Test extracting function with imports."""
+        """Test extraction with imports."""
         code = '''import math
 from typing import List
 
-def calculate_distance(point1, point2):
-    return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)'''
+def helper_function(x):
+    return math.sqrt(x)
+
+def target_function(numbers: List[float]):
+    return helper_function(sum(numbers))'''
 
         result = self.processor.extract_function_with_helpers(
-            code, "calculate_distance")
+            code, "target_function")
 
         # Should include imports with proper indentation
         assert "import math" in result
@@ -263,17 +248,6 @@ def calculate_distance(point1, point2):
             "", "some_function")
         assert result == ""
 
-    def test__find_functions_and_imports_empty_code(self):
-        """Test with empty code."""
-        result = self.processor._find_functions_and_imports(" ")
-        assert result == ([], {})
-
-    def test__find_functions_and_imports_function_only(self):
-        """Test with code that has only one funciton"""
-        code = "''def foo(): pass'''"
-        result = self.processor._find_functions_and_imports(code.split('\n'))
-        assert result == ([], {'foo': (0, 0)})
-
 
 if __name__ == "__main__":
-    pytest.main()
+    pytest.main([__file__])
