@@ -9,8 +9,8 @@ This module provides shared functionality including:
 
 from .code_processor import CodeProcessor
 from .llm_client import LLMClient
-from .sandbox import SafeCodeSandbox, create_safe_test_environment
+from .sandbox import SafeCodeSandbox, create_safe_test_environment, check_test_execution_status
 
 __all__ = ['CodeProcessor', 'LLMClient',
-           'SafeCodeSandbox', 'create_safe_test_environment']
+           'SafeCodeSandbox', 'create_safe_test_environment', 'check_test_execution_status']
 __version__ = "0.1.0"

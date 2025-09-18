@@ -11,6 +11,7 @@ import os
 import signal
 import time
 import sys
+import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 import shutil
@@ -205,38 +206,190 @@ class SafeCodeSandbox:
 
     def execute_test_script(self, test_script: str) -> Dict[str, Any]:
         """
-        Execute a test script and return results.
+        Execute a test script and return detailed results with test categorization.
 
         Args:
             test_script: The test script to execute
 
         Returns:
-            Dictionary with execution results and test outcomes
+            Dictionary with execution results and detailed test outcomes:
+            - success: bool indicating if script executed without errors
+            - script_error: bool indicating if there was a script execution error
+            - tests_passed: int number of tests that passed
+            - tests_failed: int number of tests that failed
+            - tests_errors: int number of tests with errors
+            - test_results: detailed breakdown of test results
+            - execution_category: 'SCRIPT_ERROR', 'TESTS_FAILED', 'TESTS_PASSED', 'NO_TESTS_FOUND'
+            - test_summary: human-readable summary
         """
         result = self.execute_code(test_script)
 
-        if result['success']:
-            # Parse test results from output
-            output = result['output']
-            if 'OK' in output and '.' in output:
-                # Unittest output parsing
-                lines = output.strip().split('\n')
-                last_line = lines[-1] if lines else ''
+        # Initialize test-specific fields
+        result['script_error'] = False
+        result['tests_passed'] = 0
+        result['tests_failed'] = 0
+        result['tests_errors'] = 0
+        result['test_results'] = {}
+        result['execution_category'] = 'UNKNOWN'
 
-                if 'OK' in last_line:
-                    result['tests_passed'] = True
-                    result['test_summary'] = last_line
-                else:
-                    result['tests_passed'] = False
-                    result['test_summary'] = 'Tests failed'
-            else:
-                result['tests_passed'] = False
-                result['test_summary'] = 'Could not determine test results'
+        # Check if failure is due to script errors vs test failures
+        output = result['output']
+        stderr = result['error'] or ""
+
+        # Parse unittest output regardless of success/failure
+        # because unittest failures cause non-zero exit codes
+        test_analysis = self._parse_unittest_output(output, stderr)
+
+        result['tests_passed'] = test_analysis['passed']
+        result['tests_failed'] = test_analysis['failed']
+        result['tests_errors'] = test_analysis['errors']
+        result['test_results'] = test_analysis['details']
+
+        # Determine if this was a real script error or just test failures
+        if not result['success'] and test_analysis['script_error']:
+            # True script error (syntax, import, etc.)
+            result['script_error'] = True
+            result['execution_category'] = 'SCRIPT_ERROR'
+            result['test_summary'] = f"Script execution failed: {result['error']}"
+        elif test_analysis['failed'] > 0 or test_analysis['errors'] > 0:
+            # Tests ran but some failed
+            result['execution_category'] = 'TESTS_FAILED'
+            result['test_summary'] = f"Tests completed: {test_analysis['passed']} passed, {test_analysis['failed']} failed, {test_analysis['errors']} errors"
+        elif test_analysis['passed'] > 0:
+            # All tests passed
+            result['execution_category'] = 'TESTS_PASSED'
+            result['test_summary'] = f"All tests passed: {test_analysis['passed']} tests"
+        elif 'NO TESTS RAN' in result['error'] or (result['return_code'] == 5 and 'Ran 0 tests' in result['error']):
+            # No tests found scenario (unittest exit code 5)
+            result['execution_category'] = 'NO_TESTS_FOUND'
+            result['test_summary'] = "No tests were found or executed"
+        elif not result['success']:
+            # Script failed but no unittest patterns found - likely script error
+            result['script_error'] = True
+            result['execution_category'] = 'SCRIPT_ERROR'
+            result['test_summary'] = f"Script execution failed: {result['error']}"
         else:
-            result['tests_passed'] = False
-            result['test_summary'] = 'Test execution failed'
+            # Script succeeded but no tests found
+            result['execution_category'] = 'NO_TESTS_FOUND'
+            result['test_summary'] = "No tests were found or executed"
 
         return result
+
+    def _parse_unittest_output(self, stdout: str, stderr: str) -> Dict[str, Any]:
+        """
+        Parse unittest output to extract detailed test results.
+
+        Args:
+            stdout: Standard output from test execution
+            stderr: Standard error from test execution
+
+        Returns:
+            Dictionary with parsed test results
+        """
+        analysis = {
+            'passed': 0,
+            'failed': 0,
+            'errors': 0,
+            'script_error': False,
+            'details': {
+                'passed_tests': [],
+                'failed_tests': [],
+                'error_tests': [],
+                'raw_output': stdout,
+                'raw_error': stderr
+            }
+        }
+
+        # Check for script-level errors first (syntax, import errors)
+        # But exclude unittest failure messages which also appear in stderr
+        if stderr and any(error_type in stderr.lower() for error_type in
+                          ['syntaxerror', 'indentationerror', 'importerror', 'modulenotfounderror']):
+            # Make sure it's not just unittest output in stderr
+            if not ('Ran ' in stderr and ('FAILED' in stderr or 'OK' in stderr)):
+                analysis['script_error'] = True
+                return analysis
+
+        # Combine stdout and stderr for comprehensive parsing
+        full_output = stdout + "\n" + stderr
+
+        # Pattern for unittest summary line (e.g., "Ran 5 tests in 0.001s")
+        ran_pattern = r'Ran (\d+) tests? in ([\d.]+)s'
+        ran_match = re.search(ran_pattern, full_output)
+
+        if ran_match:
+            total_tests = int(ran_match.group(1))
+
+            # Look for OK (all passed)
+            if re.search(r'\nOK\s*$', full_output, re.MULTILINE):
+                analysis['passed'] = total_tests
+
+            # Look for FAILED with details
+            failed_pattern = r'FAILED \((.+?)\)'
+            failed_match = re.search(failed_pattern, full_output)
+
+            if failed_match:
+                failure_info = failed_match.group(1)
+
+                # Parse failures and errors
+                failures_match = re.search(r'failures=(\d+)', failure_info)
+                errors_match = re.search(r'errors=(\d+)', failure_info)
+
+                failures = int(failures_match.group(1)
+                               ) if failures_match else 0
+                errors = int(errors_match.group(1)) if errors_match else 0
+
+                analysis['failed'] = failures
+                analysis['errors'] = errors
+                analysis['passed'] = total_tests - failures - errors
+            else:
+                # Check if we have failure output but no explicit FAILED line
+                # This can happen when tests fail but the format is different
+                if 'FAIL:' in full_output or 'ERROR:' in full_output:
+                    # Count failures and errors manually
+                    fail_count = len(re.findall(r'FAIL:', full_output))
+                    error_count = len(re.findall(r'ERROR:', full_output))
+
+                    analysis['failed'] = fail_count
+                    analysis['errors'] = error_count
+                    analysis['passed'] = max(
+                        0, total_tests - fail_count - error_count)
+        else:
+            # No "Ran X tests" found, try to parse test dots/letters
+            self._parse_test_dots(full_output, analysis)
+
+        # Parse individual test results from detailed output
+        self._parse_individual_tests(full_output, analysis)
+
+        return analysis
+
+    def _parse_individual_tests(self, output: str, analysis: Dict[str, Any]) -> None:
+        """Parse individual test method results from verbose output."""
+        # Pattern for individual test results
+        test_patterns = [
+            (r'(\w+\.\w+) \.\.\. ok', 'passed'),
+            (r'(\w+\.\w+) \.\.\. FAIL', 'failed'),
+            (r'(\w+\.\w+) \.\.\. ERROR', 'error'),
+        ]
+
+        for pattern, result_type in test_patterns:
+            matches = re.findall(pattern, output)
+            for test_name in matches:
+                analysis['details'][f'{result_type}_tests'].append(test_name)
+
+    def _parse_test_dots(self, output: str, analysis: Dict[str, Any]) -> None:
+        """Parse test results from dot notation (e.g., '..F.E.')"""
+        # Find test result dots/letters
+        dot_pattern = r'^([.FE]+)$'
+        matches = re.findall(dot_pattern, output, re.MULTILINE)
+
+        for match in matches:
+            for char in match:
+                if char == '.':
+                    analysis['passed'] += 1
+                elif char == 'F':
+                    analysis['failed'] += 1
+                elif char == 'E':
+                    analysis['errors'] += 1
 
 
 def create_safe_test_environment() -> SafeCodeSandbox:
@@ -256,6 +409,34 @@ def create_safe_test_environment() -> SafeCodeSandbox:
             'typing', 'dataclasses', 'enum', 'heapq', 'bisect'
         ]
     )
+
+
+def check_test_execution_status(result: Dict[str, Any]) -> str:
+    """
+    Helper function to get a human-readable status of test execution.
+
+    Args:
+        result: Result dictionary from execute_test_script
+
+    Returns:
+        String describing the execution status
+    """
+    category = result.get('execution_category', 'UNKNOWN')
+
+    if category == 'SCRIPT_ERROR':
+        return f"❌ SCRIPT ERROR: {result.get('error', 'Unknown error')}"
+    elif category == 'TESTS_FAILED':
+        passed = result.get('tests_passed', 0)
+        failed = result.get('tests_failed', 0)
+        errors = result.get('tests_errors', 0)
+        return f"⚠️  TESTS FAILED: {passed} passed, {failed} failed, {errors} errors"
+    elif category == 'TESTS_PASSED':
+        passed = result.get('tests_passed', 0)
+        return f"✅ ALL TESTS PASSED: {passed} tests successful"
+    elif category == 'NO_TESTS_FOUND':
+        return "⚪ NO TESTS: No test cases found or executed"
+    else:
+        return f"❓ UNKNOWN STATUS: {result.get('test_summary', 'Unknown')}"
 
 
 # Example usage

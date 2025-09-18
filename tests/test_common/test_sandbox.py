@@ -1,11 +1,20 @@
 """
-Tests for the SafeCodeSandbox class.
+Comprehensive tests for the SafeCodeSandbox class.
+
+This module contains tests for both basic sandbox functionality and 
+enhanced error categorization features.
 """
 
 import pytest
 import tempfile
 import os
-from src.common.sandbox import SafeCodeSandbox, create_safe_test_environment, CodeExecutionTimeoutError, CodeExecutionError
+from src.common.sandbox import (
+    SafeCodeSandbox,
+    create_safe_test_environment,
+    CodeExecutionTimeoutError,
+    CodeExecutionError,
+    check_test_execution_status
+)
 
 
 class TestSafeCodeSandbox:
@@ -169,6 +178,321 @@ print(f"Square root of 16 is {result}")
         result = sandbox.execute_code(code)
         assert result['success']
         assert "4.0" in result['output']
+
+
+class TestEnhancedSandbox:
+    """Test enhanced sandbox functionality with error categorization."""
+
+    def test_script_error_syntax(self):
+        """Test syntax error detection."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with syntax error
+        script = """
+import unittest
+
+def invalid_function(
+    # Missing closing parenthesis - syntax error
+    
+class TestExample(unittest.TestCase):
+    def test_something(self):
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'SCRIPT_ERROR'
+        assert 'syntax error' in result['error'].lower(
+        ) or 'syntaxerror' in result['error'].lower()
+        assert result['return_code'] != 0
+
+    def test_script_error_import(self):
+        """Test import error detection."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with import error
+        script = """
+import unittest
+import nonexistent_module  # This will cause ImportError
+
+class TestExample(unittest.TestCase):
+    def test_something(self):
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'SCRIPT_ERROR'
+        assert 'importerror' in result['error'].lower(
+        ) or 'modulenotfounderror' in result['error'].lower()
+        assert result['return_code'] != 0
+
+    def test_tests_failed(self):
+        """Test test failure detection."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with failing tests
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_failing(self):
+        self.assertTrue(False, "This test should fail")
+    
+    def test_another_failing(self):
+        self.assertEqual(1, 2, "Math is broken")
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'TESTS_FAILED'
+        # unittest returns 1 for failed tests
+        assert result['return_code'] == 1
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 2
+        assert result['tests_failed'] == 2
+        assert result['tests_errors'] == 0
+
+    def test_tests_passed(self):
+        """Test successful test execution."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with passing tests
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_passing(self):
+        self.assertTrue(True)
+    
+    def test_another_passing(self):
+        self.assertEqual(1, 1)
+    
+    def test_third_passing(self):
+        self.assertIsNotNone("hello")
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'TESTS_PASSED'
+        assert result['return_code'] == 0
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 3
+        assert result['tests_failed'] == 0
+        assert result['tests_errors'] == 0
+
+    def test_no_tests_found(self):
+        """Test no tests found scenario."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with no test methods
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def not_a_test_method(self):
+        self.assertTrue(True)
+    
+    def another_regular_method(self):
+        pass
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'NO_TESTS_FOUND'
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 0
+        assert result['tests_failed'] == 0
+        assert result['tests_errors'] == 0
+
+    def test_mixed_test_results(self):
+        """Test mixed passing and failing tests."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with both passing and failing tests
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_passing_one(self):
+        self.assertTrue(True)
+    
+    def test_failing_one(self):
+        self.assertTrue(False, "This should fail")
+    
+    def test_passing_two(self):
+        self.assertEqual(2, 2)
+    
+    def test_failing_two(self):
+        self.assertEqual(1, 3, "Math fail")
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'TESTS_FAILED'
+        assert result['return_code'] == 1
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 4
+        assert result['tests_failed'] == 2
+        assert result['tests_errors'] == 0
+
+    def test_test_with_errors(self):
+        """Test tests that have errors (not failures)."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with test errors (exceptions during test execution)
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_with_error(self):
+        # This will cause an error, not a failure
+        x = 1 / 0
+    
+    def test_passing(self):
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'TESTS_FAILED'
+        assert result['return_code'] == 1
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 2
+        assert result['tests_failed'] == 0
+        assert result['tests_errors'] == 1
+
+    def test_check_test_execution_status_helper(self):
+        """Test the helper function for checking test execution status."""
+        sandbox = SafeCodeSandbox()
+
+        # Test with passing tests
+        passing_script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_simple(self):
+        self.assertEqual(1, 1)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(passing_script)
+        status_info = check_test_execution_status(result)
+
+        assert "ALL TESTS PASSED" in status_info
+        assert "1 tests successful" in status_info
+
+        # Test with failing tests
+        failing_script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_failing(self):
+        self.assertTrue(False)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(failing_script)
+        status_info = check_test_execution_status(result)
+
+        assert "TESTS FAILED" in status_info
+        assert "failed" in status_info.lower()
+
+        # Test with script error
+        error_script = """
+import unittest
+import nonexistent_module
+
+class TestExample(unittest.TestCase):
+    def test_simple(self):
+        self.assertEqual(1, 1)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(error_script)
+        status_info = check_test_execution_status(result)
+
+        assert "SCRIPT ERROR" in status_info
+
+    def test_verbose_unittest_output(self):
+        """Test parsing of verbose unittest output."""
+        sandbox = SafeCodeSandbox()
+
+        # Script that should produce verbose output
+        script = """
+import unittest
+
+class TestVerbose(unittest.TestCase):
+    def test_one(self):
+        '''Test one with docstring'''
+        self.assertEqual(1, 1)
+    
+    def test_two(self):
+        '''Test two with docstring'''
+        self.assertEqual(2, 2)
+    
+    def test_three_fails(self):
+        '''Test three that fails'''
+        self.assertEqual(1, 2, "This should fail")
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result['execution_category'] == 'TESTS_FAILED'
+        total_tests = result['tests_passed'] + \
+            result['tests_failed'] + result['tests_errors']
+        assert total_tests == 3
+        assert result['tests_failed'] == 1
+        assert result['tests_errors'] == 0
+
+        # Check that individual test results are captured
+        assert 'test_results' in result
+
+    def test_edge_case_empty_script(self):
+        """Test execution of empty or minimal script."""
+        sandbox = SafeCodeSandbox()
+
+        # Empty script
+        result = sandbox.execute_test_script("")
+        # Empty script might not have unittest.main(), so could be SCRIPT_ERROR or NO_TESTS_FOUND
+        assert result['execution_category'] in [
+            'SCRIPT_ERROR', 'NO_TESTS_FOUND']
+
+        # Script with just imports
+        minimal_script = """
+import unittest
+"""
+        result = sandbox.execute_test_script(minimal_script)
+        # Should complete successfully but find no tests
+        assert result['execution_category'] == 'NO_TESTS_FOUND' or result[
+            'execution_category'] == 'SCRIPT_ERROR'
 
 
 if __name__ == "__main__":
