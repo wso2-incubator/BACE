@@ -154,7 +154,7 @@ class CodeProcessor:
         return '\n'.join(result_lines)
 
     def extract_function_with_helpers(self, code_string: str, target_function_name: str) -> str:
-        """Extract target function body with helper functions and imports."""
+        """Extract target function body with helper functions and imports. --> For HumanEval style problems"""
         lines = code_string.split('\n')
         result = self._parse_code_structure(lines)
         import_lines = result['import_lines']
