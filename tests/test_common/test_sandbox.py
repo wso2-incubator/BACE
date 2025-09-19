@@ -34,10 +34,10 @@ result = add(2, 3)
 print(result)
 """
         result = self.sandbox.execute_code(code)
-        assert result['success']
-        assert "5" in result['output']
-        assert result['error'] is None or result['error'] == ""
-        assert result.get('timeout_occurred', False) is False
+        assert result.success
+        assert "5" in result.output
+        assert result.error is None or result.error == ""
+        assert result.timeout is False
 
     def test_syntax_error_handling(self):
         """Test handling of syntax errors."""
@@ -46,9 +46,8 @@ def broken_function(
     print("This has a syntax error")
 """
         result = self.sandbox.execute_code(code)
-        assert not result['success']
-        assert result['error'] is not None
-        assert len(result['error']) > 0
+        assert not result.success
+        assert "SyntaxError" in result.error or "syntax" in result.error.lower()
 
     def test_runtime_error_handling(self):
         """Test handling of runtime errors."""
@@ -59,9 +58,9 @@ def divide_by_zero():
 divide_by_zero()
 """
         result = self.sandbox.execute_code(code)
-        assert not result['success']
-        assert result['error'] is not None
-        assert len(result['error']) > 0
+        assert not result.success
+        assert result.error is not None
+        assert len(result.error) > 0
 
     def test_timeout_handling(self):
         """Test timeout handling for infinite loops."""
@@ -71,10 +70,9 @@ while True:
 """
         sandbox = SafeCodeSandbox(timeout=1)  # 1 second timeout
         result = sandbox.execute_code(code)
-        assert not result['success']
+        assert not result.success
         # Should either timeout or be terminated
-        assert result.get('timeout_occurred',
-                          False) or result['error'] is not None
+        assert result.timeout or result.error is not None
 
     def test_import_restrictions(self):
         """Test that dangerous imports are handled."""
@@ -84,7 +82,7 @@ print("Import successful")
 """
         result = self.sandbox.execute_code(dangerous_code)
         # The code might execute - we mainly test that it doesn't crash our system
-        assert isinstance(result['success'], bool)
+        assert isinstance(result.success, bool)
 
     def test_large_output_handling(self):
         """Test handling of large output."""
@@ -93,9 +91,9 @@ for i in range(100):  # Reduced from 1000 to speed up test
     print(f"Line {i}")
 """
         result = self.sandbox.execute_code(code)
-        assert result['success']
+        assert result.success
         # Should handle large output gracefully
-        assert len(result['output']) > 0
+        assert len(result.output) > 0
 
     def test_memory_intensive_code(self):
         """Test handling of memory-intensive code."""
@@ -105,8 +103,8 @@ data = list(range(10000))
 print(f"Created list with {len(data)} elements")
 """
         result = self.sandbox.execute_code(code)
-        assert result['success']
-        assert "10000" in result['output']
+        assert result.success
+        assert "10000" in result.output
 
     def test_multiline_function_execution(self):
         """Test execution of multiline functions."""
@@ -125,8 +123,8 @@ print(f"Original: {test_array}")
 print(f"Sorted: {sorted_array}")
 """
         result = self.sandbox.execute_code(code)
-        assert result['success']
-        assert "Sorted: [11, 12, 22, 25, 34, 64, 90]" in result['output']
+        assert result.success
+        assert "Sorted: [11, 12, 22, 25, 34, 64, 90]" in result.output
 
     def test_test_script_execution(self):
         """Test executing test scripts."""
@@ -147,8 +145,8 @@ test_multiplication()
 print("All tests completed!")
 """
         result = self.sandbox.execute_test_script(test_script)
-        assert result['success']
-        assert "All tests completed!" in result['output']
+        assert result.success
+        assert "All tests completed!" in result.output
 
 
 class TestCreateSafeTestEnvironment:
@@ -164,8 +162,8 @@ class TestCreateSafeTestEnvironment:
         # Test that it can execute code
         code = "print('Hello from safe environment!')"
         result = sandbox.execute_code(code)
-        assert result['success']
-        assert "Hello from safe environment!" in result['output']
+        assert result.success
+        assert "Hello from safe environment!" in result.output
 
     def test_safe_environment_with_allowed_imports(self):
         """Test that allowed imports work in safe environment."""
@@ -176,8 +174,8 @@ result = math.sqrt(16)
 print(f"Square root of 16 is {result}")
 """
         result = sandbox.execute_code(code)
-        assert result['success']
-        assert "4.0" in result['output']
+        assert result.success
+        assert "4.0" in result.output
 
 
 class TestEnhancedSandbox:
@@ -203,10 +201,10 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'SCRIPT_ERROR'
-        assert 'syntax error' in result['error'].lower(
-        ) or 'syntaxerror' in result['error'].lower()
-        assert result['return_code'] != 0
+        assert result.execution_category == 'SCRIPT_ERROR'
+        assert 'syntax error' in result.error.lower(
+        ) or 'syntaxerror' in result.error.lower()
+        assert result.return_code != 0
 
     def test_script_error_import(self):
         """Test import error detection."""
@@ -226,10 +224,10 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'SCRIPT_ERROR'
-        assert 'importerror' in result['error'].lower(
-        ) or 'modulenotfounderror' in result['error'].lower()
-        assert result['return_code'] != 0
+        assert result.execution_category == 'SCRIPT_ERROR'
+        assert 'importerror' in result.error.lower(
+        ) or 'modulenotfounderror' in result.error.lower()
+        assert result.return_code != 0
 
     def test_tests_failed(self):
         """Test test failure detection."""
@@ -251,14 +249,14 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'TESTS_FAILED'
+        assert result.execution_category == 'TESTS_FAILED'
         # unittest returns 1 for failed tests
-        assert result['return_code'] == 1
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.return_code == 1
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 2
-        assert result['tests_failed'] == 2
-        assert result['tests_errors'] == 0
+        assert result.tests_failed == 2
+        assert result.tests_errors == 0
 
     def test_tests_passed(self):
         """Test successful test execution."""
@@ -283,13 +281,13 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'TESTS_PASSED'
-        assert result['return_code'] == 0
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.execution_category == 'TESTS_PASSED'
+        assert result.return_code == 0
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 3
-        assert result['tests_failed'] == 0
-        assert result['tests_errors'] == 0
+        assert result.tests_failed == 0
+        assert result.tests_errors == 0
 
     def test_no_tests_found(self):
         """Test no tests found scenario."""
@@ -311,14 +309,14 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'NO_TESTS_FOUND'
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.execution_category == 'NO_TESTS_FOUND'
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 0
-        assert result['tests_failed'] == 0
-        assert result['tests_errors'] == 0
+        assert result.tests_failed == 0
+        assert result.tests_errors == 0
 
-    def test_mixed_test_results(self):
+    def test_mixed_test_details(self):
         """Test mixed passing and failing tests."""
         sandbox = SafeCodeSandbox()
 
@@ -344,13 +342,13 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'TESTS_FAILED'
-        assert result['return_code'] == 1
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.execution_category == 'TESTS_FAILED'
+        assert result.return_code == 1
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 4
-        assert result['tests_failed'] == 2
-        assert result['tests_errors'] == 0
+        assert result.tests_failed == 2
+        assert result.tests_errors == 0
 
     def test_test_with_errors(self):
         """Test tests that have errors (not failures)."""
@@ -373,13 +371,13 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'TESTS_FAILED'
-        assert result['return_code'] == 1
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.execution_category == 'TESTS_FAILED'
+        assert result.return_code == 1
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 2
-        assert result['tests_failed'] == 0
-        assert result['tests_errors'] == 1
+        assert result.tests_failed == 0
+        assert result.tests_errors == 1
 
     def test_check_test_execution_status_helper(self):
         """Test the helper function for checking test execution status."""
@@ -465,15 +463,16 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result['execution_category'] == 'TESTS_FAILED'
-        total_tests = result['tests_passed'] + \
-            result['tests_failed'] + result['tests_errors']
+        assert result.execution_category == 'TESTS_FAILED'
+        total_tests = result.tests_passed + \
+            result.tests_failed + result.tests_errors
         assert total_tests == 3
-        assert result['tests_failed'] == 1
-        assert result['tests_errors'] == 0
+        assert result.tests_failed == 1
+        assert result.tests_errors == 0
 
         # Check that individual test results are captured
-        assert 'test_results' in result
+        assert hasattr(result, 'test_details')
+        assert result.test_details is not None
 
     def test_edge_case_empty_script(self):
         """Test execution of empty or minimal script."""
@@ -482,7 +481,7 @@ if __name__ == '__main__':
         # Empty script
         result = sandbox.execute_test_script("")
         # Empty script might not have unittest.main(), so could be SCRIPT_ERROR or NO_TESTS_FOUND
-        assert result['execution_category'] in [
+        assert result.execution_category in [
             'SCRIPT_ERROR', 'NO_TESTS_FOUND']
 
         # Script with just imports
@@ -491,7 +490,7 @@ import unittest
 """
         result = sandbox.execute_test_script(minimal_script)
         # Should complete successfully but find no tests
-        assert result['execution_category'] == 'NO_TESTS_FOUND' or result[
+        assert result.execution_category == 'NO_TESTS_FOUND' or result[
             'execution_category'] == 'SCRIPT_ERROR'
 
 

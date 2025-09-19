@@ -233,7 +233,7 @@ class CodeProcessor:
 
         # Add if __name__ == "__main__" block by default
         script_lines.append('if __name__ == "__main__":')
-        script_lines.append('    unittest.main()')
+        script_lines.append('    unittest.main(verbosity=2)')
         script_lines.append('')  # Blank line at the end
 
         return '\n'.join(script_lines)
