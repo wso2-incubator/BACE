@@ -1,8 +1,10 @@
-from tqdm import tqdm
-
-from human_eval.data import write_jsonl, read_problems
-from common.llm_client import LLMClient
 from common.code_processor import CodeProcessor
+from common.llm_client import LLMClient
+from human_eval.data import write_jsonl, read_problems
+import sys
+import os
+from typing import Dict, Any, List
+from tqdm import tqdm
 
 
 def generate_one_completion(prompt: str, client: LLMClient, code_processor: CodeProcessor) -> str:
@@ -36,7 +38,7 @@ if __name__ == "__main__":
     code_processor = CodeProcessor()
 
     num_samples_per_task: int = 1
-    problems: list[str] = read_problems()
+    problems: Dict[str, Dict[str, Any]] = read_problems()
     for task_id in tqdm(problems, desc="Problems", unit="problem"):
         for i in range(num_samples_per_task):
             # print(f"Generating code for task: {task_id}, sample: {i}")

@@ -1,5 +1,11 @@
 import re
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, TypedDict
+
+
+class CodeStructure(TypedDict):
+    import_lines: List[str]
+    function_definitions: Dict[str, Tuple[int, int]]
+    class_definitions: Dict[str, Tuple[int, int]]
 
 
 class CodeProcessor:
@@ -58,7 +64,7 @@ class CodeProcessor:
             return match.group(1)
         return ""
 
-    def _parse_code_structure(self, lines: List[str]) -> Dict[str, Union[List[str], Dict[str, Tuple[int, int]]]]:
+    def _parse_code_structure(self, lines: List[str]) -> CodeStructure:
         """Parse code lines to find all import statements, function definitions, and class definitions."""
         import_lines: List[str] = []
         function_definitions: Dict[str, Tuple[int, int]] = {}
@@ -180,7 +186,7 @@ class CodeProcessor:
     def extract_class_block(self, code_string: str) -> Optional[str]:
         """Extract the first class block from the code string."""
         lines = code_string.split('\n')
-        result = self._find_functions_and_imports(lines)
+        result = self._parse_code_structure(lines)
         class_definitions = result['class_definitions']
 
         if not class_definitions:
@@ -202,8 +208,8 @@ class CodeProcessor:
             tester_code.split('\n'))
 
         # Handle Imports
-        programmer_imports: List[str] = programmer_code_structure['import_lines']
-        tester_imports: List[str] = tester_code_structure['import_lines']
+        programmer_imports = programmer_code_structure['import_lines']
+        tester_imports = tester_code_structure['import_lines']
 
         # Combine and deduplicate imports
         all_imports = list(dict.fromkeys(programmer_imports + tester_imports))
@@ -216,6 +222,7 @@ class CodeProcessor:
 
         # handling functions and helper function if any
         programmer_functions = programmer_code_structure['function_definitions']
+
         for func_name, (start, end) in programmer_functions.items():
             func_lines = programmer_code.split('\n')[start:end + 1]
             script_lines.extend(func_lines)
@@ -226,6 +233,7 @@ class CodeProcessor:
 
         # Adding the tester classes if any
         tester_classes = tester_code_structure['class_definitions']
+
         for class_name, (start, end) in tester_classes.items():
             class_lines = tester_code.split('\n')[start:end + 1]
             script_lines.extend(class_lines)

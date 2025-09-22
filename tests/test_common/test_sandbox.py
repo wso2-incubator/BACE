@@ -20,11 +20,11 @@ from src.common.sandbox import (
 class TestSafeCodeSandbox:
     """Test cases for SafeCodeSandbox."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test fixtures."""
         self.sandbox = SafeCodeSandbox()
 
-    def test_basic_execution(self):
+    def test_basic_execution(self) -> None:
         """Test basic code execution."""
         code = """
 def add(a, b):
@@ -39,7 +39,7 @@ print(result)
         assert result.error is None or result.error == ""
         assert result.timeout is False
 
-    def test_syntax_error_handling(self):
+    def test_syntax_error_handling(self) -> None:
         """Test handling of syntax errors."""
         code = """
 def broken_function(
@@ -49,7 +49,7 @@ def broken_function(
         assert not result.success
         assert "SyntaxError" in result.error or "syntax" in result.error.lower()
 
-    def test_runtime_error_handling(self):
+    def test_runtime_error_handling(self) -> None:
         """Test handling of runtime errors."""
         code = """
 def divide_by_zero():
@@ -62,7 +62,7 @@ divide_by_zero()
         assert result.error is not None
         assert len(result.error) > 0
 
-    def test_timeout_handling(self):
+    def test_timeout_handling(self) -> None:
         """Test timeout handling for infinite loops."""
         code = """
 while True:
@@ -74,7 +74,7 @@ while True:
         # Should either timeout or be terminated
         assert result.timeout or result.error is not None
 
-    def test_import_restrictions(self):
+    def test_import_restrictions(self) -> None:
         """Test that dangerous imports are handled."""
         dangerous_code = """
 import os
@@ -84,7 +84,7 @@ print("Import successful")
         # The code might execute - we mainly test that it doesn't crash our system
         assert isinstance(result.success, bool)
 
-    def test_large_output_handling(self):
+    def test_large_output_handling(self) -> None:
         """Test handling of large output."""
         code = """
 for i in range(100):  # Reduced from 1000 to speed up test
@@ -95,7 +95,7 @@ for i in range(100):  # Reduced from 1000 to speed up test
         # Should handle large output gracefully
         assert len(result.output) > 0
 
-    def test_memory_intensive_code(self):
+    def test_memory_intensive_code(self) -> None:
         """Test handling of memory-intensive code."""
         code = """
 # Create a reasonably large list
@@ -106,7 +106,7 @@ print(f"Created list with {len(data)} elements")
         assert result.success
         assert "10000" in result.output
 
-    def test_multiline_function_execution(self):
+    def test_multiline_function_execution(self) -> None:
         """Test execution of multiline functions."""
         code = """
 def bubble_sort(arr):
@@ -126,7 +126,7 @@ print(f"Sorted: {sorted_array}")
         assert result.success
         assert "Sorted: [11, 12, 22, 25, 34, 64, 90]" in result.output
 
-    def test_test_script_execution(self):
+    def test_test_script_execution(self) -> None:
         """Test executing test scripts."""
         test_script = """
 def test_addition():
@@ -152,7 +152,7 @@ print("All tests completed!")
 class TestCreateSafeTestEnvironment:
     """Test cases for create_safe_test_environment function."""
 
-    def test_safe_test_environment_creation(self):
+    def test_safe_test_environment_creation(self) -> None:
         """Test creating a safe test environment."""
         sandbox = create_safe_test_environment()
         assert isinstance(sandbox, SafeCodeSandbox)
@@ -165,7 +165,7 @@ class TestCreateSafeTestEnvironment:
         assert result.success
         assert "Hello from safe environment!" in result.output
 
-    def test_safe_environment_with_allowed_imports(self):
+    def test_safe_environment_with_allowed_imports(self) -> None:
         """Test that allowed imports work in safe environment."""
         sandbox = create_safe_test_environment()
         code = """
@@ -181,7 +181,7 @@ print(f"Square root of 16 is {result}")
 class TestEnhancedSandbox:
     """Test enhanced sandbox functionality with error categorization."""
 
-    def test_script_error_syntax(self):
+    def test_script_error_syntax(self) -> None:
         """Test syntax error detection."""
         sandbox = SafeCodeSandbox()
 
@@ -206,7 +206,7 @@ if __name__ == '__main__':
         ) or 'syntaxerror' in result.error.lower()
         assert result.return_code != 0
 
-    def test_script_error_import(self):
+    def test_script_error_import(self) -> None:
         """Test import error detection."""
         sandbox = SafeCodeSandbox()
 
@@ -229,7 +229,7 @@ if __name__ == '__main__':
         ) or 'modulenotfounderror' in result.error.lower()
         assert result.return_code != 0
 
-    def test_tests_failed(self):
+    def test_tests_failed(self) -> None:
         """Test test failure detection."""
         sandbox = SafeCodeSandbox()
 
@@ -258,7 +258,7 @@ if __name__ == '__main__':
         assert result.tests_failed == 2
         assert result.tests_errors == 0
 
-    def test_tests_passed(self):
+    def test_tests_passed(self) -> None:
         """Test successful test execution."""
         sandbox = SafeCodeSandbox()
 
@@ -289,7 +289,7 @@ if __name__ == '__main__':
         assert result.tests_failed == 0
         assert result.tests_errors == 0
 
-    def test_no_tests_found(self):
+    def test_no_tests_found(self) -> None:
         """Test no tests found scenario."""
         sandbox = SafeCodeSandbox()
 
@@ -316,7 +316,7 @@ if __name__ == '__main__':
         assert result.tests_failed == 0
         assert result.tests_errors == 0
 
-    def test_mixed_test_details(self):
+    def test_mixed_test_details(self) -> None:
         """Test mixed passing and failing tests."""
         sandbox = SafeCodeSandbox()
 
@@ -350,7 +350,7 @@ if __name__ == '__main__':
         assert result.tests_failed == 2
         assert result.tests_errors == 0
 
-    def test_test_with_errors(self):
+    def test_test_with_errors(self) -> None:
         """Test tests that have errors (not failures)."""
         sandbox = SafeCodeSandbox()
 
@@ -379,7 +379,7 @@ if __name__ == '__main__':
         assert result.tests_failed == 0
         assert result.tests_errors == 1
 
-    def test_check_test_execution_status_helper(self):
+    def test_check_test_execution_status_helper(self) -> None:
         """Test the helper function for checking test execution status."""
         sandbox = SafeCodeSandbox()
 
@@ -437,7 +437,7 @@ if __name__ == '__main__':
 
         assert "SCRIPT ERROR" in status_info
 
-    def test_verbose_unittest_output(self):
+    def test_verbose_unittest_output(self) -> None:
         """Test parsing of verbose unittest output."""
         sandbox = SafeCodeSandbox()
 
@@ -474,7 +474,7 @@ if __name__ == '__main__':
         assert hasattr(result, 'test_details')
         assert result.test_details is not None
 
-    def test_edge_case_empty_script(self):
+    def test_edge_case_empty_script(self) -> None:
         """Test execution of empty or minimal script."""
         sandbox = SafeCodeSandbox()
 
@@ -490,8 +490,7 @@ import unittest
 """
         result = sandbox.execute_test_script(minimal_script)
         # Should complete successfully but find no tests
-        assert result.execution_category == 'NO_TESTS_FOUND' or result[
-            'execution_category'] == 'SCRIPT_ERROR'
+        assert result.execution_category == 'NO_TESTS_FOUND' or result.execution_category == 'SCRIPT_ERROR'
 
 
 if __name__ == "__main__":

@@ -323,10 +323,7 @@ class SafeCodeSandbox:
             - execution_category: ExecutionCategory - categorized execution result
             - test_summary: str - human-readable summary
         """
-        # Ensure unittest.main() calls use verbosity=2 for detailed output
-        modified_script = self._ensure_unittest_verbosity(test_script)
-
-        basic_result = self.execute_code(modified_script)
+        basic_result = self.execute_code(test_script)
 
         # Parse unittest output regardless of success/failure
         # because unittest failures cause non-zero exit codes
@@ -384,43 +381,6 @@ class SafeCodeSandbox:
             execution_category=execution_category,
             test_summary=test_summary
         )
-
-    def _ensure_unittest_verbosity(self, test_script: str) -> str:
-        """
-        Ensure that unittest.main() calls in the script use verbosity=2.
-
-        Args:
-            test_script: The original test script
-
-        Returns:
-            Modified test script with verbosity=2 for unittest.main() calls
-        """
-        modified_script = test_script
-
-        # Replace unittest.main() with unittest.main(verbosity=2)
-        modified_script = re.sub(
-            r'unittest\.main\(\)', 'unittest.main(verbosity=2)', modified_script)
-
-        # Replace unittest.main(verbosity=0) or unittest.main(verbosity=1) with verbosity=2
-        modified_script = re.sub(
-            r'unittest\.main\(verbosity=[01]\)', 'unittest.main(verbosity=2)', modified_script)
-
-        # Handle cases where there are other parameters but no verbosity
-        # Look for unittest.main() calls that have parameters but no verbosity
-        def add_verbosity(match: re.Match[str]) -> str:
-            params = match.group(1).strip()
-            if 'verbosity' not in params:
-                if params:
-                    return f'unittest.main({params}, verbosity=2)'
-                else:
-                    return 'unittest.main(verbosity=2)'
-            # Return unchanged if verbosity already present
-            return match.group(0)
-
-        modified_script = re.sub(
-            r'unittest\.main\(([^)]*)\)', add_verbosity, modified_script)
-
-        return modified_script
 
     def _parse_unittest_output(self, stdout: str, stderr: str) -> TestAnalysis:
         """

@@ -9,11 +9,11 @@ from src.common.code_processor import CodeProcessor
 class TestCodeProcessor:
     """Test cases for CodeProcessor."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test fixtures."""
         self.processor = CodeProcessor()
 
-    def test_extract_function_name_from_problem_basic(self):
+    def test_extract_function_name_from_problem_basic(self) -> None:
         """Test basic function name extraction."""
         prompt = '''def has_close_elements(numbers: List[float], threshold: float) -> bool:
     """ Check if numbers are close. """'''
@@ -21,7 +21,7 @@ class TestCodeProcessor:
         result = self.processor.extract_function_name_from_problem(prompt)
         assert result == "has_close_elements"
 
-    def test_extract_function_name_from_problem_multiline(self):
+    def test_extract_function_name_from_problem_multiline(self) -> None:
         """Test function name extraction with multiline definition."""
         prompt = '''from typing import List
 
@@ -32,7 +32,7 @@ def factorial(n: int) -> int:
         result = self.processor.extract_function_name_from_problem(prompt)
         assert result == "factorial"
 
-    def test_extract_function_name_from_problem_no_function(self):
+    def test_extract_function_name_from_problem_no_function(self) -> None:
         """Test when no function is found."""
         prompt = '''# Just a comment
 x = 5'''
@@ -40,12 +40,12 @@ x = 5'''
         result = self.processor.extract_function_name_from_problem(prompt)
         assert result == ""
 
-    def test_extract_function_name_from_problem_empty_string(self):
+    def test_extract_function_name_from_problem_empty_string(self) -> None:
         """Test with empty string."""
         result = self.processor.extract_function_name_from_problem("")
         assert result == ""
 
-    def test_remove_comments_single_line(self):
+    def test_remove_comments_single_line(self) -> None:
         """Test removal of single line comments."""
         code = '''def test():
     # This is a comment
@@ -57,7 +57,7 @@ x = 5'''
     return 42'''
         assert result == expected
 
-    def test_remove_comments_multiline_triple_quotes(self):
+    def test_remove_comments_multiline_triple_quotes(self) -> None:
         """Test removal of multiline comments with triple quotes."""
         code = '''def test():
     """
@@ -72,7 +72,7 @@ x = 5'''
     return 42'''
         assert result == expected
 
-    def test_remove_comments_multiline_single_quotes(self):
+    def test_remove_comments_multiline_single_quotes(self) -> None:
         """Test removal of multiline comments with single quotes."""
         code = """def test():
     '''
@@ -87,7 +87,7 @@ x = 5'''
     return 42'''
         assert result == expected
 
-    def test_remove_comments_mixed(self):
+    def test_remove_comments_mixed(self) -> None:
         """Test removal of mixed comment types."""
         code = '''def test():
     # Single line comment
@@ -103,12 +103,12 @@ x = 5'''
     return 42  '''
         assert result == expected
 
-    def test_remove_comments_empty_string(self):
+    def test_remove_comments_empty_string(self) -> None:
         """Test with empty string."""
         result = self.processor.remove_comments("")
         assert result == ""
 
-    def test_extract_code_block_from_response_markdown(self):
+    def test_extract_code_block_from_response_markdown(self) -> None:
         """Test extraction from markdown code blocks."""
         response = '''Here's the solution:
 
@@ -123,14 +123,14 @@ That should work!'''
         expected = "def add(a, b):\n    return a + b"
         assert result == expected
 
-    def test_extract_code_block_from_response_no_markdown(self):
+    def test_extract_code_block_from_response_no_markdown(self) -> None:
         """Test when no markdown blocks exist."""
         response = "Just plain text with no code blocks."
 
         result = self.processor.extract_code_block_from_response(response)
         assert result == response
 
-    def test_extract_code_block_from_response_multiple_blocks(self):
+    def test_extract_code_block_from_response_multiple_blocks(self) -> None:
         """Test extraction when multiple code blocks exist."""
         response = '''Here are two solutions:
 
@@ -148,7 +148,7 @@ def multiply(a, b):
         expected = "def add(a, b):\n    return a + b"
         assert result == expected
 
-    def test_extract_code_block_from_response_from_multile_non_python_blocks(self):
+    def test_extract_code_block_from_response_from_multile_non_python_blocks(self) -> None:
         """Test extraction when multiple non-Python code blocks exist, but we want Python."""
         response = '''Here's some code:
 
@@ -171,12 +171,12 @@ echo "Hello"
         expected = "def add(a, b):\n    return a + b"
         assert result == expected
 
-    def test_extract_code_block_from_response_empty_string(self):
+    def test_extract_code_block_from_response_empty_string(self) -> None:
         """Test with empty string."""
         result = self.processor.extract_code_block_from_response("")
         assert result == ""
 
-    def test_extract_function_with_helpers_simple(self):
+    def test_extract_function_with_helpers_simple(self) -> None:
         """Test extraction of function without helpers."""
         code = '''def target_function():
     return 42'''
@@ -187,7 +187,7 @@ echo "Hello"
     return 42'''
         assert result == expected
 
-    def test_extract_function_with_helpers_with_helper(self):
+    def test_extract_function_with_helpers_with_helper(self) -> None:
         """Test extraction of function with helper functions."""
         code = '''def helper_function():
     return 10
@@ -212,7 +212,7 @@ def another_function():
         # Should NOT include the unrelated function
         assert "def another_function():" not in result
 
-    def test_extract_function_with_helpers_with_imports(self):
+    def test_extract_function_with_helpers_with_imports(self) -> None:
         """Test extraction with imports."""
         code = '''import math
 from typing import List
@@ -233,7 +233,7 @@ def target_function(numbers: List[float]):
         # Should include function body
         assert "return math.sqrt" in result
 
-    def test_extract_function_with_helpers_target_not_found(self):
+    def test_extract_function_with_helpers_target_not_found(self) -> None:
         """Test when target function is not found."""
         code = '''def helper_function():
     return 42'''
@@ -242,7 +242,7 @@ def target_function(numbers: List[float]):
             code, "nonexistent_function")
         assert result == ""
 
-    def test_extract_function_with_helpers_empty_code(self):
+    def test_extract_function_with_helpers_empty_code(self) -> None:
         """Test with empty code."""
         result = self.processor.extract_function_with_helpers(
             "", "some_function")
