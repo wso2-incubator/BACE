@@ -277,7 +277,7 @@ class AgentCoderGenerator:
         else:
             # Create data/generations/agent_coder directory
             output_dir = Path(__file__).parent.parent.parent / \
-                "data" / "generations" / "agent_coder"
+                "data" / "human_eval" / "generations" / "agent_coder"
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate filename with specified format (sanitize model name for filesystem)
