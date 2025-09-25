@@ -26,6 +26,7 @@ class AgentCoderConfig:
     timeout: int = 30
     output_file: Optional[str] = None
     num_samples_per_task: int = 1
+    save_per_iteration: bool = True
 
 
 class AgentState(TypedDict):
@@ -227,53 +228,10 @@ class AgentCoderGenerator:
             ]
         }
 
-    def generate_completion(self, problem: str) -> Tuple[str, bool]:
-        """
-        Generate a completion for a single problem.
-
-        Args:
-            problem: The problem prompt
-
-        Returns:
-            Tuple of (completion_code, success)
-        """
-        try:
-            initial_state = self._create_initial_state(problem)
-            result = self.workflow.invoke(initial_state)
-
-            # Extract the function implementation only
-            solution = result.get('solution', '')
-            if solution:
-                function_name = self.code_processor.extract_function_name_from_problem(
-                    problem)
-                if function_name:
-                    # Extract just the function body for completion
-                    completion = self.code_processor.extract_function_with_helpers(
-                        self.code_processor.remove_comments(solution),
-                        function_name
-                    )
-
-                    # Check if tests passed
-                    test_results = result.get('test_results')
-                    success = (test_results is not None and
-                               test_results.tests_failed == 0 and
-                               test_results.tests_errors == 0)
-
-                    return completion, success
-
-            return "", False
-
-        except Exception as e:
-            print(f"Error generating completion: {e}")
-            return "", False
-
-    def process_all_problems(self) -> None:
-        """Process all HumanEval problems and generate completions."""
-        problems = read_problems()
-
-        # Create output file path with proper directory structure and naming
+    def _get_base_output_path(self) -> str:
+        """Get the base output file path without iteration suffix."""
         if self.config.output_file:
-            output_file = self.config.output_file
+            return self.config.output_file
         else:
             # Create data/generations/agent_coder directory
             output_dir = Path(__file__).parent.parent.parent / \
@@ -283,43 +241,225 @@ class AgentCoderGenerator:
             # Generate filename with specified format (sanitize model name for filesystem)
             safe_model_name = self.config.llm_model.replace(":", "_")
             filename = f"{safe_model_name}-max{self.config.max_iterations}-numSamples{self.config.num_samples_per_task}.jsonl"
-            output_file = str(output_dir / filename)
 
-        # Clear output file
-        Path(output_file).unlink(missing_ok=True)
+            return str(output_dir / filename)
 
-        total_problems = len(problems)
+    def _get_iteration_output_path(self, iteration: int) -> str:
+        """Get the output file path for a specific iteration."""
+        base_path = Path(self._get_base_output_path())
+        iteration_filename = f"{base_path.stem}-iter{iteration}{base_path.suffix}"
+        return str(base_path.parent / iteration_filename)
+
+    def _save_iteration_results(self, iteration_results: List[Dict[str, Any]], final_iteration_reached: int) -> None:
+        """Save results for each iteration, filling remaining iterations with final result if completed early."""
+        # Clear all iteration files first
+        for iter_num in range(1, self.config.max_iterations + 1):
+            iteration_file = self._get_iteration_output_path(iter_num)
+            Path(iteration_file).unlink(missing_ok=True)
+
+        # Save actual iteration results
+        iteration_data_by_iter = {}
+        for result in iteration_results:
+            iter_num = result["iteration"]
+            if iter_num not in iteration_data_by_iter:
+                iteration_data_by_iter[iter_num] = []
+            iteration_data_by_iter[iter_num].append(result)
+
+        # Write results for each iteration (1 to max_iterations)
+        for iter_num in range(1, self.config.max_iterations + 1):
+            iteration_file = self._get_iteration_output_path(iter_num)
+
+            if iter_num in iteration_data_by_iter:
+                # Use actual iteration data
+                data_to_save = iteration_data_by_iter[iter_num]
+            elif final_iteration_reached > 0 and iter_num > final_iteration_reached:
+                # Use final result for remaining iterations, but keep the correct iteration number
+                final_result = iteration_results[-1].copy(
+                ) if iteration_results else None
+                if final_result:
+                    # Keep the actual iteration where success occurred
+                    final_result["iteration"] = final_iteration_reached
+                    data_to_save = [final_result]
+                else:
+                    continue
+            else:
+                continue
+
+            write_jsonl(iteration_file, data_to_save, append=True)
+
+    def generate_completion_with_iterations(self, problem: str, task_id: str) -> Tuple[str, bool, List[Dict[str, Any]]]:
+        """
+        Generate a completion for a single problem with per-iteration tracking.
+
+        Args:
+            problem: The problem prompt
+            task_id: The task identifier
+
+        Returns:
+            Tuple of (final_completion, final_success, iteration_results)
+        """
+        try:
+            initial_state = self._create_initial_state(problem)
+
+            # Track iterations and results
+            iteration_results = []
+            current_solution = ""
+            current_test_results = None
+            iteration = 0
+
+            # Stream the workflow with updates mode
+            for update in self.workflow.stream(initial_state, stream_mode="updates"):
+                # Process programmer updates
+                if 'programmer' in update:
+                    programmer_data = update['programmer']
+                    current_solution = programmer_data.get('solution', '')
+                    iteration += 1
+
+                # Process test_executor updates
+                elif 'test_executor' in update:
+                    test_executor_data = update['test_executor']
+                    current_test_results = test_executor_data.get(
+                        'test_results')
+
+                    # Extract completion for this iteration
+                    if current_solution:
+                        function_name = self.code_processor.extract_function_name_from_problem(
+                            problem)
+                        if function_name:
+                            completion = self.code_processor.extract_function_with_helpers(
+                                self.code_processor.remove_comments(
+                                    current_solution),
+                                function_name
+                            )
+
+                            # Check if tests passed
+                            success = (current_test_results is not None and
+                                       current_test_results.tests_failed == 0 and
+                                       current_test_results.tests_errors == 0)
+
+                            # Create iteration result
+                            iteration_result = {
+                                "task_id": task_id,
+                                "iteration": iteration,
+                                "completion": completion,
+                                "success": success,
+                                "test_results_summary": {
+                                    "tests_run": current_test_results.tests_passed + current_test_results.tests_failed + current_test_results.tests_errors if current_test_results else 0,
+                                    "tests_failed": current_test_results.tests_failed if current_test_results else 0,
+                                    "tests_errors": current_test_results.tests_errors if current_test_results else 0
+                                } if current_test_results else None
+                            }
+
+                            iteration_results.append(iteration_result)
+
+                            # Save iteration result immediately if enabled
+                            if self.config.save_per_iteration:
+                                iteration_file = self._get_iteration_output_path(
+                                    iteration)
+                                write_jsonl(iteration_file, [
+                                            iteration_result], append=True)
+
+                                # If successful and early completion, save to remaining iteration files
+                                if success and iteration < self.config.max_iterations:
+                                    final_result_for_remaining = iteration_result.copy()
+                                    for remaining_iter in range(iteration + 1, self.config.max_iterations + 1):
+                                        remaining_iteration_file = self._get_iteration_output_path(
+                                            remaining_iter)
+                                        write_jsonl(remaining_iteration_file, [
+                                                    final_result_for_remaining], append=True)
+
+            # Get final results
+            final_completion = ""
+            final_success = False
+
+            if iteration_results:
+                last_result = iteration_results[-1]
+                final_completion = last_result["completion"]
+                final_success = last_result["success"]
+
+            return final_completion, final_success, iteration_results
+
+        except Exception as e:
+            print(f"Error generating completion: {e}")
+            return "", False, []
+
+    def generate_completion(self, problem: str) -> Tuple[str, bool]:
+        """
+        Generate a completion for a single problem (legacy method).
+
+        Args:
+            problem: The problem prompt
+
+        Returns:
+            Tuple of (completion_code, success)
+        """
+        completion, success, _ = self.generate_completion_with_iterations(
+            problem, "")
+        return completion, success
+
+    def process_all_problems(self) -> None:
+        """Process all HumanEval problems and generate completions with per-iteration tracking."""
+        problems = read_problems()
+
+        # Get output file paths
+        final_output_file = self._get_base_output_path()
+
+        # Clear final output file
+        Path(final_output_file).unlink(missing_ok=True)
+
+        # Clear all iteration files if per-iteration saving is enabled
+        if self.config.save_per_iteration:
+            for iter_num in range(1, self.config.max_iterations + 1):
+                iteration_file = self._get_iteration_output_path(iter_num)
+                Path(iteration_file).unlink(missing_ok=True)
+
+        total_samples = len(problems) * self.config.num_samples_per_task
         successful_completions = 0
+        processed_samples = 0
 
         with tqdm(problems.items(), desc="Processing problems", unit="problem") as pbar:
             for task_id, problem_data in pbar:
                 pbar.set_description(f"Processing {task_id}")
 
                 for sample_idx in range(self.config.num_samples_per_task):
-                    completion, success = self.generate_completion(
-                        problem_data["prompt"])
+                    completion, success, iteration_results = self.generate_completion_with_iterations(
+                        problem_data["prompt"], task_id)
 
+                    processed_samples += 1
                     if success:
                         successful_completions += 1
 
-                    # Write completion
+                    # Write final completion (simplified format: only task_id and completion)
                     completion_data = {
                         "task_id": task_id,
-                        "completion": completion,
-                        "success": success
+                        "completion": completion
                     }
+                    write_jsonl(final_output_file, [
+                                completion_data], append=True)
 
-                    write_jsonl(output_file, [completion_data], append=True)
+                    # Update progress bar with correct success rate
+                    pbar.set_postfix({
+                        "successful": f"{successful_completions}/{processed_samples}",
+                        "rate": f"{successful_completions/max(1, processed_samples)*100:.1f}%"
+                    })
 
-                pbar.set_postfix({
-                    "successful": f"{successful_completions}/{total_problems}",
-                    "rate": f"{successful_completions/max(1, pbar.n)*100:.1f}%"
-                })
-
-        print(f"\nCompleted processing {total_problems} problems")
         print(
-            f"Successful completions: {successful_completions}/{total_problems} ({successful_completions/total_problems*100:.1f}%)")
-        print(f"Results saved to: {output_file}")
+            f"\nCompleted processing {len(problems)} problems ({total_samples} samples)")
+        print(
+            f"Successful completions: {successful_completions}/{total_samples} ({successful_completions/total_samples*100:.1f}%)")
+        print(f"Final results saved to: {final_output_file}")
+
+        # Print iteration file locations if per-iteration saving was enabled
+        if self.config.save_per_iteration:
+            print("Per-iteration results saved to:")
+            for iter_num in range(1, self.config.max_iterations + 1):
+                iteration_file = self._get_iteration_output_path(iter_num)
+                if Path(iteration_file).exists():
+                    # Count entries in file to show actual count
+                    with open(iteration_file, 'r') as f:
+                        count = sum(1 for _ in f)
+                    print(
+                        f"  Iteration {iter_num}: {iteration_file} ({count} entries)")
 
 
 def main() -> None:
@@ -329,6 +469,7 @@ def main() -> None:
         llm_model='qwen2.5-coder:7b',
         max_iterations=3,  # Reduced for efficiency
         num_samples_per_task=1,
+        save_per_iteration=True,  # Enable per-iteration saving
     )
 
     generator = AgentCoderGenerator(config)
