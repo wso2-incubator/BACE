@@ -183,6 +183,7 @@ AgentCoderGenerator
 ```
 
 ### **2. Single Responsibility**
+
 ```
 ```
 
