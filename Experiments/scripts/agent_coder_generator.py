@@ -27,6 +27,8 @@ class AgentCoderConfig:
     output_file: Optional[str] = None
     num_samples_per_task: int = 1
     save_per_iteration: bool = True
+    use_humaneval_subset: bool = False
+    humaneval_subset_path: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -150,7 +152,7 @@ class PromptProvider:
 
 
 class FileManager:
-    """Handles all file operations and path management."""
+    """Handles all file operations and path management for both input datasets and output results."""
 
     def __init__(self, config: AgentCoderConfig) -> None:
         self.config = config
@@ -167,7 +169,25 @@ class FileManager:
 
         # Generate filename with specified format (sanitize model name for filesystem)
         safe_model_name = self.config.llm_model.replace(":", "_")
-        filename = f"{safe_model_name}-max{self.config.max_iterations}-numSamples{self.config.num_samples_per_task}.jsonl"
+
+        # Include dataset type in filename to prevent overwriting
+        dataset_suffix = ""
+        if self.config.use_humaneval_subset:
+            if self.config.humaneval_subset_path:
+                # Extract subset info from custom path
+                subset_filename = Path(self.config.humaneval_subset_path).stem
+                if "HumanEval_" in subset_filename:
+                    subset_size = subset_filename.split("HumanEval_")[1]
+                    dataset_suffix = f"-subset{subset_size}"
+                else:
+                    dataset_suffix = "-subset"
+            else:
+                # Default subset (20 problems)
+                dataset_suffix = "-subset20"
+        else:
+            dataset_suffix = "-full"
+
+        filename = f"{safe_model_name}{dataset_suffix}-max{self.config.max_iterations}-numSamples{self.config.num_samples_per_task}.jsonl"
 
         return str(output_dir / filename)
 
@@ -196,6 +216,40 @@ class FileManager:
         final_output_file = self.get_base_output_path()
         write_jsonl(final_output_file, [
                     final_completion.to_dict()], append=True)
+
+    def get_dataset_path(self) -> Optional[str]:
+        """Get the path to the HumanEval dataset based on configuration.
+
+        Returns:
+            Path to subset file if subset is enabled, None for default full dataset.
+        """
+        if self.config.use_humaneval_subset:
+            if self.config.humaneval_subset_path:
+                return self.config.humaneval_subset_path
+            else:
+                # Default to HumanEval_20.jsonl.gz in the project's data directory
+                project_root = Path(__file__).parent.parent.parent
+                default_subset_path = project_root / "data" / \
+                    "human_eval" / "HumanEval_20.jsonl.gz"
+                return str(default_subset_path)
+        return None  # Use default from read_problems()
+
+    def load_evaluation_problems(self) -> Tuple[Dict[str, Any], str]:
+        """Load HumanEval problems from the appropriate dataset.
+
+        Returns:
+            Tuple of (problems_dict, dataset_info_string) for logging/display purposes.
+        """
+        dataset_path = self.get_dataset_path()
+
+        if dataset_path:
+            problems = read_problems(dataset_path)
+            dataset_info = f"subset ({Path(dataset_path).name})"
+        else:
+            problems = read_problems()  # Use default full dataset
+            dataset_info = "full dataset"
+
+        return problems, dataset_info
 
 
 class IterationTracker:
@@ -480,9 +534,13 @@ class AgentCoderGenerator:
             problem, "")
         return completion, success
 
-    def process_all_problems(self) -> None:
-        """Process all HumanEval problems and generate completions with per-iteration tracking."""
-        problems = read_problems()
+    def process_evaluation_dataset(self) -> None:
+        """Process HumanEval problems (full dataset or subset) and generate completions with per-iteration tracking."""
+        # Load problems using FileManager (proper separation of concerns)
+        problems, dataset_info = self.file_manager.load_evaluation_problems()
+
+        print(
+            f"📊 Processing HumanEval {dataset_info} with {len(problems)} problems")
 
         # Clear output files
         self.file_manager.clear_output_files()
@@ -518,6 +576,32 @@ class AgentCoderGenerator:
         self._print_summary(len(problems), total_samples,
                             successful_completions)
 
+    def process_humaneval_subset(self, subset_size: int = 20) -> None:
+        """Convenience method to process the HumanEval subset with specified size.
+
+        Args:
+            subset_size: Size of the subset to process (default: 20)
+        """
+        # Temporarily override config to use subset
+        original_use_subset = self.config.use_humaneval_subset
+        original_subset_path = self.config.humaneval_subset_path
+
+        self.config.use_humaneval_subset = True
+        # Set subset path if not specified
+        if not self.config.humaneval_subset_path:
+            project_root = Path(__file__).parent.parent.parent
+            self.config.humaneval_subset_path = str(
+                project_root / "data" / "human_eval" /
+                f"HumanEval_{subset_size}.jsonl.gz"
+            )
+
+        try:
+            self.process_evaluation_dataset()
+        finally:
+            # Restore original config
+            self.config.use_humaneval_subset = original_use_subset
+            self.config.humaneval_subset_path = original_subset_path
+
     def _print_summary(self, num_problems: int, total_samples: int, successful_completions: int) -> None:
         """Print processing summary."""
         print(
@@ -546,10 +630,16 @@ def main() -> None:
         max_iterations=3,
         num_samples_per_task=1,
         save_per_iteration=True,
+        use_humaneval_subset=True,  # Enable subset processing for faster development
     )
 
     generator = AgentCoderGenerator(config)
-    generator.process_all_problems()
+
+    # Process the evaluation dataset (subset or full based on config)
+    generator.process_evaluation_dataset()
+
+    # Alternative: Use the convenience method for explicit subset processing
+    # generator.process_humaneval_subset(subset_size=20)
 
 
 if __name__ == "__main__":
