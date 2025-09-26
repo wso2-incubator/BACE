@@ -10,11 +10,6 @@ import os
 from pathlib import Path
 from typing import List
 
-# Add the human-eval directory to path to import the data module
-current_dir = Path(__file__).parent
-project_root = current_dir.parent.parent
-sys.path.insert(0, str(project_root / "human-eval"))
-
 
 def generate_humaneval_subset(num_problems: int = 20, seed: int = 42) -> List[str]:
     """

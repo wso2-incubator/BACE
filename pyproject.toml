@@ -33,3 +33,7 @@ strict = true
 module = "human_eval.*"
 ignore_missing_imports = true
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "fire"
+ignore_missing_imports = true

@@ -1,3 +1,10 @@
+"""
+Example script to generate code completions for HumanEval problems using an LLM.
+This script reads problems from the HumanEval dataset, generates code completions using
+a specified LLM, processes the responses to extract clean function implementations,
+and saves the results to a JSONL file.
+"""
+
 from common.code_processor import CodeProcessor
 from common.llm_client import LLMClient
 from human_eval.data import write_jsonl, read_problems
