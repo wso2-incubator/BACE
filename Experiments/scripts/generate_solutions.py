@@ -14,14 +14,14 @@ from typing import Dict, Any, List
 from tqdm import tqdm
 
 
-def generate_one_completion(prompt: str, client: LLMClient, code_processor: CodeProcessor) -> str:
+def generate_one_completion(problem_prompt: str, client: LLMClient, code_processor: CodeProcessor) -> str:
     # Extract the target function name from the prompt
     target_function_name: str = code_processor.extract_function_name_from_problem(
-        prompt)
+        problem_prompt)
     if not target_function_name:
         raise ValueError("No function definition found in the prompt.")
 
-    prompt = prompt + "\n# Complete the function above, do not use any libraries. You are only allowed to write code inside the function defined above. Let's think step-by-step and then write the final code.\n"
+    prompt = problem_prompt + "\n# Complete the function above, do not use any libraries. You are only allowed to write code inside the function defined above. Let's think step-by-step and then write the final code.\n"
     response: str = client.generate(prompt)
     print("Raw Response:\n", response)  # Debug print
 
