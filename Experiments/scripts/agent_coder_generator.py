@@ -59,6 +59,7 @@ class IterationResult:
     completion: str
     success: bool
     test_results_summary: Optional[TestResultsSummary]
+    test_cases: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -277,7 +278,8 @@ class IterationTracker:
                             iteration_result.to_dict()], append=True)
 
     def create_iteration_result(self, task_id: str, iteration: int, completion: str,
-                                success: bool, test_results: Optional[common.TestExecutionResult]) -> IterationResult:
+                                success: bool, test_results: Optional[common.TestExecutionResult],
+                                test_cases: Optional[str] = None) -> IterationResult:
         """Create an iteration result dataclass."""
         test_summary = None
         if test_results:
@@ -292,7 +294,8 @@ class IterationTracker:
             iteration=iteration,
             completion=completion,
             success=success,
-            test_results_summary=test_summary
+            test_results_summary=test_summary,
+            test_cases=test_cases
         )
 
 
@@ -306,7 +309,7 @@ class WorkflowBuilder:
         self.sandbox = sandbox
         self.prompt_provider = PromptProvider()
 
-    def build_workflow(self) -> CompiledStateGraph:
+    def build_workflow(self) -> "CompiledStateGraph[AgentState, None, Any, Any]":
         """Build and compile the multi-agent workflow graph."""
         graph_builder = StateGraph(AgentState)
 
@@ -436,6 +439,7 @@ class CompletionGenerator:
             iteration_results = []
             current_solution = ""
             current_test_results = None
+            current_test_cases = None
             iteration = 0
 
             # Stream the workflow with updates mode
@@ -444,6 +448,10 @@ class CompletionGenerator:
                 if 'programmer' in update:
                     current_solution = update['programmer']['solution']
                     iteration += 1
+
+                # Process test_designer updates: Capture test cases
+                elif 'test_designer' in update:
+                    current_test_cases = update['test_designer']['tests']
 
                 # Process test_executor updates: End of iteration
                 elif 'test_executor' in update:
@@ -457,7 +465,7 @@ class CompletionGenerator:
 
                         # Create and save iteration result
                         iteration_result = self.iteration_tracker.create_iteration_result(
-                            task_id, iteration, completion, success, current_test_results)
+                            task_id, iteration, completion, success, current_test_results, current_test_cases)
 
                         iteration_results.append(iteration_result)
                         self.iteration_tracker.save_iteration_result(
