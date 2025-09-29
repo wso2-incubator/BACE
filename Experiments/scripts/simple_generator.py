@@ -14,39 +14,11 @@ Features:
 """
 
 from human_eval.data import write_jsonl, read_problems
-from common.llm_client import LLMClient
-from common.code_processor import CodeProcessor
+from common import LLMClient, CodeProcessor, SimpleConfig
+
 from pathlib import Path
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from typing import Dict, Any
 from tqdm import tqdm
-
-# Add project root to Python path for imports
-project_root = Path(__file__).parent.parent.parent
-
-
-@dataclass
-class SimpleConfig:
-    """Simple configuration for code generation."""
-    # LLM settings
-    llm_provider: str = "ollama"
-    llm_model: str = "qwen2.5-coder:7b"
-
-    # Generation settings
-    num_samples_per_task: int = 1
-    use_subset: bool = True
-    subset_path: Optional[str] = None
-
-    # Prompt settings
-    prompt_template: str = "\n# Complete the function above, do not use any libraries. You are only allowed to write code inside the function defined above. Let's think step-by-step and then write the final code.\n"
-
-    # Output settings
-    output_filename: Optional[str] = None
-    output_dir: str = "data/generations/simple"
-    filename_suffix: str = ""  # Gets appended to auto-generated filenames
-
-    # Debug settings
-    verbose: bool = False
 
 
 class SimpleGenerator:
@@ -84,53 +56,19 @@ class SimpleGenerator:
 
         return completion_code
 
-    def get_output_path(self) -> str:
-        """Generate output file path with smart naming."""
-        if self.config.output_filename:
-            # If custom filename provided, make it relative to project root if it's not absolute
-            custom_path = Path(self.config.output_filename)
-            if custom_path.is_absolute():
-                return str(custom_path)
-            else:
-                return str(project_root / custom_path)
-
-        # Create descriptive filename
-        model_name = self.config.llm_model.replace(":", "_")
-        subset_suffix = "_subset20" if self.config.use_subset else ""
-        samples_suffix = f"-samples{self.config.num_samples_per_task}"
-        user_suffix = f"-{self.config.filename_suffix}" if self.config.filename_suffix else ""
-
-        filename = f"{model_name}{subset_suffix}{samples_suffix}{user_suffix}.jsonl"
-
-        # Create output directory relative to project root
-        output_dir = project_root / self.config.output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        return str(output_dir / filename)
-
     def load_problems(self) -> Dict[str, Any]:
         """Load problems from dataset (full or subset)."""
-        if self.config.use_subset and self.config.subset_path:
-            # Load from custom subset path
-            return read_problems(self.config.subset_path)
-        elif self.config.use_subset:
-            # Load from default subset (HumanEval_20)
-            subset_path = project_root / \
-                Path("data/human_eval/HumanEval_20.jsonl.gz")
-            if subset_path.exists():
-                return read_problems(str(subset_path))
-            else:
-                print(
-                    f"⚠️  Subset file not found at {subset_path}, using full dataset")
-                return read_problems()
+        dataset_path = self.config.get_dataset_path()
+        if dataset_path:
+            return read_problems(dataset_path)
         else:
-            # Load full dataset
             return read_problems()
 
     def run_generation(self) -> None:
         """Generate completions for the configured dataset."""
         problems = self.load_problems()
-        output_path = self.get_output_path()
+        output_path = self.config.get_output_path("simple",
+                                                  f"-{self.config.filename_suffix}" if self.config.filename_suffix else "")
 
         print(f"Starting generation with {len(problems)} problems")
         print(f"Output file: {output_path}")
@@ -166,9 +104,10 @@ def main() -> None:
 
     # Example 1: Basic configuration with default prompt
     config = SimpleConfig(
-        llm_model="qwen2.5-coder:7b",
+        llm_model="gpt-5",
+        llm_provider="openai",
         num_samples_per_task=1,
-        use_subset=True,  # Use HumanEval_20 for faster testing
+        use_humaneval_subset=True,  # Use HumanEval_20 for faster testing
         verbose=True,
         prompt_template="",
         filename_suffix="no-prompt"

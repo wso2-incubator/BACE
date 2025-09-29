@@ -7,28 +7,17 @@ multi-agent code generation system with proper separation of concerns.
 
 from human_eval.data import write_jsonl, read_problems
 import common
+from common import AgentCoderConfig, create_llm_instance
 from typing import List, TypedDict, Dict, Annotated, Literal, Optional, Tuple, Any
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
-from langchain_ollama.chat_models import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+
 from tqdm import tqdm
 from dataclasses import dataclass, asdict
 from pathlib import Path
-
-
-@dataclass
-class AgentCoderConfig:
-    """Configuration for the AgentCoder system."""
-    llm_model: str = "qwen2.5-coder:7b"
-    max_iterations: int = 5
-    timeout: int = 30
-    output_file: Optional[str] = None
-    num_samples_per_task: int = 1
-    save_per_iteration: bool = True
-    use_humaneval_subset: bool = False
-    humaneval_subset_path: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -160,43 +149,16 @@ class FileManager:
 
     def get_base_output_path(self) -> str:
         """Get the base output file path without iteration suffix."""
-        if self.config.output_file:
-            return self.config.output_file
+        if self.config.output_filename:
+            return self.config.output_filename
 
-        # Create data/generations/agent_coder directory
-        output_dir = Path(__file__).parent.parent.parent / \
-            "data" / "human_eval" / "generations" / "agent_coder"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Generate filename with specified format (sanitize model name for filesystem)
-        safe_model_name = self.config.llm_model.replace(":", "_")
-
-        # Include dataset type in filename to prevent overwriting
-        dataset_suffix = ""
-        if self.config.use_humaneval_subset:
-            if self.config.humaneval_subset_path:
-                # Extract subset info from custom path
-                subset_filename = Path(self.config.humaneval_subset_path).stem
-                if "HumanEval_" in subset_filename:
-                    subset_size = subset_filename.split("HumanEval_")[1]
-                    dataset_suffix = f"-subset{subset_size}"
-                else:
-                    dataset_suffix = "-subset"
-            else:
-                # Default subset (20 problems)
-                dataset_suffix = "-subset20"
-        else:
-            dataset_suffix = "-full"
-
-        filename = f"{safe_model_name}{dataset_suffix}-max{self.config.max_iterations}-numSamples{self.config.num_samples_per_task}.jsonl"
-
-        return str(output_dir / filename)
+        # Use the config's built-in output path generation with additional suffix
+        additional_suffix = f"-max{self.config.max_iterations}"
+        return self.config.get_output_path("agent_coder", additional_suffix)
 
     def get_iteration_output_path(self, iteration: int) -> str:
         """Get the output file path for a specific iteration."""
-        base_path = Path(self.get_base_output_path())
-        iteration_filename = f"{base_path.stem}-iter{iteration}{base_path.suffix}"
-        return str(base_path.parent / iteration_filename)
+        return self.config.get_iteration_output_path(iteration)
 
     def clear_output_files(self) -> None:
         """Clear all output files."""
@@ -218,30 +180,13 @@ class FileManager:
         write_jsonl(final_output_file, [
                     final_completion.to_dict()], append=True)
 
-    def get_dataset_path(self) -> Optional[str]:
-        """Get the path to the HumanEval dataset based on configuration.
-
-        Returns:
-            Path to subset file if subset is enabled, None for default full dataset.
-        """
-        if self.config.use_humaneval_subset:
-            if self.config.humaneval_subset_path:
-                return self.config.humaneval_subset_path
-            else:
-                # Default to HumanEval_20.jsonl.gz in the project's data directory
-                project_root = Path(__file__).parent.parent.parent
-                default_subset_path = project_root / "data" / \
-                    "human_eval" / "HumanEval_20.jsonl.gz"
-                return str(default_subset_path)
-        return None  # Use default from read_problems()
-
     def load_evaluation_problems(self) -> Tuple[Dict[str, Any], str]:
         """Load HumanEval problems from the appropriate dataset.
 
         Returns:
             Tuple of (problems_dict, dataset_info_string) for logging/display purposes.
         """
-        dataset_path = self.get_dataset_path()
+        dataset_path = self.config.get_dataset_path()
 
         if dataset_path:
             problems = read_problems(dataset_path)
@@ -518,7 +463,7 @@ class AgentCoderGenerator:
         # Initialize components
         self.code_processor = common.CodeProcessor()
         self.sandbox = common.create_safe_test_environment()
-        self.llm = ChatOllama(model=config.llm_model)
+        self.llm = create_llm_instance(config)
 
         # Initialize specialized components
         self.file_manager = FileManager(config)
@@ -597,7 +542,7 @@ class AgentCoderGenerator:
         self.config.use_humaneval_subset = True
         # Set subset path if not specified
         if not self.config.humaneval_subset_path:
-            project_root = Path(__file__).parent.parent.parent
+            project_root = self.config.get_project_root()
             self.config.humaneval_subset_path = str(
                 project_root / "data" / "human_eval" /
                 f"HumanEval_{subset_size}.jsonl.gz"
@@ -634,7 +579,8 @@ class AgentCoderGenerator:
 def main() -> None:
     """Main entry point."""
     config = AgentCoderConfig(
-        llm_model='qwen2.5-coder:7b',
+        llm_model='gpt-5',
+        llm_provider='openai',
         max_iterations=3,
         num_samples_per_task=1,
         save_per_iteration=True,

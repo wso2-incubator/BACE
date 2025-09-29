@@ -1,0 +1,20 @@
+{"task_id": "HumanEval/108", "completion": "\n    count = 0\n    for n in arr:\n        s = str(abs(n))\n        sum_digits = sum(int(ch) for ch in s)\n        if n < 0:\n            sum_signed = sum_digits - 2 * int(s[0])\n        else:\n            sum_signed = sum_digits\n        if sum_signed > 0:\n            count += 1\n    return count", "result": "passed", "passed": true}
+{"task_id": "HumanEval/129", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/139", "completion": "", "result": "failed: Test 4", "passed": false}
+{"task_id": "HumanEval/143", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/151", "completion": "", "result": "failed: This prints if this assert fails 1 (good for debugging!)", "passed": false}
+{"task_id": "HumanEval/154", "completion": "", "result": "failed: test #0", "passed": false}
+{"task_id": "HumanEval/163", "completion": "", "result": "failed: Test 1", "passed": false}
+{"task_id": "HumanEval/22", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/23", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/26", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/28", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/35", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/55", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/57", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/59", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/6", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/62", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/7", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/70", "completion": "", "result": "failed: ", "passed": false}
+{"task_id": "HumanEval/8", "completion": "", "result": "failed: ", "passed": false}
