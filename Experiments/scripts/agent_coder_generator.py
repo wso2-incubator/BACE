@@ -6,14 +6,12 @@ multi-agent code generation system with proper separation of concerns.
 """
 
 from human_eval.data import write_jsonl, read_problems
-import common
-from common import AgentCoderConfig, create_llm_instance
+from common import AgentCoderConfig, create_llm_from_params, CodeProcessor, create_safe_test_environment, TestExecutionResult
 from typing import List, TypedDict, Dict, Annotated, Literal, Optional, Tuple, Any
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
-from langchain_core.language_models.chat_models import BaseChatModel
 
 from tqdm import tqdm
 from dataclasses import dataclass, asdict
@@ -71,7 +69,7 @@ class AgentState(TypedDict):
     """State definition for the multi-agent workflow."""
     solution: str
     tests: str
-    test_results: Optional[common.TestExecutionResult]
+    test_results: Optional[TestExecutionResult]
     max_iterations: int
     tests_sent_to_programmer: bool
     solution_sent_to_tester: bool
@@ -125,7 +123,7 @@ class PromptProvider:
     - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
     - Do not implement the function, another expert programmer will do that."""
 
-    def generate_failure_feedback(self, state: AgentState, test_results: common.TestExecutionResult) -> str:
+    def generate_failure_feedback(self, state: AgentState, test_results: TestExecutionResult) -> str:
         """Generate feedback message for failed tests."""
         if not state.get('tests_sent_to_programmer'):
             feedback = "Your code attempt failed. An expert python tester wrote these test cases for you to evaluate against:\n\n"
@@ -223,7 +221,7 @@ class IterationTracker:
                             iteration_result.to_dict()], append=True)
 
     def create_iteration_result(self, task_id: str, iteration: int, completion: str,
-                                success: bool, test_results: Optional[common.TestExecutionResult],
+                                success: bool, test_results: Optional[TestExecutionResult],
                                 test_cases: Optional[str] = None) -> IterationResult:
         """Create an iteration result dataclass."""
         test_summary = None
@@ -247,9 +245,10 @@ class IterationTracker:
 class WorkflowBuilder:
     """Builds and manages the LangGraph workflow."""
 
-    def __init__(self, config: AgentCoderConfig, llm: Any, code_processor: Any, sandbox: Any) -> None:
+    def __init__(self, config: AgentCoderConfig, programmer_llm: Any, tester_llm: Any, code_processor: Any, sandbox: Any) -> None:
         self.config = config
-        self.llm = llm
+        self.programmer_llm = programmer_llm
+        self.tester_llm = tester_llm
         self.code_processor = code_processor
         self.sandbox = sandbox
         self.prompt_provider = PromptProvider()
@@ -287,7 +286,7 @@ class WorkflowBuilder:
 
     def _programmer_agent(self, state: AgentState) -> Dict[str, Any]:
         """Programmer agent implementation."""
-        response = self.llm.invoke(state['programmer_messages'])
+        response = self.programmer_llm.invoke(state['programmer_messages'])
         solution = self.code_processor.extract_code_block_from_response(
             str(response.content))
         return {
@@ -297,7 +296,7 @@ class WorkflowBuilder:
 
     def _test_designer_agent(self, state: AgentState) -> Dict[str, Any]:
         """Test designer agent implementation."""
-        response = self.llm.invoke(state['tester_messages'])
+        response = self.tester_llm.invoke(state['tester_messages'])
         tests = self.code_processor.extract_code_block_from_response(
             str(response.content))
         return {
@@ -443,7 +442,7 @@ class CompletionGenerator:
             return str(result) if result is not None else ""
         return ""
 
-    def _check_success(self, test_results: Optional[common.TestExecutionResult]) -> bool:
+    def _check_success(self, test_results: Optional[TestExecutionResult]) -> bool:
         """Check if tests passed."""
         return (test_results is not None and test_results.has_failures is False)
 
@@ -461,15 +460,29 @@ class AgentCoderGenerator:
         self.config = config
 
         # Initialize components
-        self.code_processor = common.CodeProcessor()
-        self.sandbox = common.create_safe_test_environment()
-        self.llm = create_llm_instance(config)
+        self.code_processor = CodeProcessor()
+        self.sandbox = create_safe_test_environment()
+
+        # These should not be None after __post_init__ sets defaults
+        assert config.programmer_llm_provider is not None
+        assert config.programmer_llm_model is not None
+        assert config.tester_llm_provider is not None
+        assert config.tester_llm_model is not None
+
+        self.programmer_llm = create_llm_from_params(
+            config.programmer_llm_provider,
+            config.programmer_llm_model
+        )
+        self.tester_llm = create_llm_from_params(
+            config.tester_llm_provider,
+            config.tester_llm_model
+        )
 
         # Initialize specialized components
         self.file_manager = FileManager(config)
         self.iteration_tracker = IterationTracker(config, self.file_manager)
         self.workflow_builder = WorkflowBuilder(
-            config, self.llm, self.code_processor, self.sandbox)
+            config, self.programmer_llm, self.tester_llm, self.code_processor, self.sandbox)
 
         # Build workflow
         self.workflow = self.workflow_builder.build_workflow()
@@ -579,12 +592,18 @@ class AgentCoderGenerator:
 def main() -> None:
     """Main entry point."""
     config = AgentCoderConfig(
-        llm_model='gpt-5',
-        llm_provider='openai',
+        llm_model='qwen2.5-coder:7b',  # Default fallback
+        llm_provider='ollama',
         max_iterations=3,
         num_samples_per_task=1,
         save_per_iteration=True,
         use_humaneval_subset=True,  # Enable subset processing for faster development
+
+        # Separate LLMs for each agent
+        programmer_llm_provider='ollama',
+        programmer_llm_model='qwen2.5-coder:7b',
+        tester_llm_provider='openai',
+        tester_llm_model='gpt-5',
     )
 
     generator = AgentCoderGenerator(config)

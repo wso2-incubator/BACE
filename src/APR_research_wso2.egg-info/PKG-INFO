@@ -6,6 +6,15 @@ Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 Requires-Dist: notebook
 Requires-Dist: pandas
+Requires-Dist: ollama
+Requires-Dist: langchain
+Requires-Dist: openai
+Requires-Dist: langgraph
+Requires-Dist: fire
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
 
 # APR - Automated Program Repair
 
@@ -22,25 +31,8 @@ cd APR
 # Install the package with human-eval dependency
 pip install -e .
 
-# Note: The human-eval package will be automatically installed from GitHub
-# If you have a local copy in ./human-eval/, you can also install it separately:
+# Note: The human-eval package should be cloned from github and installed 
 # pip install -e ./human-eval/
-```
-
-### With optional dependencies
-
-```bash
-# For development
-pip install -e ".[dev]"
-
-# For notebooks
-pip install -e ".[notebooks]"
-
-# For OpenAI support
-pip install -e ".[openai]"
-
-# All dependencies
-pip install -e ".[dev,notebooks,openai]"
 ```
 
 ### Human-Eval Dependency
@@ -54,40 +46,3 @@ This project depends on the [human-eval](https://github.com/openai/human-eval) p
    ```bash
    pip install -e ./human-eval/
    ```
-
-## Quick Start
-
-```python
-# Import the main components
-from apr import CodeProcessor, LLMClient
-
-# Initialize components
-processor = CodeProcessor()
-client = LLMClient("ollama", "qwen2.5-coder:7b")
-
-# Use them in your code
-problem = '''def factorial(n: int) -> int:
-    """Calculate factorial of n."""
-    pass'''
-
-function_name = processor.extract_function_name_from_prompt(problem)
-print(f"Function name: {function_name}")
-```
-
-## Project Structure
-
-```
-src/
-├── common/              # Shared utilities
-│   ├── code_processor.py
-│   ├── llm_client.py
-│   └── config.py
-└── agentcoder_plus/     # AgentCoder+ implementation
-    ├── agents/
-    ├── memory/
-    └── workflows/
-```
-
-## License
-
-MIT License

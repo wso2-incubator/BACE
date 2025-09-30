@@ -32,7 +32,7 @@ class BaseConfig(ABC):
     num_samples_per_task: int = 1
 
     # Output Configuration
-    output_dir: str = "data/generations"
+    output_dir: str = "data/human_eval/generations"
     output_filename: Optional[str] = None
 
     # Debug Configuration
@@ -210,6 +210,27 @@ class AgentCoderConfig(BaseConfig):
     max_iterations: int = 5
     save_per_iteration: bool = True
 
+    # Separate LLM configurations for each agent
+    programmer_llm_provider: Optional[Literal["ollama", "openai"]] = None
+    programmer_llm_model: Optional[str] = None
+    tester_llm_provider: Optional[Literal["ollama", "openai"]] = None
+    tester_llm_model: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization validation and setup with agent-specific LLM defaults."""
+        # Set agent-specific defaults if not provided
+        if self.programmer_llm_provider is None:
+            self.programmer_llm_provider = self.llm_provider
+        if self.programmer_llm_model is None:
+            self.programmer_llm_model = self.llm_model
+        if self.tester_llm_provider is None:
+            self.tester_llm_provider = self.llm_provider
+        if self.tester_llm_model is None:
+            self.tester_llm_model = self.llm_model
+
+        # Call parent post-init
+        super().__post_init__()
+
     def validate_config(self) -> None:
         """Validate AgentCoderConfig parameters."""
         super().validate_config()
@@ -217,6 +238,19 @@ class AgentCoderConfig(BaseConfig):
         # AgentCoder specific validation
         if self.max_iterations < 1:
             raise ValueError("max_iterations must be >= 1")
+
+        # Validate agent-specific LLM configurations
+        if self.programmer_llm_provider not in ["ollama", "openai"]:
+            raise ValueError(
+                f"Unsupported programmer LLM provider: {self.programmer_llm_provider}")
+        if self.tester_llm_provider not in ["ollama", "openai"]:
+            raise ValueError(
+                f"Unsupported tester LLM provider: {self.tester_llm_provider}")
+
+        if not self.programmer_llm_model:
+            raise ValueError("programmer_llm_model cannot be empty")
+        if not self.tester_llm_model:
+            raise ValueError("tester_llm_model cannot be empty")
 
     def get_iteration_output_path(self, iteration: int, experiment_name: str = "agent_coder") -> str:
         """

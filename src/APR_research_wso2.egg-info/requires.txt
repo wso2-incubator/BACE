@@ -1,2 +1,12 @@
 notebook
 pandas
+ollama
+langchain
+openai
+langgraph
+fire
+
+[dev]
+pytest
+ruff
+mypy
