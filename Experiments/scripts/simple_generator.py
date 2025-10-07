@@ -13,13 +13,14 @@ Features:
 - Simple but professional structure
 """
 
-from human_eval.data import write_jsonl, read_problems
-from common import LLMClient, CodeProcessor, SimpleConfig
-
 from pathlib import Path
-from typing import Dict, Any, Optional
-from tqdm import tqdm
+from typing import Any, Optional
+
 import fire
+from human_eval.data import read_problems, write_jsonl
+from tqdm import tqdm
+
+from common import CodeProcessor, LLMClient, SimpleConfig
 
 
 class SimpleGenerator:
@@ -34,7 +35,8 @@ class SimpleGenerator:
         """Generate a single completion for the given problem."""
         # Extract function name
         target_function_name = self.code_processor.extract_function_name_from_problem(
-            problem_prompt)
+            problem_prompt
+        )
         if not target_function_name:
             raise ValueError("No function definition found in the prompt.")
 
@@ -68,8 +70,10 @@ class SimpleGenerator:
     def run_generation(self) -> None:
         """Generate completions for the configured dataset."""
         problems = self.load_problems()
-        output_path = self.config.get_output_path("simple",
-                                                  f"-{self.config.filename_suffix}" if self.config.filename_suffix else "")
+        output_path = self.config.get_output_path(
+            "simple",
+            f"-{self.config.filename_suffix}" if self.config.filename_suffix else "",
+        )
 
         print(f"Starting generation with {len(problems)} problems")
         print(f"Output file: {output_path}")
@@ -84,12 +88,10 @@ class SimpleGenerator:
             for sample_idx in range(self.config.num_samples_per_task):
                 try:
                     completion_code = self.generate_completion(
-                        problems[task_id]["prompt"])
+                        problems[task_id]["prompt"]
+                    )
 
-                    completion = {
-                        "task_id": task_id,
-                        "completion": completion_code
-                    }
+                    completion = {"task_id": task_id, "completion": completion_code}
 
                     write_jsonl(output_path, [completion], append=True)
 
@@ -110,7 +112,7 @@ def generate(
     output_filename: Optional[str] = None,
     output_dir: str = "data/human_eval/generations",
     filename_suffix: str = "",
-    verbose: bool = False
+    verbose: bool = False,
 ) -> None:
     """
     Generate code completions for HumanEval problems.
@@ -154,10 +156,10 @@ def generate(
         output_filename=output_filename,
         output_dir=output_dir,
         filename_suffix=filename_suffix,
-        verbose=verbose
+        verbose=verbose,
     )
 
-    print(f"🚀 Starting Simple Generator")
+    print("🚀 Starting Simple Generator")
     print(f"   Model: {config.llm_model} ({config.llm_provider})")
     print(f"   Dataset: {'Subset' if config.use_humaneval_subset else 'Full'}")
     print(f"   Samples per task: {config.num_samples_per_task}")
@@ -169,6 +171,8 @@ def generate(
 
 
 if __name__ == "__main__":
-    fire.Fire({
-        'generate': generate,
-    })
+    fire.Fire(
+        {
+            "generate": generate,
+        }
+    )
