@@ -138,6 +138,7 @@ dependencies = [
     "zstandard==0.25.0",
     "human-eval",
     "livecodebench-pro",
+    "huggingface-hub>=0.35.3",
 ]
 
 [project.optional-dependencies]

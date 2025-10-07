@@ -1,5 +1,6 @@
+from typing import Any
+
 import ollama
-from typing import Any, Dict, Optional, Union
 
 
 class LLMClient:
@@ -11,6 +12,7 @@ class LLMClient:
     def _init_client(self, **kwargs: Any) -> Any:
         if self.provider == "openai":
             from openai import OpenAI
+
             return OpenAI()
         elif self.provider == "ollama":
             return None  # ollama uses module-level functions
@@ -22,7 +24,7 @@ class LLMClient:
             response = self._client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                **kwargs
+                **kwargs,
             )
             content = response.choices[0].message.content
             if content is None:
@@ -30,16 +32,18 @@ class LLMClient:
             # Ensure we return a string type
             return str(content)
         elif self.provider == "ollama":
-            response = ollama.chat(model=self.model, messages=[
-                {
-                    'role': 'user',
-                    'content': prompt,
-                },
-            ])
-            content = response['message']['content']
+            response = ollama.chat(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    },
+                ],
+            )
+            content = response["message"]["content"]
             if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected string content, got {type(content)}")
+                raise ValueError(f"Expected string content, got {type(content)}")
             return content
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
