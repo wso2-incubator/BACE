@@ -20,7 +20,8 @@ import fire
 from human_eval.data import read_problems, write_jsonl
 from tqdm import tqdm
 
-from common import CodeProcessor, LLMClient, SimpleConfig
+from common import CodeProcessor, SimpleConfig
+from common.llm_client import create_llm_client
 
 
 class SimpleGenerator:
@@ -28,7 +29,7 @@ class SimpleGenerator:
 
     def __init__(self, config: SimpleConfig) -> None:
         self.config = config
-        self.client = LLMClient(config.llm_provider, model=config.llm_model)
+        self.client = create_llm_client(config.llm_provider, model=config.llm_model)
         self.code_processor = CodeProcessor()
 
     def generate_completion(self, problem_prompt: str) -> str:
