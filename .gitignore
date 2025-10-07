@@ -1,6 +1,5 @@
 *.pyc
-human-eval
-LiveCodeBench
 **/__pycache__
 **/.mypy_cache
 **/.pytest_cache
+**/*.egg-info
