@@ -13,7 +13,7 @@ from util import extract_longest_cpp_code
 # *************************** Change this before use ****************************
 
 llm_instance = (
-    api_interface.OpenAICodex()
+    api_interface.LLMClient()
 )  # change this to the LLM class you want to benchmark on
 
 # change this to the number of workers you want to use in LightCPVerifier

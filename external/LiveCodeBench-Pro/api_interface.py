@@ -3,6 +3,8 @@ from typing import Any, Tuple
 
 from openai import OpenAI
 
+import common.llm_client as llm_client
+
 
 class LLMInterface(ABC):
     """
@@ -48,7 +50,7 @@ class LLMInterface(ABC):
         return response, meta
 
 
-class OpenAICodex(LLMInterface):
+class LLMClient(LLMInterface):
     """
     Concrete implementation of LLMInterface using OpenAI's GPT-4o model.
 
@@ -56,12 +58,14 @@ class OpenAICodex(LLMInterface):
         client (OpenAI): Client instance for interacting with the OpenAI API.
     """
 
-    def __init__(self):
+    def __init__(self, provider: str = "openai", model: str = "gpt-5"):
         """
         Initializes the ExampleLLM class by creating an instance of the OpenAI client.
         """
         super().__init__()
-        self.client = OpenAI()
+        self.client: llm_client.LLMClient = llm_client.create_llm_client(
+            provider, model=model
+        )
 
     def call_llm(self, user_prompt: str) -> Tuple[str, Any]:
         """
@@ -73,18 +77,15 @@ class OpenAICodex(LLMInterface):
         Returns:
             Tuple[str, Any]: The LLM's response and metadata about the completion.
         """
-        response = self.client.responses.create(
-            model="gpt-5-codex",
-            input=user_prompt,
-        )
-        return response.output[1].content[0].text, str(response)
+        response = self.client.generate(prompt=user_prompt)
+        return response, "no-meta-data-available"
 
 
 if __name__ == "__main__":
     """
     Example execution demonstrating how to use the ExampleLLM class to generate solutions.
     """
-    llm = OpenAICodex()
+    llm = LLMClient()
     response, meta = llm.generate_solution("I need to count from 1 to 10")
     print(response)
     print("\n---\n")
