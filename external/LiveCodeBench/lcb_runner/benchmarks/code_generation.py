@@ -32,7 +32,7 @@ class Test:
     output: str
     testtype: TestType
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.testtype = TestType(self.testtype)
         # if self.testtype == TestType.FUNCTIONAL:
         #     self.input = json.loads(self.input)
@@ -53,7 +53,7 @@ class CodeGenerationProblem:
     private_test_cases: list[Test]
     metadata: dict
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.platform = Platform(self.platform)
         self.difficulty = Difficulty(self.difficulty)
         self.contest_date = datetime.fromisoformat(self.contest_date)
@@ -103,7 +103,7 @@ class CodeGenerationProblem:
             output[k] = v
         return output
 
-    def get_evaluation_sample(self):
+    def get_evaluation_sample(self) -> dict[str, str]:
         return {
             "input_output": json.dumps(
                 {
@@ -122,7 +122,9 @@ class CodeGenerationProblem:
 
 
 def load_code_generation_dataset(
-    release_version="release_v5", start_date=None, end_date=None
+    release_version: str = "release_v5",
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> list[CodeGenerationProblem]:
     dataset = load_dataset(
         "livecodebench/code_generation_lite",
@@ -143,7 +145,7 @@ def load_code_generation_dataset(
             print("Using the first available split of the dataset.")
             dataset = dataset[list(dataset.keys())[0]]
 
-    dataset = [CodeGenerationProblem(**p) for p in dataset]  # type: ignore
+    dataset = [CodeGenerationProblem(**p) for p in dataset]
 
     # Filter only problems with difficulty hard. TODO: Make this configurable.
     dataset = [e for e in dataset if e.difficulty == Difficulty.HARD]
@@ -161,7 +163,7 @@ def load_code_generation_dataset(
 
 
 def load_code_generation_dataset_not_fast(
-    release_version="release_v5",
+    release_version: str = "release_v5",
 ) -> list[CodeGenerationProblem]:
     dataset = load_dataset("livecodebench/code_generation", split="test")
     dataset = [CodeGenerationProblem(**p) for p in dataset]  # type: ignore

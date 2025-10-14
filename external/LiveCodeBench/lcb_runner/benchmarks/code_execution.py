@@ -1,7 +1,6 @@
-import json
-from enum import Enum
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 from datasets import load_dataset
 
@@ -20,10 +19,12 @@ class CodeExecutionProblem:
     problem_id: str
     numsteps: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         pass
 
-    def insert_output(self, output_list: list[str], pred_list: list[str]) -> dict:
+    def insert_output(
+        self, output_list: list[str], pred_list: list[str]
+    ) -> dict[str, Any]:
         return {
             "question_id": self.question_id,
             "contest_id": self.contest_id,
@@ -42,13 +43,13 @@ class CodeExecutionProblem:
 
     def insert_output_evaluation(
         self, output_list: list[str], code_list: list[str], graded_list: list[bool]
-    ) -> dict:
+    ) -> dict[str, Any]:
         output = self.insert_output(output_list, code_list)
         output["graded_list"] = graded_list
         output["pass@1"] = graded_list.count(True) / len(graded_list)
         return output
 
-    def get_evaluation_sample(self) -> dict:
+    def get_evaluation_sample(self) -> dict[str, Any]:
         return {
             "code": self.code,
             "input": self.input,
@@ -56,9 +57,13 @@ class CodeExecutionProblem:
         }
 
 
-def load_code_execution_dataset(release_version="release_v1") -> list[CodeExecutionProblem]:
-    dataset = load_dataset("livecodebench/execution-v2", split="test")
-    dataset = [CodeExecutionProblem(**p) for p in dataset]  # type: ignore
+def load_code_execution_dataset(
+    release_version: str = "release_v1",
+) -> list[CodeExecutionProblem]:
+    dataset = [
+        CodeExecutionProblem(**p)
+        for p in load_dataset("livecodebench/execution-v2", split="test")
+    ]
     print(f"Loaded {len(dataset)} problems")
     return dataset
 

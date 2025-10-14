@@ -139,6 +139,8 @@ dependencies = [
     "human-eval",
     "livecodebench-pro",
     "huggingface-hub>=0.35.3",
+    "datasets==3.6.0",
+    "livecodebench",
 ]
 
 [project.optional-dependencies]
@@ -170,8 +172,10 @@ ignore_missing_imports = true
 members = [
     "external/human-eval",
     "external/LiveCodeBench-Pro",
+    "external/LiveCodeBench",
 ]
 
 [tool.uv.sources]
 human-eval = { workspace = true, editable = true }
 livecodebench-pro = { workspace = true, editable = true }
+livecodebench = { workspace = true, editable = true }

@@ -1,11 +1,12 @@
 """
 LLM Factory Module for APR Experiments
 
-This module provides factory functions and utilities for creating and managing 
+This module provides factory functions and utilities for creating and managing
 different types of Language Model instances across APR experiments.
 """
 
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
 from langchain_core.language_models.chat_models import BaseChatModel
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 # Import LLM libraries conditionally to handle missing dependencies gracefully
 try:
     from langchain_ollama.chat_models import ChatOllama
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -21,17 +23,18 @@ except ImportError:
 
 try:
     from langchain_openai import ChatOpenAI
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
     ChatOpenAI = None
 
 
-def create_llm_instance(config: 'BaseConfig') -> BaseChatModel:
+def create_llm_instance(config: "BaseConfig") -> BaseChatModel:
     """
     Factory function to create the appropriate LLM instance based on provider configuration.
 
-    Leverages LangGraph's unified interface where both ChatOllama and ChatOpenAI 
+    Leverages LangGraph's unified interface where both ChatOllama and ChatOpenAI
     inherit from BaseChatModel, providing consistent .invoke(), .stream(), and .bind_tools() methods.
 
     Args:
@@ -68,9 +71,7 @@ def create_llm_instance(config: 'BaseConfig') -> BaseChatModel:
 
 
 def create_llm_from_params(
-    provider: Literal["ollama", "openai"],
-    model: str,
-    **kwargs
+    provider: Literal["ollama", "openai"], model: str, **kwargs
 ) -> BaseChatModel:
     """
     Create LLM instance directly from parameters without config object.
@@ -105,8 +106,7 @@ def create_llm_from_params(
 
     else:
         raise ValueError(
-            f"Unsupported provider: {provider}. "
-            f"Supported providers: 'ollama', 'openai'"
+            f"Unsupported provider: {provider}. Supported providers: 'ollama', 'openai'"
         )
 
 
