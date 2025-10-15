@@ -5,59 +5,49 @@ This module provides a secure environment to execute Python code snippets
 with safety restrictions to prevent harm to the local machine.
 """
 
-import subprocess
-import tempfile
 import os
-import signal
-import time
-import sys
 import re
-from typing import Dict, Any, Optional, List, Literal
-from pathlib import Path
 import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
 
 class CodeExecutionTimeoutError(Exception):
     """Raised when code execution times out."""
+
     pass
 
 
 class CodeExecutionError(Exception):
     """Raised when code execution fails."""
+
     pass
 
 
 # Type definitions for better type safety
-ExecutionCategory = Literal['SCRIPT_ERROR', 'TESTS_FAILED',
-                            'TESTS_PASSED', 'NO_TESTS_FOUND', 'UNKNOWN']
 
 
 @dataclass
 class TestResult:
     """Individual test result with detailed information."""
+
     name: str
     description: str  # Usually the docstring or test description
-    status: Literal['passed', 'failed', 'error']
+    status: Literal["passed", "failed", "error"]
     # Full error message/traceback for failed/error tests
     details: Optional[str] = None
 
 
 @dataclass
-class TestDetails:
-    """Detailed breakdown of individual test results."""
-    raw_output: str
-    raw_error: str
-
-    # Enhanced properties with detailed information
-    passed_test_details: List[TestResult]
-    failed_test_details: List[TestResult]
-    error_test_details: List[TestResult]
-
-
-@dataclass
 class BasicExecutionResult:
     """Result of basic code execution."""
+
     success: bool
     output: str
     error: str
@@ -68,23 +58,19 @@ class BasicExecutionResult:
 
 @dataclass
 class TestExecutionResult:
-    """Comprehensive result of test script execution with detailed categorization."""
-    # Basic execution info
-    success: bool
-    output: str
-    error: str
-    execution_time: float
-    timeout: bool
-    return_code: int
+    """Simplified result of test script execution focusing on test analysis."""
 
     # Test-specific analysis
     script_error: bool
     tests_passed: int
     tests_failed: int
     tests_errors: int
-    test_details: TestDetails
-    execution_category: ExecutionCategory
-    test_summary: str
+
+    # Ordered list of test results (in execution order)
+    test_results: List[TestResult]
+
+    # Simple summary message
+    summary: str
 
     @property
     def total_tests(self) -> int:
@@ -104,19 +90,414 @@ class TestExecutionResult:
         return self.tests_failed > 0 or self.tests_errors > 0
 
     @property
-    def is_script_level_error(self) -> bool:
-        """Whether the failure is at the script level (not test failures)."""
-        return self.script_error or self.execution_category == 'SCRIPT_ERROR'
+    def all_tests_passed(self) -> bool:
+        """Whether all tests passed successfully."""
+        return (
+            self.total_tests > 0
+            and self.tests_failed == 0
+            and self.tests_errors == 0
+            and not self.script_error
+        )
 
 
 @dataclass
 class TestAnalysis:
     """Internal analysis of unittest output."""
+
     passed: int
     failed: int
     errors: int
     script_error: bool
-    details: TestDetails
+    test_results: List[TestResult]
+
+
+class TestResultAnalyzer:
+    """
+    Analyzes unittest execution output to extract detailed test results.
+
+    This class is responsible for parsing unittest output formats and
+    categorizing test results. It works independently of the execution
+    environment and can analyze any unittest output.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the test result analyzer."""
+        pass
+
+    def analyze_unittest_output(
+        self, basic_result: BasicExecutionResult
+    ) -> TestExecutionResult:
+        """
+        Analyze unittest execution results and return detailed test information.
+
+        Args:
+            basic_result: Basic execution result from code execution
+
+        Returns:
+            TestExecutionResult with detailed test analysis
+        """
+        # Parse unittest output regardless of success/failure
+        # because unittest failures cause non-zero exit codes
+        test_analysis = self._parse_unittest_output(
+            basic_result.output, basic_result.error or ""
+        )
+
+        # Determine script error and create summary
+        script_error = False
+        summary = ""
+
+        # Check if failure is due to script errors vs test failures
+        if not basic_result.success and test_analysis.script_error:
+            # True script error (syntax, import, etc.)
+            script_error = True
+            summary = f"Script execution failed: {basic_result.error}"
+        elif test_analysis.failed > 0 or test_analysis.errors > 0:
+            # Tests ran but some failed
+            summary = f"Tests completed: {test_analysis.passed} passed, {test_analysis.failed} failed, {test_analysis.errors} errors"
+        elif test_analysis.passed > 0:
+            # All tests passed
+            summary = f"All tests passed: {test_analysis.passed} tests"
+        elif "NO TESTS RAN" in basic_result.error or (
+            basic_result.return_code == 5 and "Ran 0 tests" in basic_result.error
+        ):
+            # No tests found scenario (unittest exit code 5)
+            summary = "No tests were found or executed"
+        elif not basic_result.success:
+            # Script failed but no unittest patterns found - likely script error
+            script_error = True
+            summary = f"Script execution failed: {basic_result.error}"
+        else:
+            # Script succeeded but no tests found
+            summary = "No tests were found or executed"
+
+        return TestExecutionResult(
+            script_error=script_error,
+            tests_passed=test_analysis.passed,
+            tests_failed=test_analysis.failed,
+            tests_errors=test_analysis.errors,
+            test_results=test_analysis.test_results,
+            summary=summary,
+        )
+
+    def ensure_unittest_verbosity(self, test_script: str) -> str:
+        """
+        Ensure that unittest.main() calls in the script use verbosity=2.
+
+        Args:
+            test_script: The original test script
+
+        Returns:
+            Modified test script with verbosity=2 for unittest.main() calls
+        """
+        modified_script = test_script
+
+        # Replace unittest.main() with unittest.main(verbosity=2)
+        modified_script = re.sub(
+            r"unittest\.main\(\)", "unittest.main(verbosity=2)", modified_script
+        )
+
+        # Handle all unittest.main() calls - upgrade verbosity and add if missing
+        def process_unittest_main(match: re.Match[str]) -> str:
+            params = match.group(1).strip()
+
+            # Check if verbosity is already present
+            verbosity_match = re.search(r"verbosity\s*=\s*([01])", params)
+            if verbosity_match:
+                # Replace verbosity=0 or verbosity=1 with verbosity=2
+                new_params = re.sub(r"verbosity\s*=\s*[01]", "verbosity=2", params)
+                return f"unittest.main({new_params})"
+            elif "verbosity" in params:
+                # verbosity=2 already present, keep unchanged
+                return match.group(0)
+            else:
+                # No verbosity parameter, add it
+                if params:
+                    return f"unittest.main({params}, verbosity=2)"
+                else:
+                    return "unittest.main(verbosity=2)"
+
+        modified_script = re.sub(
+            r"unittest\.main\(([^)]*)\)", process_unittest_main, modified_script
+        )
+
+        return modified_script
+
+    def _parse_unittest_output(self, stdout: str, stderr: str) -> TestAnalysis:
+        """
+        Parse unittest output to extract detailed test results.
+
+        Args:
+            stdout: Standard output from test execution
+            stderr: Standard error from test execution
+
+        Returns:
+            TestAnalysis with parsed test results
+        """
+        # Check for script-level errors first (syntax, import errors)
+        # But exclude unittest failure messages which also appear in stderr
+        script_error = False
+        if stderr and any(
+            error_type in stderr.lower()
+            for error_type in [
+                "syntaxerror",
+                "indentationerror",
+                "importerror",
+                "modulenotfounderror",
+            ]
+        ):
+            # Make sure it's not just unittest output in stderr
+            if not ("Ran " in stderr and ("FAILED" in stderr or "OK" in stderr)):
+                script_error = True
+                return TestAnalysis(
+                    passed=0,
+                    failed=0,
+                    errors=0,
+                    script_error=script_error,
+                    test_results=[],
+                )
+
+        # Combine stdout and stderr for comprehensive parsing
+        full_output = stdout + "\n" + stderr
+
+        # Initialize counters
+        passed = 0
+        failed = 0
+        errors = 0
+
+        # Pattern for unittest summary line (e.g., "Ran 5 tests in 0.001s")
+        ran_pattern = r"Ran (\d+) tests? in ([\d.]+)s"
+        ran_match = re.search(ran_pattern, full_output)
+
+        if ran_match:
+            total_tests = int(ran_match.group(1))
+
+            # Look for OK (all passed)
+            if re.search(r"\nOK\s*$", full_output, re.MULTILINE):
+                passed = total_tests
+
+            # Look for FAILED with details
+            failed_pattern = r"FAILED \((.+?)\)"
+            failed_match = re.search(failed_pattern, full_output)
+
+            if failed_match:
+                failure_info = failed_match.group(1)
+
+                # Parse failures and errors
+                failures_match = re.search(r"failures=(\d+)", failure_info)
+                errors_match = re.search(r"errors=(\d+)", failure_info)
+
+                failures = int(failures_match.group(1)) if failures_match else 0
+                errors = int(errors_match.group(1)) if errors_match else 0
+
+                failed = failures
+                errors = errors
+                passed = total_tests - failures - errors
+            else:
+                # Check if we have failure output but no explicit FAILED line
+                # This can happen when tests fail but the format is different
+                if "FAIL:" in full_output or "ERROR:" in full_output:
+                    # Count failures and errors manually
+                    fail_count = len(re.findall(r"FAIL:", full_output))
+                    error_count = len(re.findall(r"ERROR:", full_output))
+
+                    failed = fail_count
+                    errors = error_count
+                    passed = max(0, total_tests - fail_count - error_count)
+        else:
+            # No "Ran X tests" found, try to parse test dots/letters
+            passed, failed, errors = self._parse_test_dots(full_output)
+
+        # Parse individual test results from detailed output (in execution order)
+        test_results = self._parse_individual_tests(full_output)
+
+        return TestAnalysis(
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            script_error=script_error,
+            test_results=test_results,
+        )
+
+    def _parse_individual_tests(self, output: str) -> List[TestResult]:
+        """Parse individual test method results from verbose output, maintaining execution order."""
+
+        test_results = []
+
+        # Pattern for verbose unittest output - handle both cases:
+        # Case 1: test_name (module.path)\nDescription ... STATUS  (with docstring)
+        # Case 2: test_name (module.path) ... STATUS  (without docstring)
+
+        # Split output into lines and process sequentially to maintain order
+        lines = output.split("\n")
+        i = 0
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # Look for test execution lines
+            # Pattern: test_name (module.TestClass) ... ok/FAIL/ERROR
+            test_match = re.match(r"(\w+) \([^)]+\) \.\.\. (ok|FAIL|ERROR)", line)
+            if test_match:
+                test_name, status = test_match.groups()
+
+                # Look for description on previous line (if it's not a test line)
+                description = f"Test method: {test_name}"  # Default
+                if i > 0:
+                    prev_line = lines[i - 1].strip()
+                    # Check if previous line looks like a description (not a test result line)
+                    if prev_line and not re.match(
+                        r"\w+ \([^)]+\) \.\.\. (ok|FAIL|ERROR)", prev_line
+                    ):
+                        description = prev_line
+
+                # Create TestResult with basic info
+                test_result = TestResult(
+                    name=test_name,
+                    description=description,
+                    status="passed"
+                    if status == "ok"
+                    else "failed"
+                    if status == "FAIL"
+                    else "error",
+                    details=None,
+                )
+
+                test_results.append(test_result)
+
+            i += 1
+
+        # Now extract detailed failure/error information
+        self._extract_detailed_failures(output, test_results)
+
+        return test_results
+
+    def _extract_detailed_failures(
+        self, output: str, test_results: List[TestResult]
+    ) -> None:
+        """Extract detailed failure and error information from unittest output."""
+
+        # Pattern for detailed failure/error sections:
+        # ======================================================================
+        # FAIL/ERROR: test_name (module.path)
+        # ----------------------------------------------------------------------
+        # Traceback or error details...
+
+        # Find all detailed sections
+        detailed_sections = re.split(r"={70,}", output)
+
+        for section in detailed_sections:
+            if not section.strip():
+                continue
+
+            # Look for FAIL or ERROR headers
+            fail_match = re.search(
+                r"FAIL: (\w+) \([^)]+\)\n.*?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)",
+                section,
+                re.DOTALL,
+            )
+            error_match = re.search(
+                r"ERROR: (\w+) \([^)]+\)\n.*?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)",
+                section,
+                re.DOTALL,
+            )
+
+            if fail_match:
+                test_name, error_details = fail_match.groups()
+                self._update_test_details(
+                    test_results, test_name.strip(), error_details.strip()
+                )
+
+            elif error_match:
+                test_name, error_details = error_match.groups()
+                self._update_test_details(
+                    test_results, test_name.strip(), error_details.strip()
+                )
+
+    def _update_test_details(
+        self, test_results: List[TestResult], test_name: str, error_details: str
+    ) -> None:
+        """Update the details field for a specific test."""
+        for test_result in test_results:
+            if test_result.name == test_name:
+                # Clean the error details to extract only relevant parts
+                test_result.details = self._clean_error_details(error_details)
+                break
+
+    def _clean_error_details(self, raw_details: str) -> str:
+        """
+        Extract only the relevant assertion line and error message from traceback.
+
+        Args:
+            raw_details: Raw traceback string
+
+        Returns:
+            Cleaned error details with just the assertion and error message
+        """
+        if not raw_details:
+            return ""
+
+        lines = raw_details.strip().split("\n")
+
+        # Find the assertion line and error message
+        assertion_line = ""
+        error_message = ""
+
+        for i, line in enumerate(lines):
+            # Look for assertion lines (indented and contain self.assert)
+            if line.strip().startswith("self.assert") or "~~~" in line:
+                # Get the actual assertion (previous line if current is ~~~)
+                if "~~~" in line and i > 0:
+                    assertion_line = lines[i - 1].strip()
+                elif line.strip().startswith("self.assert"):
+                    assertion_line = line.strip()
+
+            # Look for error messages (AssertionError, ValueError, etc.)
+            elif any(
+                error_type in line
+                for error_type in [
+                    "AssertionError:",
+                    "ValueError:",
+                    "TypeError:",
+                    "IndexError:",
+                    "KeyError:",
+                    "AttributeError:",
+                ]
+            ):
+                error_message = line.strip()
+
+        # Combine assertion and error message
+        result_parts = []
+        if assertion_line:
+            result_parts.append(assertion_line)
+        if error_message:
+            result_parts.append(error_message)
+
+        return "\n".join(result_parts) if result_parts else raw_details
+
+    def _parse_test_dots(self, output: str) -> tuple[int, int, int]:
+        """Parse test results from dot notation (e.g., '..F.E.')
+
+        Returns:
+            Tuple of (passed, failed, errors) counts
+        """
+        passed = 0
+        failed = 0
+        errors = 0
+
+        # Find test result dots/letters
+        dot_pattern = r"^([.FE]+)$"
+        matches = re.findall(dot_pattern, output, re.MULTILINE)
+
+        for match in matches:
+            for char in match:
+                if char == ".":
+                    passed += 1
+                elif char == "F":
+                    failed += 1
+                elif char == "E":
+                    errors += 1
+
+        return passed, failed, errors
 
 
 class SafeCodeSandbox:
@@ -124,12 +505,14 @@ class SafeCodeSandbox:
     A safe sandbox environment for executing Python code with restrictions.
     """
 
-    def __init__(self,
-                 timeout: int = 30,
-                 max_memory_mb: int = 100,
-                 max_output_size: int = 10000,
-                 allowed_imports: Optional[List[str]] = None,
-                 python_executable: Optional[str] = None):
+    def __init__(
+        self,
+        timeout: int = 30,
+        max_memory_mb: int = 100,
+        max_output_size: int = 10000,
+        allowed_imports: Optional[List[str]] = None,
+        python_executable: Optional[str] = None,
+    ):
         """
         Initialize the sandbox with safety parameters.
 
@@ -145,22 +528,63 @@ class SafeCodeSandbox:
         self.max_output_size = max_output_size
         self.python_executable = python_executable or sys.executable
         self.allowed_imports = allowed_imports or [
-            'math', 'random', 'itertools', 'collections', 'functools',
-            'operator', 'copy', 'json', 're', 'string', 'unittest',
-            'typing', 'dataclasses', 'enum', 'heapq', 'bisect'
+            "math",
+            "random",
+            "itertools",
+            "collections",
+            "functools",
+            "operator",
+            "copy",
+            "json",
+            "re",
+            "string",
+            "unittest",
+            "typing",
+            "dataclasses",
+            "enum",
+            "heapq",
+            "bisect",
         ]
 
         # Dangerous modules/functions to block
         self.blocked_patterns = [
-            'import os', 'import sys', 'import subprocess', 'import shutil',
-            'import socket', 'import urllib', 'import requests', 'import http',
-            'import ftplib', 'import smtplib', 'import telnetlib',
-            'import tempfile', 'import pickle', 'import marshal',
-            'import importlib', 'import __import__', 'exec(', 'eval(',
-            'compile(', 'open(', 'file(', 'input(', 'raw_input(',
-            '__builtins__', '__globals__', '__locals__', 'globals()',
-            'locals()', 'vars()', 'dir()', 'hasattr(', 'getattr(',
-            'setattr(', 'delattr(', 'exit(', 'quit(', 'reload('
+            "import os",
+            "import sys",
+            "import subprocess",
+            "import shutil",
+            "import socket",
+            "import urllib",
+            "import requests",
+            "import http",
+            "import ftplib",
+            "import smtplib",
+            "import telnetlib",
+            "import tempfile",
+            "import pickle",
+            "import marshal",
+            "import importlib",
+            "import __import__",
+            "exec(",
+            "eval(",
+            "compile(",
+            "open(",
+            "file(",
+            "input(",
+            "raw_input(",
+            "__builtins__",
+            "__globals__",
+            "__locals__",
+            "globals()",
+            "locals()",
+            "vars()",
+            "dir()",
+            "hasattr(",
+            "getattr(",
+            "setattr(",
+            "delattr(",
+            "exit(",
+            "quit(",
+            "reload(",
         ]
 
     def _check_code_safety(self, code: str) -> bool:
@@ -190,28 +614,60 @@ class SafeCodeSandbox:
         """
         # Create a minimal safe environment
         safe_builtins = {
-            'len': len, 'range': range, 'enumerate': enumerate,
-            'zip': zip, 'map': map, 'filter': filter, 'sorted': sorted,
-            'sum': sum, 'min': max, 'max': max, 'abs': abs,
-            'round': round, 'int': int, 'float': float, 'str': str,
-            'bool': bool, 'list': list, 'tuple': tuple, 'dict': dict,
-            'set': set, 'frozenset': frozenset, 'type': type,
-            'isinstance': isinstance, 'issubclass': issubclass,
-            'print': print, 'repr': repr, 'ord': ord, 'chr': chr,
-            'bin': bin, 'oct': oct, 'hex': hex, 'any': any, 'all': all,
-            'pow': pow, 'divmod': divmod, 'reversed': reversed,
-            'slice': slice, 'Exception': Exception, 'ValueError': ValueError,
-            'TypeError': TypeError, 'IndexError': IndexError,
-            'KeyError': KeyError, 'AttributeError': AttributeError,
+            "len": len,
+            "range": range,
+            "enumerate": enumerate,
+            "zip": zip,
+            "map": map,
+            "filter": filter,
+            "sorted": sorted,
+            "sum": sum,
+            "min": max,
+            "max": max,
+            "abs": abs,
+            "round": round,
+            "int": int,
+            "float": float,
+            "str": str,
+            "bool": bool,
+            "list": list,
+            "tuple": tuple,
+            "dict": dict,
+            "set": set,
+            "frozenset": frozenset,
+            "type": type,
+            "isinstance": isinstance,
+            "issubclass": issubclass,
+            "print": print,
+            "repr": repr,
+            "ord": ord,
+            "chr": chr,
+            "bin": bin,
+            "oct": oct,
+            "hex": hex,
+            "any": any,
+            "all": all,
+            "pow": pow,
+            "divmod": divmod,
+            "reversed": reversed,
+            "slice": slice,
+            "Exception": Exception,
+            "ValueError": ValueError,
+            "TypeError": TypeError,
+            "IndexError": IndexError,
+            "KeyError": KeyError,
+            "AttributeError": AttributeError,
         }
 
         return {
-            '__builtins__': safe_builtins,
-            '__name__': '__main__',
-            '__doc__': None,
+            "__builtins__": safe_builtins,
+            "__name__": "__main__",
+            "__doc__": None,
         }
 
-    def execute_code(self, code: str, capture_output: bool = True) -> BasicExecutionResult:
+    def execute_code(
+        self, code: str, capture_output: bool = True
+    ) -> BasicExecutionResult:
         """
         Safely execute Python code in a restricted environment.
 
@@ -232,15 +688,17 @@ class SafeCodeSandbox:
         if not self._check_code_safety(code):
             return BasicExecutionResult(
                 success=False,
-                output='',
-                error='Code contains potentially dangerous patterns',
+                output="",
+                error="Code contains potentially dangerous patterns",
                 execution_time=0,
                 timeout=False,
-                return_code=-1
+                return_code=-1,
             )
 
         # Create temporary file for code execution
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False
+        ) as temp_file:
             temp_file.write(code)
             temp_file_path = temp_file.name
 
@@ -259,8 +717,8 @@ class SafeCodeSandbox:
             execution_time = time.time() - start_time
 
             # Limit output size
-            stdout = result.stdout[:self.max_output_size] if result.stdout else ''
-            stderr = result.stderr[:self.max_output_size] if result.stderr else ''
+            stdout = result.stdout[: self.max_output_size] if result.stdout else ""
+            stderr = result.stderr[: self.max_output_size] if result.stderr else ""
 
             return BasicExecutionResult(
                 success=result.returncode == 0,
@@ -268,27 +726,27 @@ class SafeCodeSandbox:
                 error=stderr,
                 execution_time=execution_time,
                 timeout=False,
-                return_code=result.returncode
+                return_code=result.returncode,
             )
 
         except subprocess.TimeoutExpired:
             return BasicExecutionResult(
                 success=False,
-                output='',
-                error=f'Code execution timed out after {self.timeout} seconds',
+                output="",
+                error=f"Code execution timed out after {self.timeout} seconds",
                 execution_time=self.timeout,
                 timeout=True,
-                return_code=-1
+                return_code=-1,
             )
 
         except Exception as e:
             return BasicExecutionResult(
                 success=False,
-                output='',
-                error=f'Execution error: {str(e)}',
+                output="",
+                error=f"Execution error: {str(e)}",
                 execution_time=0,
                 timeout=False,
-                return_code=-1
+                return_code=-1,
             )
 
         finally:
@@ -301,412 +759,94 @@ class SafeCodeSandbox:
     def execute_test_script(self, test_script: str) -> TestExecutionResult:
         """
         Execute a test script and return detailed results with test categorization.
-        The test script is expected to use the unittest framework.
-        The verbosity of unittest output is set to 2 for detailed results.
+
+        This method is a convenience wrapper that combines safe code execution
+        with unittest output analysis. For more control over the process, use
+        execute_code() and TestResultAnalyzer separately.
 
         Args:
             test_script: The test script to execute
 
         Returns:
-            TestExecutionResult containing comprehensive execution results including:
-            - success: bool indicating if script executed without errors
-            - output: str - Standard output
-            - error: str - Standard error  
-            - execution_time: float - Execution time in seconds
-            - timeout: bool - Whether execution timed out
-            - return_code: int - Process return code
-            - script_error: bool indicating if there was a script execution error
-            - tests_passed: int number of tests that passed
-            - tests_failed: int number of tests that failed
-            - tests_errors: int number of tests with errors
-            - test_details: TestDetails - detailed breakdown of test results
-            - execution_category: ExecutionCategory - categorized execution result
-            - test_summary: str - human-readable summary
+            TestExecutionResult containing comprehensive execution results
         """
-        # Ensure unittest.main() calls use verbosity=2 for detailed output
-        modified_script = self._ensure_unittest_verbosity(test_script)
+        # Create analyzer and prepare the test script
+        analyzer = TestResultAnalyzer()
+        modified_script = analyzer.ensure_unittest_verbosity(test_script)
 
+        # Execute the code safely
         basic_result = self.execute_code(modified_script)
 
-        # Parse unittest output regardless of success/failure
-        # because unittest failures cause non-zero exit codes
-        test_analysis = self._parse_unittest_output(
-            basic_result.output, basic_result.error or "")
+        # Analyze the test results
+        return analyzer.analyze_unittest_output(basic_result)
 
-        # Determine execution category and script error status
-        script_error = False
-        execution_category: ExecutionCategory = 'UNKNOWN'
-        test_summary = ""
 
-        # Check if failure is due to script errors vs test failures
-        if not basic_result.success and test_analysis.script_error:
-            # True script error (syntax, import, etc.)
-            script_error = True
-            execution_category = 'SCRIPT_ERROR'
-            test_summary = f"Script execution failed: {basic_result.error}"
-        elif test_analysis.failed > 0 or test_analysis.errors > 0:
-            # Tests ran but some failed
-            execution_category = 'TESTS_FAILED'
-            test_summary = f"Tests completed: {test_analysis.passed} passed, {test_analysis.failed} failed, {test_analysis.errors} errors"
-        elif test_analysis.passed > 0:
-            # All tests passed
-            execution_category = 'TESTS_PASSED'
-            test_summary = f"All tests passed: {test_analysis.passed} tests"
-        elif 'NO TESTS RAN' in basic_result.error or (basic_result.return_code == 5 and 'Ran 0 tests' in basic_result.error):
-            # No tests found scenario (unittest exit code 5)
-            execution_category = 'NO_TESTS_FOUND'
-            test_summary = "No tests were found or executed"
-        elif not basic_result.success:
-            # Script failed but no unittest patterns found - likely script error
-            script_error = True
-            execution_category = 'SCRIPT_ERROR'
-            test_summary = f"Script execution failed: {basic_result.error}"
-        else:
-            # Script succeeded but no tests found
-            execution_category = 'NO_TESTS_FOUND'
-            test_summary = "No tests were found or executed"
+class TestExecutor:
+    """
+    High-level interface for executing test scripts with comprehensive analysis.
 
-        return TestExecutionResult(
-            # Basic execution info
-            success=basic_result.success,
-            output=basic_result.output,
-            error=basic_result.error,
-            execution_time=basic_result.execution_time,
-            timeout=basic_result.timeout,
-            return_code=basic_result.return_code,
+    This class orchestrates safe code execution and test result analysis,
+    providing a clean separation between execution and analysis concerns
+    while maintaining the convenience of the original execute_test_script API.
+    """
 
-            # Test-specific analysis
-            script_error=script_error,
-            tests_passed=test_analysis.passed,
-            tests_failed=test_analysis.failed,
-            tests_errors=test_analysis.errors,
-            test_details=test_analysis.details,
-            execution_category=execution_category,
-            test_summary=test_summary
-        )
-
-    def _ensure_unittest_verbosity(self, test_script: str) -> str:
+    def __init__(
+        self,
+        timeout: int = 30,
+        max_memory_mb: int = 100,
+        max_output_size: int = 10000,
+        allowed_imports: Optional[List[str]] = None,
+        python_executable: Optional[str] = None,
+    ):
         """
-        Ensure that unittest.main() calls in the script use verbosity=2.
+        Initialize test executor with sandbox configuration.
 
         Args:
-            test_script: The original test script
-
-        Returns:
-            Modified test script with verbosity=2 for unittest.main() calls
+            timeout: Maximum execution time in seconds
+            max_memory_mb: Maximum memory usage in MB
+            max_output_size: Maximum output size in characters
+            allowed_imports: List of allowed import modules
+            python_executable: Path to Python executable
         """
-        modified_script = test_script
+        self.sandbox = SafeCodeSandbox(
+            timeout=timeout,
+            max_memory_mb=max_memory_mb,
+            max_output_size=max_output_size,
+            allowed_imports=allowed_imports,
+            python_executable=python_executable,
+        )
+        self.analyzer = TestResultAnalyzer()
 
-        # Replace unittest.main() with unittest.main(verbosity=2)
-        modified_script = re.sub(
-            r'unittest\.main\(\)', 'unittest.main(verbosity=2)', modified_script)
-
-        # Replace unittest.main(verbosity=0) or unittest.main(verbosity=1) with verbosity=2
-        modified_script = re.sub(
-            r'unittest\.main\(verbosity=[01]\)', 'unittest.main(verbosity=2)', modified_script)
-
-        # Handle cases where there are other parameters but no verbosity
-        # Look for unittest.main() calls that have parameters but no verbosity
-        def add_verbosity(match: re.Match[str]) -> str:
-            params = match.group(1).strip()
-            if 'verbosity' not in params:
-                if params:
-                    return f'unittest.main({params}, verbosity=2)'
-                else:
-                    return 'unittest.main(verbosity=2)'
-            # Return unchanged if verbosity already present
-            return match.group(0)
-
-        modified_script = re.sub(
-            r'unittest\.main\(([^)]*)\)', add_verbosity, modified_script)
-
-        return modified_script
-
-    def _parse_unittest_output(self, stdout: str, stderr: str) -> TestAnalysis:
+    def execute_test_script(self, test_script: str) -> TestExecutionResult:
         """
-        Parse unittest output to extract detailed test results.
+        Execute a test script and return comprehensive results.
 
         Args:
-            stdout: Standard output from test execution
-            stderr: Standard error from test execution
+            test_script: The test script to execute
 
         Returns:
-            TestAnalysis with parsed test results
+            TestExecutionResult with detailed analysis
         """
-        details = TestDetails(
-            raw_output=stdout,
-            raw_error=stderr,
-            passed_test_details=[],
-            failed_test_details=[],
-            error_test_details=[]
-        )
+        # Prepare the test script with proper verbosity
+        modified_script = self.analyzer.ensure_unittest_verbosity(test_script)
 
-        # Check for script-level errors first (syntax, import errors)
-        # But exclude unittest failure messages which also appear in stderr
-        script_error = False
-        if stderr and any(error_type in stderr.lower() for error_type in
-                          ['syntaxerror', 'indentationerror', 'importerror', 'modulenotfounderror']):
-            # Make sure it's not just unittest output in stderr
-            if not ('Ran ' in stderr and ('FAILED' in stderr or 'OK' in stderr)):
-                script_error = True
-                return TestAnalysis(
-                    passed=0,
-                    failed=0,
-                    errors=0,
-                    script_error=script_error,
-                    details=details
-                )
+        # Execute safely in the sandbox
+        basic_result = self.sandbox.execute_code(modified_script)
 
-        # Combine stdout and stderr for comprehensive parsing
-        full_output = stdout + "\n" + stderr
+        # Analyze the results
+        return self.analyzer.analyze_unittest_output(basic_result)
 
-        # Initialize counters
-        passed = 0
-        failed = 0
-        errors = 0
-
-        # Pattern for unittest summary line (e.g., "Ran 5 tests in 0.001s")
-        ran_pattern = r'Ran (\d+) tests? in ([\d.]+)s'
-        ran_match = re.search(ran_pattern, full_output)
-
-        if ran_match:
-            total_tests = int(ran_match.group(1))
-
-            # Look for OK (all passed)
-            if re.search(r'\nOK\s*$', full_output, re.MULTILINE):
-                passed = total_tests
-
-            # Look for FAILED with details
-            failed_pattern = r'FAILED \((.+?)\)'
-            failed_match = re.search(failed_pattern, full_output)
-
-            if failed_match:
-                failure_info = failed_match.group(1)
-
-                # Parse failures and errors
-                failures_match = re.search(r'failures=(\d+)', failure_info)
-                errors_match = re.search(r'errors=(\d+)', failure_info)
-
-                failures = int(failures_match.group(1)
-                               ) if failures_match else 0
-                errors = int(errors_match.group(1)) if errors_match else 0
-
-                failed = failures
-                errors = errors
-                passed = total_tests - failures - errors
-            else:
-                # Check if we have failure output but no explicit FAILED line
-                # This can happen when tests fail but the format is different
-                if 'FAIL:' in full_output or 'ERROR:' in full_output:
-                    # Count failures and errors manually
-                    fail_count = len(re.findall(r'FAIL:', full_output))
-                    error_count = len(re.findall(r'ERROR:', full_output))
-
-                    failed = fail_count
-                    errors = error_count
-                    passed = max(0, total_tests - fail_count - error_count)
-        else:
-            # No "Ran X tests" found, try to parse test dots/letters
-            passed, failed, errors = self._parse_test_dots(full_output)
-
-        # Parse individual test results from detailed output
-        self._parse_individual_tests(full_output, details)
-
-        return TestAnalysis(
-            passed=passed,
-            failed=failed,
-            errors=errors,
-            script_error=script_error,
-            details=details
-        )
-
-    def _parse_individual_tests(self, output: str, details: TestDetails) -> None:
-        """Parse individual test method results from verbose output with detailed information."""
-
-        # First, extract test execution lines with descriptions
-        self._extract_test_executions(output, details)
-
-        # Then, extract detailed error/failure information
-        self._extract_detailed_failures(output, details)
-
-    def _extract_test_executions(self, output: str, details: TestDetails) -> None:
-        """Extract test executions with their descriptions from verbose unittest output."""
-
-        # Pattern for verbose unittest output - handle both cases:
-        # Case 1: test_name (module.path)\nDescription ... STATUS  (with docstring)
-        # Case 2: test_name (module.path) ... STATUS  (without docstring)
-
-        # First try to match tests with docstrings/descriptions
-        pattern_with_description = r'(\w+) \([^)]+\)\n(.*?) \.\.\. (ok|FAIL|ERROR)'
-        matches_with_desc = re.findall(pattern_with_description, output)
-
-        # Then try to match tests without descriptions (on same line)
-        pattern_without_description = r'(\w+) \([^)]+\) \.\.\. (ok|FAIL|ERROR)'
-        matches_without_desc = re.findall(pattern_without_description, output)
-
-        # Process matches with descriptions
-        for test_name, description, status in matches_with_desc:
-            test_name = test_name.strip()
-            description = description.strip()
-            self._add_test_result(details, test_name, description, status)
-
-        # Process matches without descriptions (provide default description)
-        for match in matches_without_desc:
-            if len(match) == 3:  # test_name, empty, status
-                test_name, _, status = match
-            else:  # test_name, status
-                test_name, status = match
-
-            test_name = test_name.strip()
-            # Check if this test was already processed with a description
-            if not self._test_already_processed(details, test_name):
-                # Default description
-                description = f"Test method: {test_name}"
-                self._add_test_result(details, test_name, description, status)
-
-    def _test_already_processed(self, details: TestDetails, test_name: str) -> bool:
-        """Check if a test has already been processed."""
-        all_tests = (details.passed_test_details +
-                     details.failed_test_details +
-                     details.error_test_details)
-        return any(test.name == test_name for test in all_tests)
-
-    def _add_test_result(self, details: TestDetails, test_name: str, description: str, status: str) -> None:
-        """Add a test result to the appropriate list."""
-        if status == 'ok':
-            test_result = TestResult(
-                name=test_name,
-                description=description,
-                status='passed',
-                details=None
-            )
-            details.passed_test_details.append(test_result)
-        elif status == 'FAIL':
-            test_result = TestResult(
-                name=test_name,
-                description=description,
-                status='failed',
-                details=None  # Will be filled by _extract_detailed_failures
-            )
-            details.failed_test_details.append(test_result)
-        elif status == 'ERROR':
-            test_result = TestResult(
-                name=test_name,
-                description=description,
-                status='error',
-                details=None  # Will be filled by _extract_detailed_failures
-            )
-            details.error_test_details.append(test_result)
-
-    def _extract_detailed_failures(self, output: str, details: TestDetails) -> None:
-        """Extract detailed failure and error information from unittest output."""
-
-        # Pattern for detailed failure/error sections:
-        # ======================================================================
-        # FAIL/ERROR: test_name (module.path)
-        # Description
-        # ----------------------------------------------------------------------
-        # Traceback or error details...
-
-        # Find all detailed sections
-        detailed_sections = re.split(r'={70,}', output)
-
-        for section in detailed_sections:
-            if not section.strip():
-                continue
-
-            # Look for FAIL or ERROR headers - handle both with and without descriptions
-            fail_match = re.search(
-                r'FAIL: (\w+) \([^)]+\)\n(?:([^-]*?)\n)?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)', section, re.DOTALL)
-            error_match = re.search(
-                r'ERROR: (\w+) \([^)]+\)\n(?:([^-]*?)\n)?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)', section, re.DOTALL)
-
-            if fail_match:
-                test_name, desc, error_details = fail_match.groups()
-                desc = desc.strip() if desc else ""
-                self._update_test_details(
-                    details.failed_test_details, test_name.strip(), error_details.strip())
-
-            elif error_match:
-                test_name, desc, error_details = error_match.groups()
-                desc = desc.strip() if desc else ""
-                self._update_test_details(
-                    details.error_test_details, test_name.strip(), error_details.strip())
-
-    def _update_test_details(self, test_list: List[TestResult], test_name: str, error_details: str) -> None:
-        """Update the details field for a specific test."""
-        for test_result in test_list:
-            if test_result.name == test_name:
-                # Clean the error details to extract only relevant parts
-                test_result.details = self._clean_error_details(error_details)
-                break
-
-    def _clean_error_details(self, raw_details: str) -> str:
+    def execute_code(self, code: str) -> BasicExecutionResult:
         """
-        Extract only the relevant assertion line and error message from traceback.
+        Execute arbitrary code safely (delegates to sandbox).
 
         Args:
-            raw_details: Raw traceback string
+            code: Python code to execute
 
         Returns:
-            Cleaned error details with just the assertion and error message
+            BasicExecutionResult
         """
-        if not raw_details:
-            return ""
-
-        lines = raw_details.strip().split('\n')
-
-        # Find the assertion line and error message
-        assertion_line = ""
-        error_message = ""
-
-        for i, line in enumerate(lines):
-            # Look for assertion lines (indented and contain self.assert)
-            if line.strip().startswith('self.assert') or '~~~' in line:
-                # Get the actual assertion (previous line if current is ~~~)
-                if '~~~' in line and i > 0:
-                    assertion_line = lines[i-1].strip()
-                elif line.strip().startswith('self.assert'):
-                    assertion_line = line.strip()
-
-            # Look for error messages (AssertionError, ValueError, etc.)
-            elif any(error_type in line for error_type in
-                     ['AssertionError:', 'ValueError:', 'TypeError:', 'IndexError:', 'KeyError:', 'AttributeError:']):
-                error_message = line.strip()
-
-        # Combine assertion and error message
-        result_parts = []
-        if assertion_line:
-            result_parts.append(assertion_line)
-        if error_message:
-            result_parts.append(error_message)
-
-        return '\n'.join(result_parts) if result_parts else raw_details
-
-    def _parse_test_dots(self, output: str) -> tuple[int, int, int]:
-        """Parse test results from dot notation (e.g., '..F.E.')
-
-        Returns:
-            Tuple of (passed, failed, errors) counts
-        """
-        passed = 0
-        failed = 0
-        errors = 0
-
-        # Find test result dots/letters
-        dot_pattern = r'^([.FE]+)$'
-        matches = re.findall(dot_pattern, output, re.MULTILINE)
-
-        for match in matches:
-            for char in match:
-                if char == '.':
-                    passed += 1
-                elif char == 'F':
-                    failed += 1
-                elif char == 'E':
-                    errors += 1
-
-        return passed, failed, errors
+        return self.sandbox.execute_code(code)
 
 
 def create_safe_test_environment() -> SafeCodeSandbox:
@@ -721,10 +861,55 @@ def create_safe_test_environment() -> SafeCodeSandbox:
         max_memory_mb=100,  # 100MB max memory
         max_output_size=10000,  # 10KB max output
         allowed_imports=[
-            'math', 'random', 'itertools', 'collections', 'functools',
-            'operator', 'copy', 'json', 're', 'string', 'unittest',
-            'typing', 'dataclasses', 'enum', 'heapq', 'bisect'
-        ]
+            "math",
+            "random",
+            "itertools",
+            "collections",
+            "functools",
+            "operator",
+            "copy",
+            "json",
+            "re",
+            "string",
+            "unittest",
+            "typing",
+            "dataclasses",
+            "enum",
+            "heapq",
+            "bisect",
+        ],
+    )
+
+
+def create_test_executor() -> TestExecutor:
+    """
+    Create a default test executor with safe configuration.
+
+    Returns:
+        Configured TestExecutor instance
+    """
+    return TestExecutor(
+        timeout=30,  # 30 seconds max
+        max_memory_mb=100,  # 100MB max memory
+        max_output_size=10000,  # 10KB max output
+        allowed_imports=[
+            "math",
+            "random",
+            "itertools",
+            "collections",
+            "functools",
+            "operator",
+            "copy",
+            "json",
+            "re",
+            "string",
+            "unittest",
+            "typing",
+            "dataclasses",
+            "enum",
+            "heapq",
+            "bisect",
+        ],
     )
 
 
@@ -738,25 +923,23 @@ def check_test_execution_status(result: TestExecutionResult) -> str:
     Returns:
         String describing the execution status
     """
-    category = result.execution_category
-
-    if category == 'SCRIPT_ERROR':
-        return f"❌ SCRIPT ERROR: {result.error}"
-    elif category == 'TESTS_FAILED':
+    if result.script_error:
+        return f"❌ SCRIPT ERROR: {result.summary}"
+    elif result.has_failures:
         return f"⚠️  TESTS FAILED: {result.tests_passed} passed, {result.tests_failed} failed, {result.tests_errors} errors"
-    elif category == 'TESTS_PASSED':
+    elif result.all_tests_passed:
         return f"✅ ALL TESTS PASSED: {result.tests_passed} tests successful"
-    elif category == 'NO_TESTS_FOUND':
+    elif result.total_tests == 0:
         return "⚪ NO TESTS: No test cases found or executed"
     else:
-        return f"❓ UNKNOWN STATUS: {result.test_summary}"
+        return f"❓ UNKNOWN STATUS: {result.summary}"
 
 
 # Example usage
 if __name__ == "__main__":
-    sandbox = create_safe_test_environment()
+    # Example 1: Using the high-level TestExecutor (recommended for most cases)
+    executor = create_test_executor()
 
-    # Test safe code
     safe_code = """
 import unittest
 import math
@@ -768,15 +951,43 @@ def factorial(n):
 
 class TestFactorial(unittest.TestCase):
     def test_base_case(self):
+        '''Test factorial of 0 and 1'''
         self.assertEqual(factorial(0), 1)
         self.assertEqual(factorial(1), 1)
     
     def test_normal_case(self):
+        '''Test factorial of larger numbers'''
         self.assertEqual(factorial(5), 120)
 
 if __name__ == '__main__':
     unittest.main()
 """
 
-    result = sandbox.execute_test_script(safe_code)
-    print("Execution result:", result)
+    # Execute with full test analysis
+    result = executor.execute_test_script(safe_code)
+    print("Test execution result:", result)
+    print("Status:", check_test_execution_status(result))
+
+    # Example 2: Using components separately for more control
+    sandbox = create_safe_test_environment()
+    analyzer = TestResultAnalyzer()
+
+    # Prepare and execute
+    modified_code = analyzer.ensure_unittest_verbosity(safe_code)
+    basic_result = sandbox.execute_code(modified_code)
+    detailed_result = analyzer.analyze_unittest_output(basic_result)
+
+    print("\nDetailed analysis:")
+    print(f"- Passed: {detailed_result.tests_passed}")
+    print(f"- Failed: {detailed_result.tests_failed}")
+    print(f"- Errors: {detailed_result.tests_errors}")
+    print(f"- Summary: {detailed_result.summary}")
+    print(
+        f"- Test results (in order): {[f'{t.name}:{t.status}' for t in detailed_result.test_results]}"
+    )
+
+    # Example 3: Using sandbox for non-test code
+    simple_result = sandbox.execute_code("print('Hello from sandbox!')")
+    print(
+        f"\nSimple execution: {simple_result.success}, output: {simple_result.output.strip()}"
+    )
