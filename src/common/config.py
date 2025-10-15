@@ -5,10 +5,10 @@ This module provides reusable configuration classes and utilities for APR experi
 It standardizes common configuration patterns across different experiment types.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Literal, Dict, Any, List
-from pathlib import Path
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
 
 @dataclass
@@ -23,6 +23,7 @@ class BaseConfig(ABC):
     # LLM Configuration
     llm_provider: Literal["ollama", "openai"] = "ollama"
     llm_model: str = "qwen2.5-coder:7b"
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] = "minimal"
 
     # Dataset Configuration
     use_humaneval_subset: bool = False
@@ -134,7 +135,7 @@ class BaseConfig(ABC):
             # Use .stem to get filename without extension, then split further if needed
             subset_filename = Path(self.humaneval_subset_path).stem
             # Handle .gz files by removing the .jsonl part as well
-            if subset_filename.endswith('.jsonl'):
+            if subset_filename.endswith(".jsonl"):
                 subset_filename = subset_filename[:-6]  # Remove .jsonl
 
             if "HumanEval_" in subset_filename:
@@ -167,7 +168,7 @@ class BaseConfig(ABC):
         }
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'BaseConfig':
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "BaseConfig":
         """
         Create configuration from dictionary.
 
@@ -178,10 +179,8 @@ class BaseConfig(ABC):
             Configuration instance
         """
         # Filter out unknown keys
-        valid_keys = {
-            field.name for field in cls.__dataclass_fields__.values()}
-        filtered_dict = {k: v for k, v in config_dict.items()
-                         if k in valid_keys}
+        valid_keys = {field.name for field in cls.__dataclass_fields__.values()}
+        filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         return cls(**filtered_dict)
 
 
@@ -213,8 +212,14 @@ class AgentCoderConfig(BaseConfig):
     # Separate LLM configurations for each agent
     programmer_llm_provider: Optional[Literal["ollama", "openai"]] = None
     programmer_llm_model: Optional[str] = None
+    programmer_reasoning_effort: Optional[
+        Literal["minimal", "low", "medium", "high"]
+    ] = None
     tester_llm_provider: Optional[Literal["ollama", "openai"]] = None
     tester_llm_model: Optional[str] = None
+    tester_reasoning_effort: Optional[Literal["minimal", "low", "medium", "high"]] = (
+        None
+    )
 
     def __post_init__(self) -> None:
         """Post-initialization validation and setup with agent-specific LLM defaults."""
@@ -223,10 +228,14 @@ class AgentCoderConfig(BaseConfig):
             self.programmer_llm_provider = self.llm_provider
         if self.programmer_llm_model is None:
             self.programmer_llm_model = self.llm_model
+        if self.programmer_reasoning_effort is None:
+            self.programmer_reasoning_effort = self.reasoning_effort
         if self.tester_llm_provider is None:
             self.tester_llm_provider = self.llm_provider
         if self.tester_llm_model is None:
             self.tester_llm_model = self.llm_model
+        if self.tester_reasoning_effort is None:
+            self.tester_reasoning_effort = self.reasoning_effort
 
         # Call parent post-init
         super().__post_init__()
@@ -242,17 +251,21 @@ class AgentCoderConfig(BaseConfig):
         # Validate agent-specific LLM configurations
         if self.programmer_llm_provider not in ["ollama", "openai"]:
             raise ValueError(
-                f"Unsupported programmer LLM provider: {self.programmer_llm_provider}")
+                f"Unsupported programmer LLM provider: {self.programmer_llm_provider}"
+            )
         if self.tester_llm_provider not in ["ollama", "openai"]:
             raise ValueError(
-                f"Unsupported tester LLM provider: {self.tester_llm_provider}")
+                f"Unsupported tester LLM provider: {self.tester_llm_provider}"
+            )
 
         if not self.programmer_llm_model:
             raise ValueError("programmer_llm_model cannot be empty")
         if not self.tester_llm_model:
             raise ValueError("tester_llm_model cannot be empty")
 
-    def get_iteration_output_path(self, iteration: int, experiment_name: str = "agent_coder") -> str:
+    def get_iteration_output_path(
+        self, iteration: int, experiment_name: str = "agent_coder"
+    ) -> str:
         """
         Get output path for a specific iteration.
 
