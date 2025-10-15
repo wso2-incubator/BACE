@@ -358,6 +358,9 @@ class CodeProcessor:
         tester_classes = tester_code_structure["class_definitions"]
 
         for class_name, (start, end) in tester_classes.items():
+            if class_name == "Solution":
+                # Skip the class if it's named Solution to avoid conflicts
+                continue
             class_lines = tester_code.split("\n")[start : end + 1]
             script_lines.extend(class_lines)
             script_lines.append("")  # Blank line after each class
