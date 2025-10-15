@@ -154,7 +154,11 @@ class LLMClient(ABC):
 # ----------------------------
 # OpenAI Client Implementation
 # ----------------------------
-class OpenAIClient(LLMClient):
+class OpenAIChatClient(LLMClient):
+    """
+    OpenAI Client using the Chat Completions API
+    """
+
     def __init__(
         self,
         model: str,
@@ -185,34 +189,37 @@ class OpenAIClient(LLMClient):
 # ----------------------------
 # OpenAI Codex Client Implementation (using Response API)
 # ----------------------------
-class OpenAICodexClient(LLMClient):
+class OpenAIClient(LLMClient):
+    """
+    OpenAI Client using the Response API
+    """
+
     def __init__(
         self,
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
+        reasoning_effort: str = "minimal",
         **kwargs: Any,
     ) -> None:
         super().__init__(model, max_output_tokens, enable_token_limit)
         from openai import OpenAI
 
+        self.reasoning_effort = reasoning_effort
         self.client = OpenAI(**kwargs)
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
+        # Allow overriding reasoning effort for this specific call
+        reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
+
         response = self.client.responses.create(
             model=self.model,
             input=prompt,
+            reasoning={"effort": reasoning_effort},
             **kwargs,
         )
-        # Extract content from response API format
-        if hasattr(response, "output") and response.output:
-            content = (
-                response.output[0].content[0].text
-                if response.output[0].content
-                else None
-            )
-        else:
-            content = None
+
+        content = response.output_text if hasattr(response, "output_text") else None
 
         if content is None:
             raise ValueError("OpenAI Codex response content is None")
@@ -220,6 +227,23 @@ class OpenAICodexClient(LLMClient):
         result = str(content)
         self._add_output_tokens(result)
         return result
+
+    def set_reasoning_effort(self, reasoning_effort: str) -> None:
+        """Set the reasoning effort level for future generations.
+
+        Args:
+            reasoning_effort: The reasoning effort level to use.
+                            Common values: 'minimal', 'low', 'medium', 'high'
+        """
+        self.reasoning_effort = reasoning_effort
+
+    def get_reasoning_effort(self) -> str:
+        """Get the current reasoning effort level.
+
+        Returns:
+            The current reasoning effort level.
+        """
+        return self.reasoning_effort
 
 
 # ----------------------------
@@ -260,6 +284,7 @@ def create_llm_client(
     model: str,
     max_output_tokens: Optional[int] = None,
     enable_token_limit: Optional[bool] = None,
+    reasoning_effort: Optional[str] = None,
     **kwargs: Any,
 ) -> LLMClient:
     """Create an LLM client with the specified provider and configuration.
@@ -271,6 +296,9 @@ def create_llm_client(
         enable_token_limit: Whether to enforce the token limit. If None, uses provider defaults:
                           - OpenAI clients: True (limits enabled by default)
                           - Ollama clients: False (limits disabled by default)
+        reasoning_effort: The reasoning effort level for OpenAI Response API models.
+                         Common values: 'minimal', 'low', 'medium', 'high'.
+                         Defaults to 'minimal'. Only applies to 'openai' provider.
         **kwargs: Additional provider-specific arguments.
 
     Returns:
@@ -281,22 +309,26 @@ def create_llm_client(
     """
     provider = provider.lower()
 
-    # Extract token limit parameters from kwargs to pass to constructors
+    # Extract special parameters from kwargs to pass to constructors
     client_kwargs = {
         k: v
         for k, v in kwargs.items()
-        if k not in ["max_output_tokens", "enable_token_limit"]
+        if k not in ["max_output_tokens", "enable_token_limit", "reasoning_effort"]
     }
 
     client: LLMClient
     if provider == "openai":
         # OpenAI default: token limits enabled
         limit_enabled = True if enable_token_limit is None else enable_token_limit
-        client = OpenAIClient(model, max_output_tokens, limit_enabled, **client_kwargs)
-    elif provider == "openai-codex":
+        # Set default reasoning effort if not provided
+        effort = reasoning_effort if reasoning_effort is not None else "minimal"
+        client = OpenAIClient(
+            model, max_output_tokens, limit_enabled, effort, **client_kwargs
+        )
+    elif provider == "openai-chat":
         # OpenAI Codex default: token limits enabled
         limit_enabled = True if enable_token_limit is None else enable_token_limit
-        client = OpenAICodexClient(
+        client = OpenAIChatClient(
             model, max_output_tokens, limit_enabled, **client_kwargs
         )
     elif provider == "ollama":
