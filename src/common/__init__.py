@@ -11,58 +11,56 @@ This module provides shared functionality including:
 """
 
 from .code_processor import CodeProcessor
+from .config import AgentCoderConfig, BaseConfig, ExperimentConfig, SimpleConfig
 from .llm_client import LLMClient
-from .sandbox import (
-    SafeCodeSandbox,
-    create_safe_test_environment,
-    check_test_execution_status,
-    TestExecutionResult,
-    BasicExecutionResult,
-    TestDetails,
-    TestAnalysis,
-    ExecutionCategory,
-    CodeExecutionError,
-    CodeExecutionTimeoutError
-)
-from .config import (
-    BaseConfig,
-    SimpleConfig,
-    AgentCoderConfig,
-    ExperimentConfig
-)
 from .llm_factory import (
-    create_llm_instance,
-    create_llm_from_params,
-    get_available_providers,
     check_provider_availability,
-    validate_provider_model_combination
+    create_llm_from_params,
+    create_llm_instance,
+    get_available_providers,
+    validate_provider_model_combination,
+)
+from .sandbox import (
+    BasicExecutionResult,
+    CodeExecutionError,
+    CodeExecutionTimeoutError,
+    SafeCodeSandbox,
+    TestAnalysis,
+    TestExecutionResult,
+    TestExecutor,
+    TestResultAnalyzer,
+    check_test_execution_status,
+    create_safe_test_environment,
+    create_test_executor,
 )
 
 __all__ = [
     # Core utilities
-    'CodeProcessor',
-    'LLMClient',
-    'SafeCodeSandbox',
-    'create_safe_test_environment',
-    'check_test_execution_status',
+    "CodeProcessor",
+    "LLMClient",
+    "SafeCodeSandbox",
+    "create_safe_test_environment",
+    "check_test_execution_status",
     # Types
-    'TestExecutionResult',
-    'BasicExecutionResult',
-    'TestDetails',
-    'TestAnalysis',
-    'ExecutionCategory',
-    'CodeExecutionError',
-    'CodeExecutionTimeoutError',
+    "TestExecutionResult",
+    "BasicExecutionResult",
+    "TestAnalysis",
+    "CodeExecutionError",
+    "CodeExecutionTimeoutError",
+    # New architecture
+    "TestExecutor",
+    "create_test_executor",
+    "TestResultAnalyzer",
     # Configuration
-    'BaseConfig',
-    'SimpleConfig',
-    'AgentCoderConfig',
-    'ExperimentConfig',
+    "BaseConfig",
+    "SimpleConfig",
+    "AgentCoderConfig",
+    "ExperimentConfig",
     # LLM Factory
-    'create_llm_instance',
-    'create_llm_from_params',
-    'get_available_providers',
-    'check_provider_availability',
-    'validate_provider_model_combination'
+    "create_llm_instance",
+    "create_llm_from_params",
+    "get_available_providers",
+    "check_provider_availability",
+    "validate_provider_model_combination",
 ]
 __version__ = "0.1.0"
