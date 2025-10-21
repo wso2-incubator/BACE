@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 
 class CodeStructure(TypedDict):
@@ -275,20 +275,18 @@ class CodeProcessor:
         programmer_code_structure = self._parse_code_structure(
             programmer_code.split("\n")
         )
+
+        # Remove "Solution" import from tester if present: from solution import Solution, or import Solution
+        tester_code = re.sub(
+            r"from\s+solution\s+import\s+Solution\s*(#.*)?", "", tester_code
+        )
+        tester_code = re.sub(r"import\s+Solution\s*(#.*)?", "", tester_code)
+
         tester_code_structure = self._parse_code_structure(tester_code.split("\n"))
 
         # Handle Imports
         programmer_imports = programmer_code_structure["import_lines"]
         tester_imports = tester_code_structure["import_lines"]
-
-        # Remove "Solution" import from tester imports if present: from solution import Solution, or import Solution
-        tester_imports = [
-            line
-            for line in tester_imports
-            if not re.match(
-                r"^\s*(from\s+solution\s+import\s+Solution|import\s+Solution)\s*$", line
-            )
-        ]
 
         # Add "import unittest" if not already present
         if not any(
