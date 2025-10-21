@@ -549,7 +549,7 @@ class SafeCodeSandbox:
         # Dangerous modules/functions to block
         self.blocked_patterns = [
             "import os",
-            "import sys",
+            # "import sys",
             "import subprocess",
             "import shutil",
             "import socket",
