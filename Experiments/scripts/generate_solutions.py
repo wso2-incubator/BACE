@@ -5,24 +5,22 @@ a specified LLM, processes the responses to extract clean function implementatio
 and saves the results to a JSONL file.
 """
 
-import os
-import sys
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from human_eval.data import read_problems, write_jsonl
 from tqdm import tqdm
 
-from common.code_processor import CodeProcessor
+from common.code_preprocessing import (
+    extract_code_block_from_response,
+    extract_function_name_from_problem,
+    extract_function_with_helpers,
+)
 from common.llm_client import LLMClient, create_llm_client
 
 
-def generate_one_completion(
-    problem_prompt: str, client: LLMClient, code_processor: CodeProcessor
-) -> str:
+def generate_one_completion(problem_prompt: str, client: LLMClient) -> str:
     # Extract the target function name from the prompt
-    target_function_name: str = code_processor.extract_function_name_from_problem(
-        problem_prompt
-    )
+    target_function_name: str = extract_function_name_from_problem(problem_prompt)
     if not target_function_name:
         raise ValueError("No function definition found in the prompt.")
 
@@ -33,13 +31,10 @@ def generate_one_completion(
     response: str = client.generate(prompt)
     print("Raw Response:\n", response)  # Debug print
 
-    code = code_processor.extract_code_block_from_response(response)
+    code = extract_code_block_from_response(response)
 
-    # Extract the function block from def to return
-    code_without_comments: str = code_processor.remove_comments(code)
-    completion_code: str = code_processor.extract_function_with_helpers(
-        code_without_comments, target_function_name
-    )
+    # Extract the function block - no need to remove comments as AST handles it
+    completion_code: str = extract_function_with_helpers(code, target_function_name)
 
     print("Generated Completion Code:\n", completion_code)  # Debug print
     return completion_code
@@ -51,7 +46,6 @@ if __name__ == "__main__":
     llm_model = "qwen2.5-coder:7b"
 
     client = create_llm_client(llm_provider, model=llm_model)
-    code_processor = CodeProcessor()
 
     num_samples_per_task: int = 1
     problems: Dict[str, Dict[str, Any]] = read_problems()
@@ -60,11 +54,7 @@ if __name__ == "__main__":
             # print(f"Generating code for task: {task_id}, sample: {i}")
             completion = dict(
                 task_id=task_id,
-                completion=generate_one_completion(
-                    problems[task_id]["prompt"], client, code_processor
-                ),
+                completion=generate_one_completion(problems[task_id]["prompt"], client),
             )
-
-            write_jsonl(f"{llm_model}.jsonl", [completion], append=True)
 
             write_jsonl(f"{llm_model}.jsonl", [completion], append=True)
