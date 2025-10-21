@@ -1,29 +1,5 @@
-import ast
-import logging
 import re
 from typing import Dict, List, Optional, Tuple, TypedDict
-
-# Setup logging
-log = logging.getLogger(__name__)
-
-
-# Custom Exceptions
-class CodeProcessingError(Exception):
-    """Base exception for code processing errors."""
-
-    pass
-
-
-class CodeParsingError(CodeProcessingError):
-    """Raised when code cannot be parsed due to syntax errors."""
-
-    pass
-
-
-class CodeTransformationError(CodeProcessingError):
-    """Raised when code transformation/generation fails."""
-
-    pass
 
 
 class CodeStructure(TypedDict):
@@ -34,8 +10,7 @@ class CodeStructure(TypedDict):
 
 class CodeProcessor:
     """
-    A class to process and extract relevant code segments from a given code string
-    using Abstract Syntax Trees (AST) for robust parsing.
+    A class to process and extract relevant code segments from a given code string.
     """
 
     def extract_function_name_from_problem(self, problem_prompt: str) -> str:
@@ -45,13 +20,43 @@ class CodeProcessor:
         lines = problem_prompt.split("\n")
         for line in lines:
             if line.strip().startswith("def "):
+                # Extract function name
                 func_name = line.strip().split("def ")[1].split("(")[0]
                 return func_name
         return ""
 
+    def remove_comments(self, code: str) -> str:
+        """
+        Remove single line (#) and multiline (''' or \"\"\") comments from Python code.
+        """
+        # Remove multiline comments (triple quotes)
+        # This pattern matches ''' or """ followed by any content until the closing quotes
+        code = re.sub(r"(\'\'\'[\s\S]*?\'\'\'|\"\"\"[\s\S]*?\"\"\")", "", code)
+
+        # Remove single line comments (# comments)
+        # This pattern matches # and everything after it until the end of line
+        code = re.sub(r"#.*?$", "", code, flags=re.MULTILINE)
+
+        # Clean up extra whitespace and empty lines
+        lines: list[str] = code.split("\n")
+        cleaned_lines: list[str] = []
+
+        for line in lines:
+            stripped = line.rstrip()  # Remove trailing whitespace
+            # Keep line if not empty or previous line wasn't empty
+            if stripped or (cleaned_lines and cleaned_lines[-1].strip()):
+                cleaned_lines.append(stripped)
+
+        # Remove trailing empty lines
+        while cleaned_lines and not cleaned_lines[-1].strip():
+            cleaned_lines.pop()
+
+        return "\n".join(cleaned_lines)
+
     def extract_all_code_blocks(self, response: str) -> List[str]:
         """
         Extracts all Python code blocks (```python ... ```) from the LLM response.
+        Returns a list of code blocks. If no Python code blocks are found, returns an empty list.
         """
         pattern = re.compile(r"```[Pp]ython\s*([\s\S]+?)\s*```")
         matches = pattern.findall(response)
@@ -60,522 +65,342 @@ class CodeProcessor:
     def extract_code_block_from_response(self, response: str) -> str:
         """
         Extracts the first Python code block (```python ... ```) from the LLM response.
-        If no Python code block is found, returns the original response.
+        If no Python code block is found, returns an empty string.
         """
         pattern = re.compile(r"```[Pp]ython\s*([\s\S]+?)\s*```")
         match = pattern.search(response)
         if match:
             return match.group(1)
-        return response  # Return original response if no code block found
+        return ""
 
-    def _parse_code_structure(self, code_string: str) -> CodeStructure:
-        """Parse code string to find all imports, functions, and classes using AST."""
-        lines = code_string.split("\n")
+    def _parse_code_structure(self, lines: List[str]) -> CodeStructure:
+        """Parse code lines to find all import statements, function definitions, and class definitions."""
         import_lines: List[str] = []
         function_definitions: Dict[str, Tuple[int, int]] = {}
         class_definitions: Dict[str, Tuple[int, int]] = {}
 
-        try:
-            tree = ast.parse(code_string)
-        except SyntaxError as e:
-            log.error(f"Syntax error during parsing: {e}")
-            raise CodeParsingError(f"Failed to parse code: {e}") from e
+        i = 0
+        while i < len(lines):
+            stripped_line = lines[i].strip()
 
-        for node in tree.body:
-            start_idx = node.lineno - 1
-            end_idx = (
-                (node.end_lineno - 1) if node.end_lineno is not None else start_idx
-            )
+            # Collect import lines
+            if stripped_line.startswith(("import ", "from ")):
+                import_lines.append(lines[i])
+                i += 1
+                continue
 
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                import_lines.extend(lines[start_idx : end_idx + 1])
-            elif isinstance(node, ast.FunctionDef):
-                function_definitions[node.name] = (start_idx, end_idx)
-            elif isinstance(node, ast.ClassDef):
-                class_definitions[node.name] = (start_idx, end_idx)
+            # Collect Classes
+            if stripped_line.startswith("class "):
+                class_name = stripped_line.split("class ")[1].split("(")[0].strip()
+                start_idx = i
+
+                # Find end of this class
+                end_idx = self._find_function_end(lines, i)
+                class_definitions[class_name] = (start_idx, end_idx)
+                i = end_idx + 1
+                continue
+
+            # Find function definitions
+            if stripped_line.startswith("def "):
+                func_name = stripped_line.split("def ")[1].split("(")[0].strip()
+                start_idx = i
+
+                # Find end of this function
+                end_idx = self._find_function_end(lines, i)
+                function_definitions[func_name] = (start_idx, end_idx)
+                i = end_idx + 1
+            else:
+                i += 1
 
         return {
-            "import_lines": list(dict.fromkeys(import_lines)),
+            "import_lines": import_lines,
             "function_definitions": function_definitions,
             "class_definitions": class_definitions,
         }
 
+    def _find_function_end(self, lines: List[str], start_idx: int) -> int:
+        """Find the end index of a function definition."""
+        in_triple_quote = False
+        triple_quote_char = None
+
+        for j in range(start_idx + 1, len(lines)):
+            line = lines[j]
+            stripped = line.strip()
+
+            # Check if we should end the function/class BEFORE processing triple quotes
+            # This prevents the closing """ line from incorrectly ending the block
+            should_end = (
+                stripped
+                and not line.startswith("\t")
+                and not line.startswith("    ")
+                and not in_triple_quote
+            )
+
+            # Now update triple-quote state
+            # Check for triple quotes (both """ and ''')
+            # Count occurrences of triple quotes in the line
+            if '"""' in line:
+                count = line.count('"""')
+                if count % 2 == 1:  # Odd number toggles the state
+                    if not in_triple_quote:
+                        in_triple_quote = True
+                        triple_quote_char = '"'
+                    elif triple_quote_char == '"':
+                        in_triple_quote = False
+                        triple_quote_char = None
+
+            if "'''" in line:
+                count = line.count("'''")
+                if count % 2 == 1:  # Odd number toggles the state
+                    if not in_triple_quote:
+                        in_triple_quote = True
+                        triple_quote_char = "'"
+                    elif triple_quote_char == "'":
+                        in_triple_quote = False
+                        triple_quote_char = None
+
+            # Now check if we should end (after updating state)
+            if should_end:
+                return j - 1
+
+        # If no unindented line found, use end of string
+        end_idx = len(lines) - 1
+
+        # Remove trailing empty lines
+        while end_idx > start_idx and not lines[end_idx].strip():
+            end_idx -= 1
+
+        return end_idx
+
+    def _build_completion(
+        self,
+        import_lines: List[str],
+        helper_functions: List[str],
+        function_definitions: Dict[str, Tuple[int, int]],
+        target_body_lines: List[str],
+        lines: List[str],
+    ) -> str:
+        """Build the final completion code block."""
+        result_lines = []
+
+        # Add indented imports
+        if import_lines:
+            indented_imports = ["    " + line.strip() for line in import_lines]
+            result_lines.extend(indented_imports)
+            result_lines.append("")
+
+        # Add helper functions with proper indentation
+        for helper_name in helper_functions:
+            helper_start, helper_end = function_definitions[helper_name]
+            helper_lines = lines[helper_start : helper_end + 1]
+            indented_helper = ["    " + line for line in helper_lines]
+            result_lines.extend(indented_helper)
+            result_lines.append("")
+
+        # Add target function body
+        result_lines.extend(target_body_lines)
+
+        # Clean up trailing empty lines
+        while result_lines and not result_lines[-1].strip():
+            result_lines.pop()
+
+        return "\n".join(result_lines)
+
     def extract_function_with_helpers(
         self, code_string: str, target_function_name: str
     ) -> str:
-        """
-        Extract target function body with helper functions and imports.
-        For HumanEval style problems - returns properly indented completion code.
+        """Extract target function body with helper functions and imports. --> For HumanEval style problems"""
+        lines = code_string.split("\n")
+        result = self._parse_code_structure(lines)
+        import_lines = result["import_lines"]
+        function_definitions = result["function_definitions"]
 
-        Args:
-            code_string: Python source code
-            target_function_name: Name of target function to extract
+        if target_function_name not in function_definitions:
+            return ""
 
-        Returns:
-            Indented code string with imports, helpers, and target function body
+        target_start, target_end = function_definitions[target_function_name]
+        target_body_lines = lines[target_start + 1 : target_end + 1]
 
-        Raises:
-            CodeParsingError: If code has syntax errors
-            CodeTransformationError: If target function not found
-        """
-        try:
-            tree = ast.parse(code_string)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing code: {e}")
-            raise CodeParsingError(f"Failed to parse code: {e}") from e
-
-        # Find target function and helpers
-        target_function = None
-        helper_functions = []
-        imports = []
-
-        for node in tree.body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                imports.append(node)
-            elif isinstance(node, ast.FunctionDef):
-                if node.name == target_function_name:
-                    target_function = node
-                else:
-                    helper_functions.append(node)
-
-        if target_function is None:
-            log.error(f"Target function '{target_function_name}' not found")
-            raise CodeTransformationError(
-                f"Target function '{target_function_name}' not found"
-            )
-
-        # Build result with proper indentation
-        result_parts = []
-
-        # Add imports with indentation
-        if imports:
-            for imp in imports:
-                result_parts.append("    " + ast.unparse(imp))
-            result_parts.append("")
-
-        # Add helper functions with indentation
-        for helper in helper_functions:
-            helper_code = ast.unparse(helper)
-            # Indent each line
-            indented_helper = "\n".join(
-                "    " + line for line in helper_code.split("\n")
-            )
-            result_parts.append(indented_helper)
-            result_parts.append("")
-
-        # Add target function body (skip the def line, keep body only)
-        for stmt in target_function.body:
-            stmt_code = ast.unparse(stmt)
-            # Indent each line
-            indented_stmt = "\n".join("    " + line for line in stmt_code.split("\n"))
-            result_parts.append(indented_stmt)
-
-        return "\n".join(result_parts)
-
-    def extract_class_block(self, code_string: str) -> str:
-        """
-        Extract the first class block from the code string.
-
-        Args:
-            code_string: Python source code containing a class definition
-
-        Returns:
-            Class source code as string
-
-        Raises:
-            CodeParsingError: If code has syntax errors
-            CodeTransformationError: If no class found
-        """
-        try:
-            tree = ast.parse(code_string)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing code: {e}")
-            raise CodeParsingError(f"Failed to parse code: {e}") from e
-
-        # Find first class definition
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                return ast.unparse(node)
-
-        log.error("No class definition found in code")
-        raise CodeTransformationError("No class definition found in code")
-
-    def extract_test_case_names(self, test_code: str) -> List[str]:
-        """
-        Extract test case method names from a unittest test class.
-
-        Args:
-            test_code: String containing a unittest test class definition
-
-        Returns:
-            List of test method names
-
-        Raises:
-            CodeParsingError: If test code has syntax errors
-        """
-        test_cases = []
-        try:
-            tree = ast.parse(test_code)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing test code: {e}")
-            raise CodeParsingError(f"Failed to parse test code: {e}") from e
-
-        # Find the first class definition
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                # Iterate through class methods
-                for method in node.body:
-                    if isinstance(method, ast.FunctionDef) and method.name.startswith(
-                        "test_"
-                    ):
-                        test_cases.append(method.name)
-                # Stop after first class
-                break
-
-        return test_cases
-
-    def extract_test_methods_code(self, test_code: str) -> List[str]:
-        """
-        Extract the actual code for each test method from a unittest test class.
-        Returns a list of code strings for each test method (methods starting with 'test_') in the order they appear.
-
-        Args:
-            test_code: String containing a unittest test class definition
-
-        Returns:
-            List of code strings for each test method
-
-        Raises:
-            CodeParsingError: If test code has syntax errors
-        """
-        test_methods_code = []
-        try:
-            tree = ast.parse(test_code)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing test code: {e}")
-            raise CodeParsingError(f"Failed to parse test code: {e}") from e
-
-        # Find the first class definition
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                # Iterate through class methods
-                for method in node.body:
-                    if isinstance(method, ast.FunctionDef) and method.name.startswith(
-                        "test_"
-                    ):
-                        # Use ast.unparse instead of string slicing - more robust!
-                        method_code = ast.unparse(method)
-                        test_methods_code.append(method_code)
-
-                # Stop after first class
-                break
-
-        return test_methods_code
-
-    def replace_test_methods(self, test_code: str, new_test_methods: List[str]) -> str:
-        """
-        Replace test methods in a test class with new test methods while preserving
-        setup methods, helper methods, and class structure.
-
-        Args:
-            test_code: String containing the original unittest test class definition
-            new_test_methods: List of new test method code strings to replace the old ones.
-                             Each should be a complete method definition (e.g., 'def test_foo(self):\\n    ...')
-
-        Returns:
-            New test code string with replaced test methods
-
-        Raises:
-            CodeParsingError: If test code has syntax errors
-            CodeTransformationError: If no class found or transformation fails
-        """
-        try:
-            tree = ast.parse(test_code)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing test code: {e}")
-            raise CodeParsingError(f"Failed to parse test code: {e}") from e
-
-        # Find the first class definition
-        class_node = None
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                class_node = node
-                break
-
-        if class_node is None:
-            log.error("No class definition found in test code")
-            raise CodeTransformationError("No class definition found in test code")
-
-        # Build new class body: non-test elements + new test methods
-        new_body: List[ast.stmt] = []
-
-        # Add non-test methods and class variables (using ast.unparse - robust!)
-        for item in class_node.body:
-            if isinstance(item, ast.FunctionDef):
-                # Keep non-test methods (setUp, tearDown, helpers, etc.)
-                if not item.name.startswith("test_"):
-                    new_body.append(item)
-            elif isinstance(item, (ast.Assign, ast.AnnAssign)):
-                # Keep class variables
-                new_body.append(item)
-
-        # Parse and add new test methods
-        for test_method_str in new_test_methods:
-            try:
-                # Parse the test method string into an AST node
-                method_tree = ast.parse(test_method_str)
-                if method_tree.body and isinstance(
-                    method_tree.body[0], ast.FunctionDef
-                ):
-                    new_body.append(method_tree.body[0])
-                else:
-                    log.warning(f"Invalid test method code: {test_method_str[:50]}...")
-            except SyntaxError as e:
-                log.warning(f"Failed to parse test method: {e}")
-                continue
-
-        # Update class body
-        class_node.body = new_body
-
-        # Return the unparsed class
-        return ast.unparse(class_node)
-
-    def build_test_script_for_humaneval(
-        self, programmer_code: str, tester_code: str
-    ) -> str:
-        """
-        Combine programmer and tester code into a single test script for HumanEval Style Problems.
-
-        Args:
-            programmer_code: Python code with function implementations
-            tester_code: Python code with test class
-
-        Returns:
-            Complete test script as string
-
-        Raises:
-            CodeParsingError: If either code has syntax errors
-        """
-        try:
-            prog_tree = ast.parse(programmer_code)
-            test_tree = ast.parse(tester_code)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing code: {e}")
-            raise CodeParsingError(f"Failed to parse code: {e}") from e
-
-        # Collect imports from both
-        imports = []
-        import_strs = set()
-
-        for node in prog_tree.body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                imp_str = ast.unparse(node)
-                if imp_str not in import_strs:
-                    import_strs.add(imp_str)
-                    imports.append(node)
-
-        for node in test_tree.body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                imp_str = ast.unparse(node)
-                if imp_str not in import_strs:
-                    import_strs.add(imp_str)
-                    imports.append(node)
-
-        # Collect programmer functions
-        prog_functions = [
-            node for node in prog_tree.body if isinstance(node, ast.FunctionDef)
+        # Get helper functions (all except target)
+        helper_functions = [
+            name for name in function_definitions.keys() if name != target_function_name
         ]
 
-        # Collect tester classes
-        test_classes = [
-            node for node in test_tree.body if isinstance(node, ast.ClassDef)
-        ]
+        return self._build_completion(
+            import_lines,
+            helper_functions,
+            function_definitions,
+            target_body_lines,
+            lines,
+        )
 
-        # Build the script using AST unparsing
-        script_parts = []
+    def extract_class_block(self, code_string: str) -> Optional[str]:
+        """Extract the first class block from the code string."""
+        lines = code_string.split("\n")
+        result = self._parse_code_structure(lines)
+        class_definitions = result["class_definitions"]
 
-        # Add imports
-        for imp in imports:
-            script_parts.append(ast.unparse(imp))
-        if imports:
-            script_parts.append("")
+        if not class_definitions:
+            return None
+
+        # Get the first class defined
+        first_class_name = next(iter(class_definitions))
+        class_start, class_end = class_definitions[first_class_name]
+        class_lines = lines[class_start : class_end + 1]
+
+        return "\n".join(class_lines)
+
+    def build_test_script(self, programmer_code: str, tester_code: str) -> str:
+        """Combine programmer and tester code into a single test script. This is for human-eval style problems."""
+        script_lines: List[str] = []
+        programmer_code_structure = self._parse_code_structure(
+            programmer_code.split("\n")
+        )
+        tester_code_structure = self._parse_code_structure(tester_code.split("\n"))
+
+        # Handle Imports
+        programmer_imports = programmer_code_structure["import_lines"]
+        tester_imports = tester_code_structure["import_lines"]
+
+        # Combine and deduplicate imports
+        all_imports = list(dict.fromkeys(programmer_imports + tester_imports))
+        if all_imports:
+            script_lines.extend(all_imports)
+            script_lines.append("")  # Add a blank line after imports
 
         # Add programmer code
-        script_parts.append("# Programmer Code")
-        for func in prog_functions:
-            script_parts.append(ast.unparse(func))
-            script_parts.append("")
+        script_lines.append("# Programmer Code")
+
+        # handling functions and helper function if any
+        programmer_functions = programmer_code_structure["function_definitions"]
+
+        for func_name, (start, end) in programmer_functions.items():
+            func_lines = programmer_code.split("\n")[start : end + 1]
+            script_lines.extend(func_lines)
+            script_lines.append("")  # Blank line after each function
 
         # Add tester code
-        script_parts.append("# Tester Code")
-        for cls in test_classes:
-            script_parts.append(ast.unparse(cls))
-            script_parts.append("")
+        script_lines.append("# Tester Code")
 
-        # Add main block
-        script_parts.append('if __name__ == "__main__":')
-        script_parts.append("    unittest.main(verbosity=2)")
+        # Adding the tester classes if any
+        tester_classes = tester_code_structure["class_definitions"]
 
-        return "\n".join(script_parts)
+        for class_name, (start, end) in tester_classes.items():
+            class_lines = tester_code.split("\n")[start : end + 1]
+            script_lines.extend(class_lines)
+            script_lines.append("")  # Blank line after each class
 
-    def build_test_script_for_lcb(self, programmer_code: str, tester_code: str) -> str:
-        """
-        Combine programmer and tester code into a single test script for LCB Style Problems.
+        # Add if __name__ == "__main__" block by default
+        script_lines.append('if __name__ == "__main__":')
+        script_lines.append("    unittest.main(verbosity=2)")
+        script_lines.append("")  # Blank line at the end
 
-        Args:
-            programmer_code: Python code with Solution class or functions
-            tester_code: Python code with test class
+        return "\n".join(script_lines)
 
-        Returns:
-            Complete test script as string
+    def build_test_script_for_class(
+        self, programmer_code: str, tester_code: str
+    ) -> Optional[str]:
+        """Combine programmer and tester code into a single test script. This is for OOP style problems (eg: livecodebench)."""
+        script_lines: List[str] = []
+        solution_function_name = self.extract_function_name_from_problem(
+            programmer_code
+        )
+        programmer_code_structure = self._parse_code_structure(
+            programmer_code.split("\n")
+        )
 
-        Raises:
-            CodeParsingError: If either code has syntax errors
-            CodeTransformationError: If Solution class/functions not found
-        """
-        # --- 1. Parse Programmer Code ---
-        try:
-            prog_tree = ast.parse(programmer_code)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing programmer code: {e}")
-            raise CodeParsingError(f"Failed to parse programmer code: {e}") from e
+        # Remove "Solution" import from tester if present: from solution import Solution, or import Solution
+        # Handle both top-level and indented imports (e.g., inside methods)
+        # Match lines that start with optional whitespace, then the import statement
+        tester_code = re.sub(
+            r"^\s*from\s+solution\s+import\s+Solution\s*(#.*)?$",
+            "",
+            tester_code,
+            flags=re.MULTILINE,
+        )
+        tester_code = re.sub(
+            r"^\s*import\s+Solution\s*(#.*)?$", "", tester_code, flags=re.MULTILINE
+        )
 
-        prog_imports = []
-        prog_classes = []
-        prog_funcs = []
-        for node in prog_tree.body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                prog_imports.append(node)
-            elif isinstance(node, ast.ClassDef):
-                prog_classes.append(node)
-            elif isinstance(node, ast.FunctionDef):
-                prog_funcs.append(node)
+        tester_code_structure = self._parse_code_structure(tester_code.split("\n"))
 
-        # --- 2. Find/Create Solution Class ---
-        solution_class_node = None
-        helper_class_nodes = []
-        for c in prog_classes:
-            if c.name == "Solution":
-                solution_class_node = c
-            else:
-                helper_class_nodes.append(c)
+        # Handle Imports
+        programmer_imports = programmer_code_structure["import_lines"]
+        tester_imports = tester_code_structure["import_lines"]
 
-        # If no 'Solution' class, wrap loose functions into one
-        if not solution_class_node and prog_funcs:
-            wrapped_funcs = []
-            for func in prog_funcs:
-                # Add 'self' argument if not present
-                args = func.args.args
-                if not args or args[0].arg != "self":
-                    func.args.args.insert(0, ast.arg(arg="self"))
-                wrapped_funcs.append(func)
+        # Add "import unittest" if not already present
+        if not any(
+            re.match(r"^\s*import\s+unittest\s*$", line) for line in tester_imports
+        ):
+            tester_imports.insert(0, "import unittest")
 
-            # Create ClassDef with type_params for Python 3.12+
-            solution_class_node = ast.ClassDef(
-                name="Solution",
-                bases=[],
-                keywords=[],
-                body=wrapped_funcs,  # type: ignore[arg-type]
-                decorator_list=[],
-                type_params=[],
-            )
+        # Combine and deduplicate imports
+        all_imports = list(dict.fromkeys(programmer_imports + tester_imports))
+        if all_imports:
+            script_lines.extend(all_imports)
+            script_lines.append("")  # Add a blank line after imports
 
-        if not solution_class_node:
-            log.error("No Solution class or functions found in programmer code")
-            raise CodeTransformationError(
-                "No Solution class or functions found in programmer code"
-            )
+        # Add programmer code
+        script_lines.append("# Programmer Code")
 
-        # --- 3. Parse and Clean Tester Code ---
+        # handling classes and methods if any
+        if len(programmer_code_structure["class_definitions"]) >= 1:
+            # Include all classes (Solution class and any helper classes like DSU, etc.)
+            for class_name, (start, end) in programmer_code_structure[
+                "class_definitions"
+            ].items():
+                class_lines = programmer_code.split("\n")[start : end + 1]
+                script_lines.extend(class_lines)
+                script_lines.append("")  # Blank line after each class
 
-        class SolutionImportRemover(ast.NodeTransformer):
-            def visit_ImportFrom(self, node: ast.ImportFrom) -> Optional[ast.AST]:
-                if node.module == "solution":
-                    return None
-                return node
+        elif len(programmer_code_structure["class_definitions"]) == 0:
+            # The solution might have only functions, not classes
+            # We will wrap them in a dummy class named Solution
+            script_lines.append("class Solution:")
+            # Indent all function lines
+            programmer_functions = programmer_code_structure["function_definitions"]
+            for func_name, (start, end) in programmer_functions.items():
+                func_lines = programmer_code.split("\n")[start : end + 1]
 
-            def visit_Import(self, node: ast.Import) -> Optional[ast.AST]:
-                node.names = [alias for alias in node.names if alias.name != "Solution"]
-                if not node.names:
-                    return None
-                return node
+                # Add "self" to function definitions if not present
+                # The first line (index 0) is the def line
+                def_line = func_lines[0]
+                if "self" not in def_line.split("(")[1].split(")")[0]:
+                    func_lines[0] = def_line.replace("(", "(self, ")
 
-        try:
-            tester_tree = ast.parse(tester_code)
-            tester_tree = SolutionImportRemover().visit(tester_tree)
-            ast.fix_missing_locations(tester_tree)
-        except SyntaxError as e:
-            log.error(f"Syntax error parsing tester code: {e}")
-            raise CodeParsingError(f"Failed to parse tester code: {e}") from e
+                # Indent all function lines
+                func_lines = ["    " + line for line in func_lines]
 
-        tester_imports = []
-        tester_classes = []
-        tester_funcs = []
-        tester_main_block = None
+                script_lines.extend(func_lines)
+                script_lines.append("")  # Blank line after each function
 
-        for node in tester_tree.body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                tester_imports.append(node)
-            elif isinstance(node, ast.ClassDef):
-                if node.name != "Solution":
-                    tester_classes.append(node)
-            elif isinstance(node, ast.FunctionDef):
-                tester_funcs.append(node)
-            elif (
-                isinstance(node, ast.If)
-                and isinstance(node.test, ast.Compare)
-                and isinstance(node.test.left, ast.Name)
-                and node.test.left.id == "__name__"
-            ):
-                tester_main_block = node
+        # Add tester code
+        script_lines.append("# Tester Code")
 
-        # --- 4. Assemble Final Script ---
+        # Adding tester helper functions if any
+        tester_functions = tester_code_structure["function_definitions"]
+        for func_name, (start, end) in tester_functions.items():
+            if func_name == solution_function_name:
+                # Skip the function if it has the same name as the solution function
+                continue
+            func_lines = tester_code.split("\n")[start : end + 1]
+            script_lines.extend(func_lines)
+            script_lines.append("")  # Blank line after each function
 
-        all_import_nodes = prog_imports + tester_imports
-        has_unittest = False
-        import_strs = set()
-        final_import_nodes = []
+        # Adding the tester classes if any
+        tester_classes = tester_code_structure["class_definitions"]
 
-        for node in all_import_nodes:
-            import_str = ast.unparse(node)
-            if "import unittest" in import_str:
-                has_unittest = True
-            if import_str not in import_strs:
-                import_strs.add(import_str)
-                final_import_nodes.append(node)
+        for class_name, (start, end) in tester_classes.items():
+            if class_name == "Solution":
+                # Skip the class if it's named Solution to avoid conflicts
+                continue
+            class_lines = tester_code.split("\n")[start : end + 1]
+            script_lines.extend(class_lines)
+            script_lines.append("")  # Blank line after each class
 
-        if not has_unittest:
-            final_import_nodes.insert(0, ast.Import(names=[ast.alias(name="unittest")]))
+        # Add if __name__ == "__main__" block by default
+        script_lines.append('if __name__ == "__main__":')
+        script_lines.append("    unittest.main(verbosity=2)")
+        script_lines.append("")  # Blank line at the end
 
-        final_code_parts = []
-
-        # Add Imports
-        for node in final_import_nodes:
-            final_code_parts.append(ast.unparse(node))
-        final_code_parts.append("")
-
-        # Add Programmer Code
-        final_code_parts.append("# Programmer Code")
-        for node in helper_class_nodes:
-            final_code_parts.append(ast.unparse(node))
-            final_code_parts.append("")
-        final_code_parts.append(ast.unparse(solution_class_node))
-        final_code_parts.append("")
-
-        # Add Tester Code
-        final_code_parts.append("# Tester Code")
-        for node in tester_funcs:
-            final_code_parts.append(ast.unparse(node))
-            final_code_parts.append("")
-        for node in tester_classes:
-            final_code_parts.append(ast.unparse(node))
-            final_code_parts.append("")
-
-        # Add Main Block
-        if tester_main_block:
-            final_code_parts.append(ast.unparse(tester_main_block))
-        else:
-            final_code_parts.append('if __name__ == "__main__":')
-            final_code_parts.append("    unittest.main(verbosity=2)")
-
-        return "\n".join(final_code_parts)
+        return "\n".join(script_lines)

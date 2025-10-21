@@ -2,7 +2,7 @@
 Common utilities shared across all APR projects.
 
 This module provides shared functionality including:
-- CodeProcessor: For processing and extracting code segments
+- Code Preprocessing: For parsing, analyzing, transforming, and building test code
 - LLMClient: Unified interface for different LLM providers
 - SafeCodeSandbox: Safe execution environment for generated code
 - Enhanced typing: TestExecutionResult, BasicExecutionResult, TestDetails for type safety
@@ -11,7 +11,23 @@ This module provides shared functionality including:
 - Coevolution: Bayesian coevolution algorithms with selection strategies
 """
 
-from .code_processor import CodeProcessor
+from .code_preprocessing import (
+    CodeParsingError,
+    CodeProcessingError,
+    CodeStructure,
+    CodeTransformationError,
+    build_test_script_for_humaneval,
+    build_test_script_for_lcb,
+    extract_all_code_blocks,
+    extract_class_block,
+    extract_code_block_from_response,
+    extract_function_name_from_problem,
+    extract_function_with_helpers,
+    extract_test_case_names,
+    extract_test_methods_code,
+    parse_code_structure,
+    replace_test_methods,
+)
 from .coevolution import (
     CoevolutionConfig,
     SelectionStrategy,
@@ -43,8 +59,23 @@ from .sandbox import (
 )
 
 __all__ = [
+    # Code Preprocessing
+    "CodeProcessingError",
+    "CodeParsingError",
+    "CodeTransformationError",
+    "CodeStructure",
+    "extract_function_name_from_problem",
+    "extract_all_code_blocks",
+    "extract_code_block_from_response",
+    "parse_code_structure",
+    "extract_test_case_names",
+    "extract_test_methods_code",
+    "extract_function_with_helpers",
+    "extract_class_block",
+    "replace_test_methods",
+    "build_test_script_for_humaneval",
+    "build_test_script_for_lcb",
     # Core utilities
-    "CodeProcessor",
     "LLMClient",
     "SafeCodeSandbox",
     "create_safe_test_environment",
