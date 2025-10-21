@@ -141,6 +141,8 @@ dependencies = [
     "huggingface-hub>=0.35.3",
     "datasets==3.6.0",
     "livecodebench",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]
