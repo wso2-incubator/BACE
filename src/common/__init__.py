@@ -8,9 +8,17 @@ This module provides shared functionality including:
 - Enhanced typing: TestExecutionResult, BasicExecutionResult, TestDetails for type safety
 - Configuration: BaseConfig and specialized config classes for experiments
 - LLM Factory: Factory functions for creating LLM instances
+- Coevolution: Bayesian coevolution algorithms with selection strategies
 """
 
 from .code_processor import CodeProcessor
+from .coevolution import (
+    CoevolutionConfig,
+    SelectionStrategy,
+    initialize_populations,
+    run_evaluation,
+    update_population_beliefs,
+)
 from .config import AgentCoderConfig, BaseConfig, ExperimentConfig, SimpleConfig
 from .llm_client import LLMClient
 from .llm_factory import (
@@ -62,5 +70,11 @@ __all__ = [
     "get_available_providers",
     "check_provider_availability",
     "validate_provider_model_combination",
+    # Coevolution
+    "CoevolutionConfig",
+    "SelectionStrategy",
+    "initialize_populations",
+    "run_evaluation",
+    "update_population_beliefs",
 ]
 __version__ = "0.1.0"
