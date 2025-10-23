@@ -3,12 +3,16 @@ LLM-based genetic operators for coevolutionary algorithms.
 
 This module provides LLM-powered genetic operators for evolutionary algorithms
 that evolve both code solutions and test cases. It defines an abstract base class
-and two concrete implementations:
+and two concrete implementations with built-in validation and retry mechanisms.
 
 Classes:
     BaseLLMOperator: Abstract base class defining the genetic operator interface
     CodeOperator: Concrete operator for evolving code solutions
     TestOperator: Concrete operator for evolving test cases
+
+Custom Exceptions:
+    LLMGenerationError: Raised when LLM fails to generate valid output
+    CodeValidationError: Raised when generated code fails validation checks
 
 Genetic Operations:
     - create_initial_population: Generate initial population of individuals
@@ -16,13 +20,22 @@ Genetic Operations:
     - crossover: Combine two parents to create offspring
     - edit: Fix an individual based on feedback/errors
 
+Robustness Features:
+    - Automatic retry with exponential backoff for transient LLM failures
+    - Code validation (syntax checking, content validation)
+    - Configurable retry parameters (max_retries, backoff settings)
+    - Graceful handling of network errors, timeouts, and rate limits
+    - Partial results for batch operations when some generations fail
+
 The operators use an LLM (Large Language Model) to perform intelligent
 transformations and maintain a problem context (CodeGenerationProblem)
-that guides the evolutionary process.
+that guides the evolutionary process. All generated code is validated
+for syntax correctness before being returned.
 
 All LLM interactions are logged using loguru for debugging and analysis:
     - logger.info: High-level operation tracking
     - logger.debug: Medium-level details (LLM calls, feedback)
+    - logger.warning: Retry attempts and validation failures
     - logger.trace: Full verbose output (prompts, responses, code)
 
 Example:
@@ -30,29 +43,51 @@ Example:
     >>> from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
     >>>
     >>> llm = LLMClient(model="gpt-4")
-    >>> code_op = CodeOperator(llm)
+    >>> # Configure retry behavior
+    >>> code_op = CodeOperator(llm, max_retries=5, retry_backoff_max=30.0)
     >>> code_op.set_problem(problem)
     >>>
-    >>> # Generate initial population
+    >>> # Generate initial population (with automatic validation)
     >>> solutions = code_op.create_initial_population(population_size=5)
     >>>
-    >>> # Apply genetic operations
+    >>> # Apply genetic operations (with automatic retry on failures)
     >>> mutated = code_op.mutate(solutions[0])
     >>> offspring = code_op.crossover(solutions[0], solutions[1])
     >>> fixed = code_op.edit(solutions[0], "NameError: undefined variable")
 """
 
+import ast
 from abc import ABC, abstractmethod  # Import ABC and abstractmethod
 from typing import List, Optional
 
 from lcb_runner.benchmarks.code_generation import CodeGenerationProblem  # type: ignore
 from loguru import logger
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from common.code_preprocessing.parsers import (
     extract_all_code_blocks_from_response,
     extract_code_block_from_response,
 )
 from common.llm_client import LLMClient
+
+# === Custom Exceptions ===
+
+
+class LLMGenerationError(Exception):
+    """Raised when LLM fails to generate valid output after retries."""
+
+    pass
+
+
+class CodeValidationError(Exception):
+    """Raised when generated code fails basic validation checks."""
+
+    pass
 
 
 class BaseLLMOperator(ABC):
@@ -63,6 +98,13 @@ class BaseLLMOperator(ABC):
     Models (LLMs) to perform intelligent transformations on code and test individuals.
     It maintains a problem context that can be updated and reused across multiple
     operations.
+
+    Robustness Features:
+        - Automatic retry with exponential backoff on LLM failures
+        - Syntax validation using Python's ast module
+        - Content validation (minimum code length, non-empty)
+        - Configurable retry parameters
+        - Graceful error handling with custom exceptions
 
     Abstract Methods (must be implemented by subclasses):
         create_initial_population(population_size: int) -> List[str] | str
@@ -79,10 +121,20 @@ class BaseLLMOperator(ABC):
 
     Helper Methods:
         _generate_and_extract(prompt: str) -> str
-            Send prompt to LLM and extract single code block
+            Send prompt to LLM and extract single code block with validation and retry
 
         _generate_and_extract_many(prompt: str, n: int) -> List[str]
-            Send prompt to LLM and extract multiple code blocks
+            Send prompt to LLM and extract multiple code blocks with validation and retry
+
+    Validation Methods:
+        _validate_python_syntax(code: str) -> tuple[bool, str]
+            Check if code is syntactically valid Python
+
+        _validate_has_content(code: str) -> tuple[bool, str]
+            Check if code has meaningful content
+
+        _validate_generated_code(code: str) -> None
+            Perform all validation checks (raises CodeValidationError if invalid)
 
     Problem Management:
         set_problem(problem: CodeGenerationProblem) -> None
@@ -94,6 +146,14 @@ class BaseLLMOperator(ABC):
     Attributes:
         llm (LLMClient): The LLM client for generating responses
         problem (Optional[CodeGenerationProblem]): Current problem context
+        max_retries (int): Maximum number of retry attempts (default: 3)
+        retry_backoff_base (float): Exponential backoff multiplier (default: 2.0)
+        retry_backoff_max (float): Maximum wait between retries in seconds (default: 10.0)
+
+    Raises:
+        LLMGenerationError: When LLM fails to generate valid output after all retries
+        CodeValidationError: When generated code fails validation checks
+        RuntimeError: When abstract methods are called or problem is not set
 
     Usage:
         # Subclasses implement the abstract methods
@@ -103,14 +163,19 @@ class BaseLLMOperator(ABC):
                 pass
             # ... implement other abstract methods
 
-        # Use the operator
-        operator = MyOperator(llm_client)
+        # Use the operator with custom retry settings
+        operator = MyOperator(llm_client, max_retries=5, retry_backoff_max=30.0)
         operator.set_problem(problem)
-        result = operator.mutate(code)
+        result = operator.mutate(code)  # Automatically retries on failures
     """
 
     def __init__(
-        self, llm_client: LLMClient, problem: Optional[CodeGenerationProblem] = None
+        self,
+        llm_client: LLMClient,
+        problem: Optional[CodeGenerationProblem] = None,
+        max_retries: int = 3,
+        retry_backoff_base: float = 2.0,
+        retry_backoff_max: float = 10.0,
     ) -> None:
         """
         Initialize the LLMOperator with an LLM client and optional problem.
@@ -118,9 +183,30 @@ class BaseLLMOperator(ABC):
         Args:
             llm_client: An instance of LLMClient for interacting with the LLM
             problem: Optional initial problem context. Can be set later via set_problem()
+            max_retries: Maximum number of retry attempts for LLM operations (default: 3).
+                         Higher values increase reliability but may slow down operations.
+            retry_backoff_base: Base multiplier for exponential backoff in seconds (default: 2.0).
+                                Wait time = backoff_base ^ (attempt_number - 1)
+            retry_backoff_max: Maximum wait time between retries in seconds (default: 10.0).
+                               Caps the exponential backoff to prevent excessive delays.
+
+        Example:
+            >>> # Standard configuration
+            >>> operator = CodeOperator(llm_client)
+            >>>
+            >>> # More aggressive retry for unreliable networks
+            >>> operator = CodeOperator(llm_client, max_retries=5, retry_backoff_max=30.0)
+            >>>
+            >>> # Faster retry for development/testing
+            >>> operator = CodeOperator(llm_client, max_retries=2, retry_backoff_base=1.5)
         """
         self.llm = llm_client
         self.problem: Optional[CodeGenerationProblem] = None
+
+        # Retry configuration
+        self.max_retries = max_retries
+        self.retry_backoff_base = retry_backoff_base
+        self.retry_backoff_max = retry_backoff_max
 
         # If a problem was passed, call the setter to process and assign it.
         if problem:
@@ -172,64 +258,239 @@ class Solution:
             )
         return self.problem
 
+    def _validate_python_syntax(self, code: str) -> tuple[bool, str]:
+        """
+        Validate that code is syntactically correct Python.
+
+        This is a basic quality check - does not validate semantics,
+        imports, or problem-specific requirements.
+
+        Args:
+            code: Python code string to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+            - is_valid: True if syntax is valid, False otherwise
+            - error_message: Empty string if valid, error details if invalid
+        """
+        if not code or not code.strip():
+            return False, "Empty code string"
+
+        try:
+            ast.parse(code)
+            return True, ""
+        except SyntaxError as e:
+            error_msg = f"Syntax error at line {e.lineno}: {e.msg}"
+            logger.warning(f"Syntax validation failed: {error_msg}")
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error during syntax validation: {str(e)}"
+            logger.warning(error_msg)
+            return False, error_msg
+
+    def _validate_has_content(self, code: str, min_lines: int = 2) -> tuple[bool, str]:
+        """
+        Validate that generated code has meaningful content.
+
+        Checks:
+        - Not empty
+        - Has minimum number of non-comment lines
+        - Not just whitespace or comments
+
+        Args:
+            code: Code string to validate
+            min_lines: Minimum number of non-empty, non-comment lines
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not code or not code.strip():
+            return False, "Empty or whitespace-only code"
+
+        # Count non-empty, non-comment lines
+        lines = [
+            line.strip()
+            for line in code.split("\n")
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        if len(lines) < min_lines:
+            return False, f"Too few lines of code ({len(lines)} < {min_lines})"
+
+        return True, ""
+
+    def _validate_generated_code(self, code: str) -> None:
+        """
+        Perform basic validation on generated code.
+
+        Validates:
+        1. Has meaningful content
+        2. Syntactically valid Python
+
+        Raises:
+            CodeValidationError: If validation fails
+        """
+        # Check content
+        is_valid, error = self._validate_has_content(code)
+        if not is_valid:
+            raise CodeValidationError(f"Content validation failed: {error}")
+
+        # Check syntax
+        is_valid, error = self._validate_python_syntax(code)
+        if not is_valid:
+            raise CodeValidationError(f"Syntax validation failed: {error}")
+
+        logger.trace("Code validation passed")
+
     def _generate_and_extract(self, prompt: str) -> str:
         """
-        Generate LLM response and extract clean code block.
+        Generate LLM response and extract clean code block with retry logic.
 
-        This helper method wraps the LLM generate call and automatically
-        extracts the first Python code block from the response, removing
-        any markdown formatting or explanatory text.
+        This helper method wraps the LLM generate call, automatically extracts
+        the first Python code block, and validates the result. Includes retry
+        logic for transient failures using tenacity.
+
+        Retries on:
+        - LLM API failures (network, rate limits, etc.)
+        - Empty or invalid responses
+        - Syntax errors in generated code
 
         Args:
             prompt: The prompt to send to the LLM
 
         Returns:
-            Extracted Python code string (or raw response if no code block found)
+            Extracted and validated Python code string
+
+        Raises:
+            LLMGenerationError: If LLM fails after all retries
+            CodeValidationError: If generated code is invalid after all retries
         """
-        logger.debug("Sending prompt to LLM")
-        logger.trace(f"Prompt content:\n{prompt}")
 
-        raw_response = self.llm.generate(prompt)
+        @retry(
+            stop=stop_after_attempt(self.max_retries),
+            wait=wait_exponential(
+                multiplier=self.retry_backoff_base, max=self.retry_backoff_max
+            ),
+            retry=retry_if_exception_type(
+                (LLMGenerationError, CodeValidationError, ConnectionError, TimeoutError)
+            ),
+        )
+        def _generate_with_retry() -> str:
+            logger.debug("Sending prompt to LLM")
+            logger.trace(f"Prompt content:\n{prompt}")
 
-        logger.debug("Received response from LLM")
-        logger.trace(f"Raw LLM response:\n{raw_response}")
+            try:
+                raw_response = self.llm.generate(prompt)
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                raise LLMGenerationError(f"LLM API call failed: {e}") from e
 
-        extracted_code = extract_code_block_from_response(raw_response)
-        logger.trace(f"Extracted code:\n{extracted_code}")
+            logger.debug("Received response from LLM")
+            logger.trace(f"Raw LLM response:\n{raw_response}")
 
-        return extracted_code
+            # Extract code
+            extracted_code = extract_code_block_from_response(raw_response)
+
+            if not extracted_code or not extracted_code.strip():
+                logger.warning("LLM returned empty code block")
+                raise LLMGenerationError("LLM returned empty code block")
+
+            logger.trace(f"Extracted code:\n{extracted_code}")
+
+            # Validate extracted code
+            self._validate_generated_code(extracted_code)
+
+            return extracted_code
+
+        return _generate_with_retry()
 
     def _generate_and_extract_many(self, prompt: str, n: int) -> List[str]:
         """
-        Generate LLM response and extract multiple code blocks.
+        Generate multiple solutions in a single LLM call with retry logic.
 
-        This helper method wraps the LLM generate call and automatically
-        extracts multiple Python code blocks from the response, removing
-        any markdown formatting or explanatory text.
+        This helper method wraps the LLM generate call for batch generation,
+        automatically extracting all Python code blocks and validating each one.
+        Includes retry logic for transient failures using tenacity.
+
+        Retries on:
+        - LLM API failures (network, rate limits, etc.)
+        - Empty or invalid responses
+        - Syntax errors in generated code
+
+        If some code blocks are valid and others invalid, returns the valid ones.
+        Only fails if no valid blocks are found after all retries.
 
         Args:
             prompt: The prompt to send to the LLM
             n: The number of code blocks to extract (used for logging)
 
         Returns:
-            A list of extracted Python code strings (up to n items)
+            A list of extracted and validated Python code strings (up to n items)
+
+        Raises:
+            LLMGenerationError: If LLM fails after all retries
+            CodeValidationError: If no valid code blocks found after all retries
         """
-        logger.debug(f"Sending prompt to LLM (requesting {n} items)")
-        logger.trace(f"Prompt content:\n{prompt}")
 
-        raw_response = self.llm.generate(prompt)
+        @retry(
+            stop=stop_after_attempt(self.max_retries),
+            wait=wait_exponential(
+                multiplier=self.retry_backoff_base, max=self.retry_backoff_max
+            ),
+            retry=retry_if_exception_type(
+                (LLMGenerationError, CodeValidationError, ConnectionError, TimeoutError)
+            ),
+        )
+        def _generate_with_retry() -> List[str]:
+            logger.debug(f"Sending prompt to LLM (requesting {n} items)")
+            logger.trace(f"Prompt content:\n{prompt}")
 
-        logger.debug("Received response from LLM")
-        logger.trace(f"Raw LLM response:\n{raw_response}")
+            try:
+                raw_response = self.llm.generate(prompt)
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                raise LLMGenerationError(f"LLM API call failed: {e}") from e
 
-        extracted_codes = extract_all_code_blocks_from_response(raw_response)
-        logger.debug(f"Extracted {len(extracted_codes)} code blocks from response")
+            logger.debug("Received response from LLM")
+            logger.trace(f"Raw LLM response:\n{raw_response}")
 
-        # Return up to the requested number of code blocks
-        result = extracted_codes[:n] if extracted_codes else []
-        logger.trace(f"Returning {len(result)} code blocks")
+            # Extract all code blocks
+            extracted_codes = extract_all_code_blocks_from_response(raw_response)
 
-        return result
+            if not extracted_codes:
+                logger.warning("LLM returned no code blocks")
+                raise LLMGenerationError("LLM returned no code blocks")
+
+            logger.debug(f"Extracted {len(extracted_codes)} code blocks from response")
+
+            # Validate each code block - keep valid ones, log invalid ones
+            valid_blocks = []
+            for idx, code_block in enumerate(extracted_codes[:n]):
+                try:
+                    self._validate_generated_code(code_block)
+                    valid_blocks.append(code_block)
+                    logger.trace(f"Code block {idx + 1} is valid")
+                except CodeValidationError as e:
+                    logger.warning(
+                        f"Code block {idx + 1} validation failed: {e}. Skipping."
+                    )
+                    continue
+
+            if not valid_blocks:
+                logger.error("No valid code blocks found after validation")
+                raise CodeValidationError(
+                    f"All {len(extracted_codes[:n])} code blocks failed validation"
+                )
+
+            if len(valid_blocks) < n:
+                logger.warning(
+                    f"Only {len(valid_blocks)} valid blocks found (expected {n})"
+                )
+
+            logger.trace(f"Returning {len(valid_blocks)} valid code blocks")
+            return valid_blocks
+
+        return _generate_with_retry()
 
     # --- Define the Abstract Interface for Operators ---
     @abstractmethod
@@ -298,42 +559,56 @@ class CodeOperator(BaseLLMOperator):
 
     This operator implements all genetic operations specifically tailored for
     evolving code solutions to programming problems. It generates, mutates,
-    combines, and fixes Python code using LLM-powered transformations.
+    combines, and fixes Python code using LLM-powered transformations with
+    automatic validation and retry mechanisms.
 
     Return Types:
-        create_initial_population: Returns List[str] - multiple separate code solutions
-        mutate: Returns str - single mutated code solution
-        crossover: Returns str - single offspring code solution
-        edit: Returns str - single fixed code solution
+        create_initial_population: Returns List[str] - multiple validated code solutions
+        mutate: Returns str - single validated mutated code solution
+        crossover: Returns str - single validated offspring code solution
+        edit: Returns str - single validated fixed code solution
 
     Operations:
         - Initial Population: Generates multiple independent code solutions, each in
           a separate code block. Solutions may use different algorithms or approaches.
+          All solutions are validated for syntax correctness before being returned.
 
         - Mutation: Modifies a solution to explore different implementation approaches
           while maintaining functionality (e.g., different algorithm, data structure).
+          Automatically retries if LLM generates invalid syntax.
 
         - Crossover: Intelligently combines the best aspects of two parent solutions
           (e.g., better algorithm from parent1, clearer logic from parent2).
+          Validates the offspring before returning.
 
         - Edit: Fixes a solution based on error feedback (e.g., syntax errors, test
-          failures) while maintaining the overall approach.
+          failures) while maintaining the overall approach. Retries if fix introduces
+          new syntax errors.
+
+    Robustness:
+        All operations automatically retry on:
+        - LLM API failures (network errors, timeouts, rate limits)
+        - Empty or invalid responses
+        - Syntax errors in generated code
+
+        Configuration is inherited from BaseLLMOperator (max_retries, backoff settings).
 
     Example:
-        >>> code_op = CodeOperator(llm_client)
+        >>> code_op = CodeOperator(llm_client, max_retries=5)
         >>> code_op.set_problem(problem)
         >>>
-        >>> # Generate 5 diverse solutions
+        >>> # Generate 5 diverse solutions (automatically validated)
         >>> solutions = code_op.create_initial_population(5)
         >>> # Returns: ["def solution1()...", "def solution2()...", ...]
+        >>> # All solutions guaranteed to be syntactically valid
         >>>
-        >>> # Mutate a solution
+        >>> # Mutate a solution (with automatic retry on failures)
         >>> variant = code_op.mutate(solutions[0])
         >>>
-        >>> # Combine two solutions
+        >>> # Combine two solutions (validated before return)
         >>> child = code_op.crossover(solutions[0], solutions[1])
         >>>
-        >>> # Fix an error
+        >>> # Fix an error (retries if fix introduces new errors)
         >>> fixed = code_op.edit(solutions[0], "NameError: x is not defined")
     """
 
@@ -480,15 +755,15 @@ class TestOperator(BaseLLMOperator):
     Concrete operator specialized for test case evolution.
 
     This operator implements all genetic operations specifically tailored for
-    evolving test cases. Unlike CodeOperator which returns multiple separate
-    solutions, TestOperator works with unittest classes containing multiple
-    test methods.
+    evolving test cases with automatic validation and retry. Unlike CodeOperator
+    which returns multiple separate solutions, TestOperator works with unittest
+    classes containing multiple test methods.
 
     Return Types:
-        create_initial_population: Returns str - single unittest class with multiple test methods
-        mutate: Returns str - single mutated test case
-        crossover: Returns str - single combined test case
-        edit: Returns str - single improved test case
+        create_initial_population: Returns str - single validated unittest class with multiple test methods
+        mutate: Returns str - single validated mutated test case
+        crossover: Returns str - single validated combined test case
+        edit: Returns str - single validated improved test case
 
     Design Note:
         TestOperator returns a single unittest class (str) for initial population,
@@ -499,34 +774,45 @@ class TestOperator(BaseLLMOperator):
     Operations:
         - Initial Population: Generates a unittest class containing multiple test
           methods. Methods test different scenarios, edge cases, and boundary conditions.
+          The entire class is validated for syntax before return.
 
         - Mutation: Modifies a test to check different edge cases or boundary
-          conditions while maintaining unittest structure.
+          conditions while maintaining unittest structure. Automatically retries if
+          mutation breaks test structure.
 
         - Crossover: Combines assertions and test scenarios from two test cases to
-          create a more comprehensive test.
+          create a more comprehensive test. Validates the combined test structure.
 
         - Edit: Improves a test based on feedback (e.g., test too broad, missed
-          edge case, assertion errors).
+          edge case, assertion errors). Retries if improvement introduces syntax errors.
+
+    Robustness:
+        All operations automatically retry on:
+        - LLM API failures (network errors, timeouts, rate limits)
+        - Empty or invalid responses
+        - Syntax errors in generated test code
+
+        Configuration is inherited from BaseLLMOperator (max_retries, backoff settings).
 
     Example:
-        >>> test_op = TestOperator(llm_client)
+        >>> test_op = TestOperator(llm_client, max_retries=5)
         >>> test_op.set_problem(problem)
         >>>
-        >>> # Generate unittest class with 5 test methods
+        >>> # Generate unittest class with 5 test methods (validated)
         >>> test_class = test_op.create_initial_population(5)
         >>> # Returns: "import unittest\\nclass TestSolution(unittest.TestCase):\\n    def test_1()...\\n    def test_2()..."
+        >>> # Guaranteed to be syntactically valid unittest code
         >>>
         >>> # Extract individual tests later in your algorithm
         >>> individual_tests = extract_test_methods(test_class)
         >>>
-        >>> # Mutate a test
+        >>> # Mutate a test (with automatic retry on failures)
         >>> variant = test_op.mutate(individual_tests[0])
         >>>
-        >>> # Combine two tests
+        >>> # Combine two tests (validated before return)
         >>> comprehensive_test = test_op.crossover(individual_tests[0], individual_tests[1])
         >>>
-        >>> # Improve based on feedback
+        >>> # Improve based on feedback (retries if needed)
         >>> improved = test_op.edit(individual_tests[0], "Test too broad, add edge cases")
     """
 
