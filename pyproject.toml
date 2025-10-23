@@ -143,6 +143,7 @@ dependencies = [
     "livecodebench",
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
+    "loguru>=0.7.3",
 ]
 
 [project.optional-dependencies]
@@ -159,6 +160,8 @@ where = ["src"]
 
 [tool.mypy]
 strict = true
+mypy_path = "src"
+explicit_package_bases = true
 
 
 [[tool.mypy.overrides]]
