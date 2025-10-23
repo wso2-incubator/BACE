@@ -616,11 +616,16 @@ class CodeOperator(BaseLLMOperator):
         """
         Generate an initial population of code solutions.
 
+        Guarantees to return exactly `population_size` solutions.
+
         Args:
             population_size: The number of solutions to generate
 
         Returns:
-            A list of code solution strings
+            A list of exactly `population_size` code solution strings
+
+        Raises:
+            LLMGenerationError: If unable to generate the requested number of solutions
         """
         logger.info(
             f"CodeOperator: Creating initial population of size {population_size}"
@@ -631,8 +636,17 @@ class CodeOperator(BaseLLMOperator):
 
         solutions = self._generate_and_extract_many(prompt, population_size)
 
+        # Verify we got exactly the requested number
+        if len(solutions) != population_size:
+            error_msg = (
+                f"Failed to generate requested population size. "
+                f"Expected {population_size}, got {len(solutions)} valid solutions."
+            )
+            logger.error(error_msg)
+            raise LLMGenerationError(error_msg)
+
         logger.info(
-            f"CodeOperator: Generated {len(solutions)} solutions for initial population"
+            f"CodeOperator: Successfully generated {len(solutions)} solutions for initial population"
         )
         return solutions
 
@@ -824,11 +838,16 @@ class TestOperator(BaseLLMOperator):
         TestOperator returns a single unittest class containing multiple test methods.
         Individual test methods should be extracted separately in the main algorithm.
 
+        Guarantees the unittest class contains at least `population_size` test methods.
+
         Args:
             population_size: The number of test methods to request in the unittest class
 
         Returns:
-            A single string containing a unittest class with multiple test methods
+            A single string containing a unittest class with at least `population_size` test methods
+
+        Raises:
+            LLMGenerationError: If unable to generate the requested number of test methods
         """
         logger.info(
             f"TestOperator: Creating initial test population (requesting {population_size} test methods)"
@@ -839,10 +858,19 @@ class TestOperator(BaseLLMOperator):
 
         result = self._generate_and_extract(prompt)
 
-        # Count test methods for logging
+        # Count test methods and verify we got at least the requested number
         test_count = result.count("def test_")
+
+        if test_count < population_size:
+            error_msg = (
+                f"Failed to generate requested number of test methods. "
+                f"Expected at least {population_size}, got {test_count} test methods."
+            )
+            logger.error(error_msg)
+            raise LLMGenerationError(error_msg)
+
         logger.info(
-            f"TestOperator: Generated unittest class with {test_count} test methods"
+            f"TestOperator: Successfully generated unittest class with {test_count} test methods"
         )
 
         return result
