@@ -204,24 +204,29 @@ def _update_test_beliefs(
 
 
 def initialize_prior_beliefs(
-    config: CoevolutionConfig,
-) -> Tuple[np.ndarray, np.ndarray]:
+    size: int,
+    prior: float,
+) -> np.ndarray:
     """
-    Initialize prior belief probabilities for code and test populations.
+    Create an array of prior correctness probabilities.
 
-    Creates arrays of prior correctness probabilities for each member of the
-    code and test populations based on the configured population sizes and prior values.
+    Returns a 1-D numpy array of length `size` with every element set to `prior`.
+    This is a convenience helper for initializing uniform prior beliefs for a
+    population of members (code or tests).
 
     Args:
-        config: Configuration object with population sizes and prior probability values.
+        size: Number of population members (length of the returned array).
+        prior: Prior probability to assign to each member.
 
     Returns:
-        A tuple of (code_probabilities, test_probabilities), where each array contains
-        the prior correctness probability for each population member.
+        A numpy.ndarray of shape (size,) and dtype float filled with `prior`.
     """
-    code_probs = np.full(config.initial_code_population_size, config.initial_code_prior)
-    test_probs = np.full(config.initial_test_population_size, config.initial_test_prior)
-    return code_probs, test_probs
+
+    if not (0.0 < prior < 1.0):
+        raise ValueError("Prior probability must be in the range (0.0, 1.0)")
+    if size <= 0:
+        raise ValueError("Size must be a positive integer")
+    return np.full(size, prior, dtype=float)
 
 
 def update_population_beliefs(
