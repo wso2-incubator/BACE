@@ -11,7 +11,7 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, List
 
 import numpy as np
 from loguru import logger
@@ -679,7 +679,3 @@ class TestPopulation(BasePopulation):
             f"Replaced individual at index {index} in TestPopulation "
             f"(generation {self.generation}): prob {old_prob:.4f} → {probability:.4f}"
         )
-
-
-# Backward compatibility alias
-Population = BasePopulation
