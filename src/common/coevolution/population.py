@@ -11,10 +11,12 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Iterator, List
+from typing import Iterator, List
 
 import numpy as np
 from loguru import logger
+
+from common.code_preprocessing.builders import rebuild_unittest_with_new_methods
 
 
 class BasePopulation(ABC):
@@ -192,16 +194,13 @@ class BasePopulation(ABC):
 
     # Abstract methods that subclasses must implement
     @abstractmethod
-    def add_individual(
-        self, individual: str, probability: float, **kwargs: Any
-    ) -> None:
+    def add_individual(self, individual: str, probability: float) -> None:
         """
         Add a single individual to the population.
 
         Args:
             individual: Code string or test method to add
             probability: Correctness probability for this individual
-            **kwargs: Additional subclass-specific parameters
 
         Raises:
             ValueError: If probability is not in [0, 1]
@@ -209,13 +208,12 @@ class BasePopulation(ABC):
         pass
 
     @abstractmethod
-    def remove_individual(self, index: int, **kwargs: Any) -> tuple[str, float]:
+    def remove_individual(self, index: int) -> tuple[str, float]:
         """
         Remove an individual at the specified index.
 
         Args:
             index: Index of individual to remove
-            **kwargs: Additional subclass-specific parameters
 
         Returns:
             Tuple of (removed_individual, removed_probability)
@@ -228,7 +226,7 @@ class BasePopulation(ABC):
 
     @abstractmethod
     def replace_individual(
-        self, index: int, individual: str, probability: float, **kwargs: Any
+        self, index: int, individual: str, probability: float
     ) -> None:
         """
         Replace a single individual at the specified index.
@@ -237,7 +235,6 @@ class BasePopulation(ABC):
             index: Index of individual to replace
             individual: New code string or test method
             probability: New correctness probability
-            **kwargs: Additional subclass-specific parameters
 
         Raises:
             ValueError: If probability is not in [0, 1]
@@ -247,10 +244,7 @@ class BasePopulation(ABC):
 
     @abstractmethod
     def replace_individuals(
-        self,
-        new_individuals: List[str],
-        new_probabilities: np.ndarray,
-        **kwargs: Any,
+        self, new_individuals: List[str], new_probabilities: np.ndarray
     ) -> None:
         """
         Replace the entire population with new individuals and probabilities.
@@ -258,7 +252,6 @@ class BasePopulation(ABC):
         Args:
             new_individuals: New list of individuals
             new_probabilities: New probability array
-            **kwargs: Additional subclass-specific parameters
 
         Raises:
             ValueError: If validation checks fail
@@ -296,10 +289,7 @@ class CodePopulation(BasePopulation):
         )
 
     def replace_individuals(
-        self,
-        new_individuals: List[str],
-        new_probabilities: np.ndarray,
-        **kwargs: Any,
+        self, new_individuals: List[str], new_probabilities: np.ndarray
     ) -> None:
         """
         Replace the entire code population with new individuals and probabilities.
@@ -309,7 +299,6 @@ class CodePopulation(BasePopulation):
         Args:
             new_individuals: New list of code solutions
             new_probabilities: New probability array
-            **kwargs: Ignored for code populations
 
         Raises:
             ValueError: If validation checks fail
@@ -336,16 +325,13 @@ class CodePopulation(BasePopulation):
             f"avg_prob {old_avg:.4f} → {new_avg:.4f}"
         )
 
-    def add_individual(
-        self, individual: str, probability: float, **kwargs: Any
-    ) -> None:
+    def add_individual(self, individual: str, probability: float) -> None:
         """
         Add a single code solution to the population.
 
         Args:
             individual: Code solution string to add
             probability: Correctness probability for this solution
-            **kwargs: Ignored for code populations
 
         Raises:
             ValueError: If probability is not in [0, 1]
@@ -362,13 +348,12 @@ class CodePopulation(BasePopulation):
             f"new_size={len(self._individuals)}, prob={probability:.4f}"
         )
 
-    def remove_individual(self, index: int, **kwargs: Any) -> tuple[str, float]:
+    def remove_individual(self, index: int) -> tuple[str, float]:
         """
         Remove a code solution at the specified index.
 
         Args:
             index: Index of solution to remove
-            **kwargs: Ignored for code populations
 
         Returns:
             Tuple of (removed_individual, removed_probability)
@@ -398,7 +383,7 @@ class CodePopulation(BasePopulation):
         return removed_individual, removed_probability
 
     def replace_individual(
-        self, index: int, individual: str, probability: float, **kwargs: Any
+        self, index: int, individual: str, probability: float
     ) -> None:
         """
         Replace a code solution at the specified index.
@@ -407,7 +392,6 @@ class CodePopulation(BasePopulation):
             index: Index of solution to replace
             individual: New code solution string
             probability: New correctness probability
-            **kwargs: Ignored for code populations
 
         Raises:
             ValueError: If probability is not in [0, 1]
@@ -502,6 +486,23 @@ class TestPopulation(BasePopulation):
             raise ValueError("test_class_block cannot be empty")
         self._test_class_block = test_class_block
 
+    def _rebuild_test_class_block(self) -> None:
+        """
+        Internal method to rebuild the test class block from current individuals.
+
+        This method is called automatically whenever individuals are modified
+        (added, removed, or replaced) to keep the test_class_block in sync.
+
+        Uses rebuild_unittest_with_new_methods() from builders.py to preserve
+        the class structure, imports, and non-test methods while updating test methods.
+        """
+        self._test_class_block = rebuild_unittest_with_new_methods(
+            self._test_class_block, self._individuals
+        )
+        logger.trace(
+            f"Rebuilt test class block with {len(self._individuals)} test methods"
+        )
+
     def __repr__(self) -> str:
         """String representation of the test population."""
         return (
@@ -511,23 +512,20 @@ class TestPopulation(BasePopulation):
         )
 
     def replace_individuals(
-        self,
-        new_individuals: List[str],
-        new_probabilities: np.ndarray,
-        **kwargs: Any,
+        self, new_individuals: List[str], new_probabilities: np.ndarray
     ) -> None:
         """
         Replace the entire test population with new individuals and probabilities.
 
         This is useful for generational replacement in evolutionary algorithms.
+        The test_class_block will be automatically rebuilt from the new individuals.
 
         Args:
             new_individuals: New list of test method strings
             new_probabilities: New probability array
-            **kwargs: Must include 'new_test_class_block' parameter
 
         Raises:
-            ValueError: If validation checks fail or new_test_class_block is missing
+            ValueError: If validation checks fail
         """
         if len(new_individuals) != len(new_probabilities):
             raise ValueError(
@@ -537,20 +535,12 @@ class TestPopulation(BasePopulation):
         if len(new_individuals) == 0:
             raise ValueError("Cannot replace with empty population")
 
-        # Require new_test_class_block for test populations
-        new_test_class_block = kwargs.get("new_test_class_block")
-        if new_test_class_block is None:
-            raise ValueError(
-                "new_test_class_block is required when replacing a TestPopulation. "
-                "The test class block must be provided for the new test methods."
-            )
-
         old_size = len(self._individuals)
         old_avg = np.mean(self._probabilities)
 
         self._individuals = new_individuals
         self._probabilities = new_probabilities
-        self._test_class_block = new_test_class_block
+        self._rebuild_test_class_block()
         self._validate_consistency()
 
         new_avg = np.mean(new_probabilities)
@@ -560,34 +550,25 @@ class TestPopulation(BasePopulation):
             f"avg_prob {old_avg:.4f} → {new_avg:.4f}"
         )
 
-    def add_individual(
-        self, individual: str, probability: float, **kwargs: Any
-    ) -> None:
+    def add_individual(self, individual: str, probability: float) -> None:
         """
         Add a single test method to the population.
+
+        The test_class_block will be automatically rebuilt to include the new test method.
 
         Args:
             individual: Test method string to add
             probability: Correctness probability for this test
-            **kwargs: Must include 'updated_test_class_block' parameter
 
         Raises:
-            ValueError: If probability is not in [0, 1] or updated_test_class_block is missing
+            ValueError: If probability is not in [0, 1]
         """
         if not 0 <= probability <= 1:
             raise ValueError(f"Probability must be in [0, 1], got {probability}")
 
-        # Require updated test_class_block for test populations
-        updated_test_class_block = kwargs.get("updated_test_class_block")
-        if updated_test_class_block is None:
-            raise ValueError(
-                "updated_test_class_block is required when adding to a TestPopulation. "
-                "The test class block must be regenerated to include the new test method."
-            )
-
         self._individuals.append(individual)
         self._probabilities = np.append(self._probabilities, probability)
-        self._test_class_block = updated_test_class_block
+        self._rebuild_test_class_block()
         self._validate_consistency()
 
         logger.debug(
@@ -595,19 +576,20 @@ class TestPopulation(BasePopulation):
             f"new_size={len(self._individuals)}, prob={probability:.4f}"
         )
 
-    def remove_individual(self, index: int, **kwargs: Any) -> tuple[str, float]:
+    def remove_individual(self, index: int) -> tuple[str, float]:
         """
         Remove a test method at the specified index.
 
+        The test_class_block will be automatically rebuilt without the removed test method.
+
         Args:
             index: Index of test method to remove
-            **kwargs: Must include 'updated_test_class_block' parameter
 
         Returns:
             Tuple of (removed_individual, removed_probability)
 
         Raises:
-            ValueError: If population would become empty or updated_test_class_block is missing
+            ValueError: If population would become empty
             IndexError: If index is out of bounds
         """
         if len(self._individuals) <= 1:
@@ -617,18 +599,10 @@ class TestPopulation(BasePopulation):
                 f"Index {index} out of bounds for population size {len(self._individuals)}"
             )
 
-        # Require updated test_class_block for test populations
-        updated_test_class_block = kwargs.get("updated_test_class_block")
-        if updated_test_class_block is None:
-            raise ValueError(
-                "updated_test_class_block is required when removing from a TestPopulation. "
-                "The test class block must be regenerated without the removed test method."
-            )
-
         removed_individual = self._individuals.pop(index)
         removed_probability = float(self._probabilities[index])
         self._probabilities = np.delete(self._probabilities, index)
-        self._test_class_block = updated_test_class_block
+        self._rebuild_test_class_block()
         self._validate_consistency()
 
         logger.debug(
@@ -640,19 +614,20 @@ class TestPopulation(BasePopulation):
         return removed_individual, removed_probability
 
     def replace_individual(
-        self, index: int, individual: str, probability: float, **kwargs: Any
+        self, index: int, individual: str, probability: float
     ) -> None:
         """
         Replace a test method at the specified index.
+
+        The test_class_block will be automatically rebuilt with the replaced test method.
 
         Args:
             index: Index of test method to replace
             individual: New test method string
             probability: New correctness probability
-            **kwargs: Must include 'updated_test_class_block' parameter
 
         Raises:
-            ValueError: If probability is not in [0, 1] or updated_test_class_block is missing
+            ValueError: If probability is not in [0, 1]
             IndexError: If index is out of bounds
         """
         if not 0 <= probability <= 1:
@@ -662,18 +637,10 @@ class TestPopulation(BasePopulation):
                 f"Index {index} out of bounds for population size {len(self._individuals)}"
             )
 
-        # Require updated test_class_block for test populations
-        updated_test_class_block = kwargs.get("updated_test_class_block")
-        if updated_test_class_block is None:
-            raise ValueError(
-                "updated_test_class_block is required when replacing in a TestPopulation. "
-                "The test class block must be regenerated with the replaced test method."
-            )
-
         old_prob = float(self._probabilities[index])
         self._individuals[index] = individual
         self._probabilities[index] = probability
-        self._test_class_block = updated_test_class_block
+        self._rebuild_test_class_block()
 
         logger.debug(
             f"Replaced individual at index {index} in TestPopulation "
