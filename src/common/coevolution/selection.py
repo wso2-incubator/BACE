@@ -19,7 +19,7 @@ class SelectionStrategy:
     """
     A class that encapsulates various selection strategies for evolutionary algorithms.
 
-    All methods work with BaseBasePopulation objects (CodePopulation or TestPopulation).
+    All methods work with BasePopulation objects (CodePopulation or TestPopulation).
     """
 
     @staticmethod
@@ -28,7 +28,7 @@ class SelectionStrategy:
         Performs binary tournament selection on a population based on probabilities.
 
         Args:
-            population: BaseBasePopulation object containing individuals and their probabilities
+            population: BasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -48,7 +48,7 @@ class SelectionStrategy:
         Selects the top individuals from the population based on probabilities.
 
         Args:
-            population: BaseBasePopulation object containing individuals and their probabilities
+            population: BasePopulation object containing individuals and their probabilities
             num_elites: Number of top individuals to select
 
         Returns:
@@ -62,7 +62,7 @@ class SelectionStrategy:
         Performs roulette wheel selection on a population based on probabilities.
 
         Args:
-            population: BaseBasePopulation object containing individuals and their probabilities
+            population: BasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -95,7 +95,7 @@ class SelectionStrategy:
         range or when there are outliers.
 
         Args:
-            population: BaseBasePopulation object containing individuals and their probabilities
+            population: BasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -130,7 +130,7 @@ class SelectionStrategy:
         This can be useful for maintaining diversity or as a baseline comparison.
 
         Args:
-            population: BaseBasePopulation object containing individuals and their probabilities
+            population: BasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -176,7 +176,7 @@ class SelectionStrategy:
         Selects two different parents from the population using the specified selection method.
 
         Args:
-            population: BaseBasePopulation object to select from
+            population: BasePopulation object to select from
             method: Selection method to use. Available methods can be retrieved using
                    get_available_methods(). Default is "binary_tournament".
 
@@ -224,5 +224,4 @@ class SelectionStrategy:
                     idx = np.random.choice(available_indices)
                     parent2_individual, parent2_prob = population[idx]
 
-        return (parent1_individual, parent1_prob), (parent2_individual, parent2_prob)
         return (parent1_individual, parent1_prob), (parent2_individual, parent2_prob)
