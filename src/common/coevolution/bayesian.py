@@ -210,8 +210,8 @@ def initialize_prior_beliefs(
         A tuple of (code_probabilities, test_probabilities), where each array contains
         the prior correctness probability for each population member.
     """
-    code_probs = np.full(config.initial_code_population_size, config.c0_prior)
-    test_probs = np.full(config.initial_test_population_size, config.t0_prior)
+    code_probs = np.full(config.initial_code_population_size, config.initial_code_prior)
+    test_probs = np.full(config.initial_test_population_size, config.initial_test_prior)
     return code_probs, test_probs
 
 
