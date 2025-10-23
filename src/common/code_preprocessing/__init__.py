@@ -11,62 +11,19 @@ Main components:
 - transformers: Extract and modify code segments
 - builders: Assemble complete test scripts
 
-Usage:
-    from src.common.code_preprocessing import (
-        extract_code_block_from_response,
-        parse_code_structure,
-        extract_function_with_helpers,
-        build_test_script_for_humaneval,
-    )
+Usage (Hierarchical Imports):
+    from src.common.code_preprocessing.parsers import extract_code_block_from_response
+    from src.common.code_preprocessing.analyzers import parse_code_structure
+    from src.common.code_preprocessing.transformers import extract_function_with_helpers
+    from src.common.code_preprocessing.builders import build_test_script_for_humaneval
+    from src.common.code_preprocessing import CodeParsingError  # Exceptions available directly
 """
 
-# Analyzers
-from .analyzers import (
-    CodeStructure,
-    extract_test_case_names,
-    extract_test_methods_code,
-    parse_code_structure,
-)
-
-# Builders
-from .builders import build_test_script_for_humaneval, build_test_script_for_lcb
-
-# Exceptions
+# Only export exceptions for convenience - they're used across many modules
 from .exceptions import CodeParsingError, CodeProcessingError, CodeTransformationError
 
-# Parsers
-from .parsers import (
-    extract_all_code_blocks_from_response,
-    extract_code_block_from_response,
-    extract_function_name_from_problem,
-)
-
-# Transformers
-from .transformers import (
-    extract_class_block,
-    extract_function_with_helpers,
-    replace_test_methods,
-)
-
 __all__ = [
-    # Exceptions
     "CodeProcessingError",
     "CodeParsingError",
     "CodeTransformationError",
-    # Parsers
-    "extract_function_name_from_problem",
-    "extract_all_code_blocks_from_response",
-    "extract_code_block_from_response",
-    # Analyzers
-    "CodeStructure",
-    "parse_code_structure",
-    "extract_test_case_names",
-    "extract_test_methods_code",
-    # Transformers
-    "extract_function_with_helpers",
-    "extract_class_block",
-    "replace_test_methods",
-    # Builders
-    "build_test_script_for_humaneval",
-    "build_test_script_for_lcb",
 ]

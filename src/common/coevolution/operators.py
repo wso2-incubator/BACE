@@ -48,7 +48,7 @@ from typing import List, Optional
 from lcb_runner.benchmarks.code_generation import CodeGenerationProblem  # type: ignore
 from loguru import logger
 
-from common.code_preprocessing import (
+from common.code_preprocessing.parsers import (
     extract_all_code_blocks_from_response,
     extract_code_block_from_response,
 )

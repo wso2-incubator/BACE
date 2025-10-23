@@ -2,7 +2,7 @@
 
 import ast
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from .exceptions import CodeParsingError, CodeTransformationError
 
@@ -262,3 +262,87 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
         final_code_parts.append("    unittest.main(verbosity=2)")
 
     return "\n".join(final_code_parts)
+
+
+def rebuild_unittest_with_new_methods(
+    test_code: str, new_test_methods: List[str]
+) -> str:
+    """
+    Rebuild a unittest class by replacing old test methods with new ones.
+
+    This function preserves the class structure, imports, and non-test methods
+    (like setUp, tearDown, etc.) while replacing all test methods (methods
+    starting with 'test_') with the provided new test methods.
+
+    Args:
+        test_code: String containing the original unittest test class definition
+        new_test_methods: List of code strings for new test methods to insert
+
+    Returns:
+        String containing the rebuilt unittest class with new test methods
+
+    Raises:
+        CodeParsingError: If test code has syntax errors or no class is found
+
+    Example:
+        >>> original = "class TestFoo(unittest.TestCase):\\n    def test_old(self): pass"
+        >>> new_methods = ["def test_new(self):\\n    self.assertTrue(True)"]
+        >>> rebuilt = rebuild_unittest_with_new_methods(original, new_methods)
+        >>> 'test_new' in rebuilt
+        True
+    """
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        log.error(f"Syntax error parsing test code: {e}")
+        raise CodeParsingError(f"Failed to parse test code: {e}") from e
+
+    # Find the first class definition
+    class_node: Optional[ast.ClassDef] = None
+    other_nodes: List[ast.stmt] = []  # To preserve imports and other top-level code
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and class_node is None:
+            class_node = node
+        else:
+            other_nodes.append(node)
+
+    if class_node is None:
+        raise CodeParsingError("No class definition found in test code")
+
+    # Separate test methods from non-test methods
+    non_test_members: List[ast.stmt] = []
+    for member in class_node.body:
+        if isinstance(member, ast.FunctionDef):
+            # Keep setUp, tearDown, and other non-test methods
+            if not member.name.startswith("test_"):
+                non_test_members.append(member)
+        else:
+            # Keep class variables, docstrings, etc.
+            non_test_members.append(member)
+
+    # Parse the new test methods and add them to the class
+    new_method_nodes: List[ast.stmt] = []
+    for method_code in new_test_methods:
+        try:
+            # Parse the method code
+            method_tree = ast.parse(method_code)
+            # Extract the function definition
+            for node in method_tree.body:
+                if isinstance(node, ast.FunctionDef):
+                    new_method_nodes.append(node)
+                    break
+        except SyntaxError as e:
+            log.warning(f"Skipping invalid test method code: {e}")
+            continue
+
+    # Rebuild the class body with non-test members first, then new test methods
+    class_node.body = non_test_members + new_method_nodes
+
+    # Rebuild the module with preserved imports and the modified class
+    tree.body = other_nodes + [class_node]
+
+    # Unparse the modified AST back to code
+    rebuilt_code = ast.unparse(tree)
+
+    return rebuilt_code

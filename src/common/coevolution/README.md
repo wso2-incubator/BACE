@@ -8,11 +8,24 @@ This module implements Bayesian coevolution algorithms with various selection st
 coevolution/
 ├── __init__.py          # Main module interface
 ├── bayesian.py          # Bayesian belief updating logic
+├── evaluation.py        # Observation matrix generation
+├── operators.py         # LLM-based genetic operators
+├── population.py        # Population management
 ├── selection.py         # Selection strategies for evolutionary algorithms
-└── README.md           # This file
+├── config.py            # Configuration parameters
+├── README.md           # This file
+└── EVALUATION_USAGE.md # Detailed usage guide for evaluation module
 ```
 
 ## Modules
+
+### `evaluation.py` (NEW!)
+
+Provides functions to generate observation matrices by executing code populations against test populations in a safe sandbox environment.
+
+**Key Functions:**
+
+- `generate_observation_matrix()`: Execute code vs tests, treating each test block as one unit
 
 ### `bayesian.py`
 

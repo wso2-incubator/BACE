@@ -5,30 +5,30 @@ This module provides various selection methods used in evolutionary algorithms,
 including tournament selection, roulette wheel selection, rank selection,
 random selection, and elitism.
 
-Uses the Population class for cleaner API.
+Uses the BasePopulation class for cleaner API.
 """
 
 from typing import Callable, List, Optional
 
 import numpy as np
 
-from .population import Population
+from .population import BasePopulation
 
 
 class SelectionStrategy:
     """
     A class that encapsulates various selection strategies for evolutionary algorithms.
 
-    All methods now work with Population objects instead of separate arrays.
+    All methods work with BaseBasePopulation objects (CodePopulation or TestPopulation).
     """
 
     @staticmethod
-    def binary_tournament(population: Population) -> tuple[str, float]:
+    def binary_tournament(population: BasePopulation) -> tuple[str, float]:
         """
         Performs binary tournament selection on a population based on probabilities.
 
         Args:
-            population: Population object containing individuals and their probabilities
+            population: BaseBasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -43,12 +43,12 @@ class SelectionStrategy:
             return population[idx2]
 
     @staticmethod
-    def elitism(population: Population, num_elites: int) -> List[tuple[str, float]]:
+    def elitism(population: BasePopulation, num_elites: int) -> List[tuple[str, float]]:
         """
         Selects the top individuals from the population based on probabilities.
 
         Args:
-            population: Population object containing individuals and their probabilities
+            population: BaseBasePopulation object containing individuals and their probabilities
             num_elites: Number of top individuals to select
 
         Returns:
@@ -57,12 +57,12 @@ class SelectionStrategy:
         return population.get_top_k_individuals(num_elites)
 
     @staticmethod
-    def roulette_wheel(population: Population) -> tuple[str, float]:
+    def roulette_wheel(population: BasePopulation) -> tuple[str, float]:
         """
         Performs roulette wheel selection on a population based on probabilities.
 
         Args:
-            population: Population object containing individuals and their probabilities
+            population: BaseBasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -86,7 +86,7 @@ class SelectionStrategy:
         return population[len(population) - 1]
 
     @staticmethod
-    def rank_selection(population: Population) -> tuple[str, float]:
+    def rank_selection(population: BasePopulation) -> tuple[str, float]:
         """
         Performs rank-based selection on a population.
 
@@ -95,7 +95,7 @@ class SelectionStrategy:
         range or when there are outliers.
 
         Args:
-            population: Population object containing individuals and their probabilities
+            population: BaseBasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -122,7 +122,7 @@ class SelectionStrategy:
         return population[len(population) - 1]
 
     @staticmethod
-    def random_selection(population: Population) -> tuple[str, float]:
+    def random_selection(population: BasePopulation) -> tuple[str, float]:
         """
         Performs uniform random selection from the population.
 
@@ -130,7 +130,7 @@ class SelectionStrategy:
         This can be useful for maintaining diversity or as a baseline comparison.
 
         Args:
-            population: Population object containing individuals and their probabilities
+            population: BaseBasePopulation object containing individuals and their probabilities
 
         Returns:
             Tuple of (selected_individual, selected_probability)
@@ -156,9 +156,9 @@ class SelectionStrategy:
     @classmethod
     def _get_selection_function(
         cls, method: str
-    ) -> Optional[Callable[[Population], tuple[str, float]]]:
+    ) -> Optional[Callable[[BasePopulation], tuple[str, float]]]:
         """Internal method to get selection function by name."""
-        methods: dict[str, Callable[[Population], tuple[str, float]]] = {
+        methods: dict[str, Callable[[BasePopulation], tuple[str, float]]] = {
             "binary_tournament": cls.binary_tournament,
             "roulette_wheel": cls.roulette_wheel,
             "rank_selection": cls.rank_selection,
@@ -169,14 +169,14 @@ class SelectionStrategy:
     @classmethod
     def select_parents(
         cls,
-        population: Population,
+        population: BasePopulation,
         method: str = "binary_tournament",
     ) -> tuple[tuple[str, float], tuple[str, float]]:
         """
         Selects two different parents from the population using the specified selection method.
 
         Args:
-            population: Population object to select from
+            population: BaseBasePopulation object to select from
             method: Selection method to use. Available methods can be retrieved using
                    get_available_methods(). Default is "binary_tournament".
 
