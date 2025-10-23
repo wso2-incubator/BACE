@@ -13,51 +13,7 @@ from typing import Tuple
 
 import numpy as np
 
-
-class CoevolutionConfig:
-    """Configuration parameters for coevolutionary algorithm with Bayesian updates."""
-
-    def __init__(
-        self,
-        initial_code_population_size: int = 10,
-        initial_test_population_size: int = 20,
-        c0_prior: float = 0.5,  # Prior probability of code being correct
-        t0_prior: float = 0.5,  # Prior probability of test being correct
-        alpha: float = 0.1,  # P(pass | code correct, test incorrect)
-        beta: float = 0.2,  # P(pass | code incorrect, test correct)
-        gamma: float = 0.5,  # P(pass | code incorrect, test incorrect)
-    ):
-        """
-        Initialize coevolution configuration.
-
-        Args:
-            initial_code_population_size: Size of initial code population
-            initial_test_population_size: Size of initial test population
-            c0_prior: Prior probability that a code is correct
-            t0_prior: Prior probability that a test is correct
-            alpha: Hyperparameter for a correct code passing an incorrect test.
-            beta: Hyperparameter for an incorrect code passing a correct test.
-            gamma: Hyperparameter for an incorrect code passing an incorrect test.
-        """
-        if not (0 < c0_prior < 1):
-            raise ValueError("c0_prior must be between 0 and 1")
-        if not (0 < t0_prior < 1):
-            raise ValueError("t0_prior must be between 0 and 1")
-        if not (0 <= alpha <= 1):
-            raise ValueError("alpha must be between 0 and 1")
-        if not (0 <= beta <= 1):
-            raise ValueError("beta must be between 0 and 1")
-        if not (0 <= gamma <= 1):
-            raise ValueError("gamma must be between 0 and 1")
-
-        self.initial_code_population_size = initial_code_population_size
-        self.initial_test_population_size = initial_test_population_size
-        self.c0_prior = c0_prior
-        self.t0_prior = t0_prior
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-
+from .config import CoevolutionConfig
 
 # --- Internal Helper Functions for Log-Odds Conversion ---
 
@@ -101,23 +57,29 @@ def _calculate_woe_for_code_update(
 ) -> np.ndarray:
     """
     Calculates the Weight of Evidence (WoE) matrix for updating code beliefs.
+    Corresponds to Equations 16 and 17 in the documentation.
 
     Args:
-        test_probs: Current correctness probabilities for the test population.
-        config: The coevolution configuration object.
+        test_probs: Current correctness probabilities P(T_j) for the test population.
+        config: The coevolution configuration object containing alpha, beta, gamma.
 
     Returns:
         A WoE matrix (num_tests x 2) for updating code beliefs.
-        (slice [:,0] for fails, [:,1] for passes)
+        The last dimension contains [WoE for observation 0 (Fail), WoE for observation 1 (Pass)].
     """
     epsilon = 1e-9
-    t_p = test_probs[np.newaxis, :]
+    t_p = test_probs[np.newaxis, :]  # Shape (1, num_tests)
 
+    # Likelihood P(D=1 | C_i=1) and P(D=1 | C_i=0)
     like_pass_c_correct = t_p + config.alpha * (1 - t_p)
     like_pass_c_incorrect = config.beta * t_p + config.gamma * (1 - t_p)
+
+    # Likelihood P(D=0 | C_i=1) and P(D=0 | C_i=0)
     like_fail_c_correct = (1 - config.alpha) * (1 - t_p)
     like_fail_c_incorrect = (1 - config.beta) * t_p + (1 - config.gamma) * (1 - t_p)
 
+    # WoE = log( Likelihood(Correct) / Likelihood(Incorrect) )
+    # Adding epsilon inside log to prevent log(0) if likelihoods become zero
     woe_code_pass = np.log(
         (like_pass_c_correct + epsilon) / (like_pass_c_incorrect + epsilon)
     )
@@ -125,7 +87,8 @@ def _calculate_woe_for_code_update(
         (like_fail_c_correct + epsilon) / (like_fail_c_incorrect + epsilon)
     )
 
-    # Transpose to get shape (num_tests, 2)
+    # Stack fail WoE (index 0) and pass WoE (index 1) along the last axis
+    # Squeeze removes the first dimension of size 1, resulting in (num_tests, 2)
     return np.stack([woe_code_fail.squeeze(), woe_code_pass.squeeze()], axis=-1)
 
 
@@ -134,23 +97,28 @@ def _calculate_woe_for_test_update(
 ) -> np.ndarray:
     """
     Calculates the Weight of Evidence (WoE) matrix for updating test beliefs.
+    Corresponds to Equations 18 and 19 in the documentation.
 
     Args:
-        code_probs: Current correctness probabilities for the code population.
-        config: The coevolution configuration object.
+        code_probs: Current correctness probabilities P(C_i) for the code population.
+        config: The coevolution configuration object containing alpha, beta, gamma.
 
     Returns:
         A WoE matrix (num_codes x 2) for updating test beliefs.
-        (slice [:,0] for fails, [:,1] for passes)
+        The last dimension contains [WoE for observation 0 (Fail), WoE for observation 1 (Pass)].
     """
     epsilon = 1e-9
-    c_p = code_probs[:, np.newaxis]
+    c_p = code_probs[:, np.newaxis]  # Shape (num_codes, 1)
 
+    # Likelihood P(D=1 | T_j=1) and P(D=1 | T_j=0)
     like_pass_t_correct = c_p + config.beta * (1 - c_p)
     like_pass_t_incorrect = config.alpha * c_p + config.gamma * (1 - c_p)
+
+    # Likelihood P(D=0 | T_j=1) and P(D=0 | T_j=0)
     like_fail_t_correct = (1 - config.beta) * (1 - c_p)
     like_fail_t_incorrect = (1 - config.alpha) * c_p + (1 - config.gamma) * (1 - c_p)
 
+    # WoE = log( Likelihood(Correct) / Likelihood(Incorrect) )
     woe_test_pass = np.log(
         (like_pass_t_correct + epsilon) / (like_pass_t_incorrect + epsilon)
     )
@@ -158,6 +126,8 @@ def _calculate_woe_for_test_update(
         (like_fail_t_correct + epsilon) / (like_fail_t_incorrect + epsilon)
     )
 
+    # Stack fail WoE (index 0) and pass WoE (index 1) along the last axis
+    # Squeeze removes the second dimension of size 1, resulting in (num_codes, 2)
     return np.stack([woe_test_fail.squeeze(), woe_test_pass.squeeze()], axis=-1)
 
 
@@ -165,53 +135,80 @@ def _update_code_beliefs(
     code_log_odds: np.ndarray,
     observation_matrix: np.ndarray,
     woe_for_code_update: np.ndarray,
+    config: CoevolutionConfig,  # Pass config for learning rate
 ) -> np.ndarray:
-    """Update beliefs about code correctness using the pre-calculated WoE matrix."""
-    # woe_for_code_update has shape (num_tests, 2)
-    # observation_matrix has shape (num_codes, num_tests)
-    # We want to select the woe for each test based on the observation for each code
-    # The result should be a (num_codes, num_tests) matrix of relevant woes
-    relevant_woes = woe_for_code_update[
-        np.arange(observation_matrix.shape[1]), observation_matrix
-    ]
+    """
+    Update beliefs about code correctness using the pre-calculated WoE matrix,
+    scaled by the learning rate. Implements Equation 14 adjusted for learning rate.
+
+    Args:
+        code_log_odds: The prior log-odds for each code candidate.
+        observation_matrix: The (num_codes x num_tests) matrix of results (0 or 1).
+        woe_for_code_update: The (num_tests x 2) WoE matrix for updating codes.
+        config: The coevolution configuration object.
+
+    Returns:
+        The posterior log-odds for each code candidate.
+    """
+    indices = observation_matrix[..., np.newaxis]
+    woe_matrix_expanded = woe_for_code_update[np.newaxis, :, :]
+    relevant_woes = np.take_along_axis(woe_matrix_expanded, indices, axis=2).squeeze(-1)
 
     total_woe_per_code = np.sum(relevant_woes, axis=1)
-    posterior_log_odds = code_log_odds + total_woe_per_code
-    return np.asarray(posterior_log_odds)
+
+    # Apply the Bayesian update, scaled by learning rate
+    posterior_log_odds = code_log_odds + config.learning_rate * total_woe_per_code
+    return np.asarray(posterior_log_odds, dtype=float)
 
 
 def _update_test_beliefs(
     test_log_odds: np.ndarray,
     observation_matrix: np.ndarray,
     woe_for_test_update: np.ndarray,
+    config: CoevolutionConfig,  # Pass config for learning rate
 ) -> np.ndarray:
-    """Update beliefs about test correctness using the pre-calculated WoE matrix."""
-    # woe_for_test_update has shape (num_codes, 2)
-    # observation_matrix has shape (num_codes, num_tests)
-    # We want to select the woe for each code based on the observation for each test
-    relevant_woes = woe_for_test_update[
-        np.arange(observation_matrix.shape[0]), observation_matrix.T
-    ].T
+    """
+    Update beliefs about test correctness using the pre-calculated WoE matrix,
+    scaled by the learning rate. Implements Equation 15 adjusted for learning rate.
+
+    Args:
+        test_log_odds: The prior log-odds for each test case.
+        observation_matrix: The (num_codes x num_tests) matrix of results (0 or 1).
+        woe_for_test_update: The (num_codes x 2) WoE matrix for updating tests.
+        config: The coevolution configuration object.
+
+    Returns:
+        The posterior log-odds for each test case.
+    """
+    indices = observation_matrix[..., np.newaxis]
+    woe_matrix_expanded = woe_for_test_update[:, np.newaxis, :]
+    relevant_woes = np.take_along_axis(woe_matrix_expanded, indices, axis=2).squeeze(-1)
 
     total_woe_per_test = np.sum(relevant_woes, axis=0)
-    posterior_log_odds = test_log_odds + total_woe_per_test
-    return np.asarray(posterior_log_odds)
+
+    # Apply the Bayesian update, scaled by learning rate
+    posterior_log_odds = test_log_odds + config.learning_rate * total_woe_per_test
+    return np.asarray(posterior_log_odds, dtype=float)
 
 
 # --- Public-Facing API Functions ---
 
 
-def initialize_populations(
+def initialize_prior_beliefs(
     config: CoevolutionConfig,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Initialize code and test populations with prior beliefs.
+    Initialize prior belief probabilities for code and test populations.
+
+    Creates arrays of prior correctness probabilities for each member of the
+    code and test populations based on the configured population sizes and prior values.
 
     Args:
-        config: Configuration object with population sizes and priors.
+        config: Configuration object with population sizes and prior probability values.
 
     Returns:
-        A tuple of (code_probabilities, test_probabilities).
+        A tuple of (code_probabilities, test_probabilities), where each array contains
+        the prior correctness probability for each population member.
     """
     code_probs = np.full(config.initial_code_population_size, config.c0_prior)
     test_probs = np.full(config.initial_test_population_size, config.t0_prior)
@@ -264,7 +261,7 @@ def update_population_beliefs(
 
     # 3. Update beliefs in log-odds space for code only
     posterior_code_log_odds = _update_code_beliefs(
-        prior_code_log_odds, observation_matrix, woe_for_code
+        prior_code_log_odds, observation_matrix, woe_for_code, config
     )
 
     # 4. Pre-calculate WoE for test update based on updated code probabilities
@@ -276,7 +273,7 @@ def update_population_beliefs(
 
     # 5. Update beliefs in log-odds space for tests
     posterior_test_log_odds = _update_test_beliefs(
-        prior_test_log_odds, observation_matrix, woe_for_test
+        prior_test_log_odds, observation_matrix, woe_for_test, config
     )
 
     # 6. Convert posterior log-odds back to probabilities for the output
