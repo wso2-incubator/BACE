@@ -15,6 +15,12 @@ import numpy as np
 
 from .config import CoevolutionConfig
 
+# --- Constants ---
+
+# Small value added to probabilities and likelihoods to prevent numerical instabilities
+# from log(0) or division by zero in log-odds and WoE calculations
+_NUMERICAL_STABILITY_EPSILON = 1e-9
+
 # --- Internal Helper Functions for Log-Odds Conversion ---
 
 
@@ -30,8 +36,9 @@ def _probabilities_to_log_odds_array(probabilities: np.ndarray) -> np.ndarray:
         Array of log-odds values
     """
     # Clip probabilities to avoid infinity in log-odds during calculations
-    epsilon = 1e-9
-    clipped_probs = np.clip(probabilities, epsilon, 1 - epsilon)
+    clipped_probs = np.clip(
+        probabilities, _NUMERICAL_STABILITY_EPSILON, 1 - _NUMERICAL_STABILITY_EPSILON
+    )
     return np.asarray(np.log(clipped_probs / (1 - clipped_probs)))
 
 
@@ -67,7 +74,6 @@ def _calculate_woe_for_code_update(
         A WoE matrix (num_tests x 2) for updating code beliefs.
         The last dimension contains [WoE for observation 0 (Fail), WoE for observation 1 (Pass)].
     """
-    epsilon = 1e-9
     t_p = test_probs[np.newaxis, :]  # Shape (1, num_tests)
 
     # Likelihood P(D=1 | C_i=1) and P(D=1 | C_i=0)
@@ -81,10 +87,12 @@ def _calculate_woe_for_code_update(
     # WoE = log( Likelihood(Correct) / Likelihood(Incorrect) )
     # Adding epsilon inside log to prevent log(0) if likelihoods become zero
     woe_code_pass = np.log(
-        (like_pass_c_correct + epsilon) / (like_pass_c_incorrect + epsilon)
+        (like_pass_c_correct + _NUMERICAL_STABILITY_EPSILON)
+        / (like_pass_c_incorrect + _NUMERICAL_STABILITY_EPSILON)
     )
     woe_code_fail = np.log(
-        (like_fail_c_correct + epsilon) / (like_fail_c_incorrect + epsilon)
+        (like_fail_c_correct + _NUMERICAL_STABILITY_EPSILON)
+        / (like_fail_c_incorrect + _NUMERICAL_STABILITY_EPSILON)
     )
 
     # Stack fail WoE (index 0) and pass WoE (index 1) along the last axis
@@ -107,7 +115,6 @@ def _calculate_woe_for_test_update(
         A WoE matrix (num_codes x 2) for updating test beliefs.
         The last dimension contains [WoE for observation 0 (Fail), WoE for observation 1 (Pass)].
     """
-    epsilon = 1e-9
     c_p = code_probs[:, np.newaxis]  # Shape (num_codes, 1)
 
     # Likelihood P(D=1 | T_j=1) and P(D=1 | T_j=0)
@@ -120,10 +127,12 @@ def _calculate_woe_for_test_update(
 
     # WoE = log( Likelihood(Correct) / Likelihood(Incorrect) )
     woe_test_pass = np.log(
-        (like_pass_t_correct + epsilon) / (like_pass_t_incorrect + epsilon)
+        (like_pass_t_correct + _NUMERICAL_STABILITY_EPSILON)
+        / (like_pass_t_incorrect + _NUMERICAL_STABILITY_EPSILON)
     )
     woe_test_fail = np.log(
-        (like_fail_t_correct + epsilon) / (like_fail_t_incorrect + epsilon)
+        (like_fail_t_correct + _NUMERICAL_STABILITY_EPSILON)
+        / (like_fail_t_incorrect + _NUMERICAL_STABILITY_EPSILON)
     )
 
     # Stack fail WoE (index 0) and pass WoE (index 1) along the last axis
@@ -213,22 +222,6 @@ def initialize_prior_beliefs(
     code_probs = np.full(config.initial_code_population_size, config.initial_code_prior)
     test_probs = np.full(config.initial_test_population_size, config.initial_test_prior)
     return code_probs, test_probs
-
-
-def run_evaluation(code_population_size: int, test_population_size: int) -> np.ndarray:
-    """
-    Simulates running all tests against all codes and returns the observation matrix.
-
-    In a real scenario, this function would be replaced by the actual evaluation engine.
-
-    Args:
-        code_population_size: The number of code candidates.
-        test_population_size: The number of test cases.
-
-    Returns:
-        A (code_population_size x test_population_size) matrix of observations (1 for pass, 0 for fail).
-    """
-    return np.random.randint(0, 2, size=(code_population_size, test_population_size))
 
 
 def update_population_beliefs(
