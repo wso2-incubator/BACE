@@ -234,7 +234,6 @@ def update_population_beliefs(
     prior_test_probs: np.ndarray,
     observation_matrix: np.ndarray,
     config: CoevolutionConfig,
-    use_intermediate_updates: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Performs a full generation update for both code and test populations.
@@ -263,7 +262,7 @@ def update_population_beliefs(
     )
 
     # 4. Pre-calculate WoE for test update based on updated code probabilities
-    if use_intermediate_updates:
+    if config.use_intermediate_updates:
         updated_code_probs = _log_odds_array_to_probabilities(posterior_code_log_odds)
         woe_for_test = _calculate_woe_for_test_update(updated_code_probs, config)
     else:
