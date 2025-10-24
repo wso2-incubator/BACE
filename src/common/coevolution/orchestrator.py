@@ -211,11 +211,15 @@ class CoevolutionOrchestrator:
 
         return test_population
 
-    def _generate_code_offspring(self) -> List[Tuple[str, float]]:
+    def _generate_code_offspring(self, elite_count: int) -> List[Tuple[str, float]]:
         """
         Generate offspring for the code population using genetic operators.
 
         Delegates to ReproductionStrategy for the actual offspring generation.
+        Adjusts offspring count to ensure it fits within remaining population space.
+
+        Args:
+            elite_count: Number of elite individuals being preserved
 
         Returns:
             List of (offspring_code, probability) tuples
@@ -223,32 +227,46 @@ class CoevolutionOrchestrator:
         assert self.code_population is not None, "Code population must be initialized"
         assert self.test_population is not None, "Test population must be initialized"
 
+        # Calculate remaining space after elites
+        remaining_space = self.config.max_code_population_size - elite_count
+        # Adjust offspring count to fit remaining space (Option 3: offspring fills remainder)
+        actual_offspring_count = min(self.config.code_offspring_count, remaining_space)
+
         return self.code_reproduction.generate_offspring(
             population=self.code_population,
             other_population=self.test_population,
             execution_results=self.last_execution_results,
             feedback_generator=generate_feedback_for_code,
-            offspring_size=self.config.code_offspring_size,
+            offspring_size=actual_offspring_count,
             crossover_rate=self.config.code_crossover_rate,
             mutation_rate=self.config.code_mutation_rate,
             edit_rate=self.config.code_edit_rate,
             population_type="code",
         )
 
-    def _generate_test_offspring(self) -> List[Tuple[str, float]]:
+    def _generate_test_offspring(self, elite_count: int) -> List[Tuple[str, float]]:
         """
         Generate offspring for the test population using genetic operators.
 
         Delegates to ReproductionStrategy for the actual offspring generation.
+        Adjusts offspring count to ensure it fits within remaining population space.
 
         Note: Edit operation for tests is not yet implemented. The feedback_generator
         is a placeholder that will be replaced when test feedback generation is ready.
+
+        Args:
+            elite_count: Number of elite individuals being preserved
 
         Returns:
             List of (offspring_test, probability) tuples
         """
         assert self.test_population is not None, "Test population must be initialized"
         assert self.code_population is not None, "Code population must be initialized"
+
+        # Calculate remaining space after elites
+        remaining_space = self.config.max_test_population_size - elite_count
+        # Adjust offspring count to fit remaining space (Option 3: offspring fills remainder)
+        actual_offspring_count = min(self.config.test_offspring_count, remaining_space)
 
         # Placeholder feedback generator for tests (to be implemented)
         def _placeholder_test_feedback(
@@ -263,7 +281,7 @@ class CoevolutionOrchestrator:
             other_population=self.code_population,
             execution_results=self.last_execution_results,
             feedback_generator=_placeholder_test_feedback,
-            offspring_size=self.config.test_offspring_size,
+            offspring_size=actual_offspring_count,
             crossover_rate=self.config.test_crossover_rate,
             mutation_rate=self.config.test_mutation_rate,
             edit_rate=self.config.test_edit_rate,
@@ -294,14 +312,14 @@ class CoevolutionOrchestrator:
             f"{len(offspring)} offspring = {len(combined)} total"
         )
 
-        # If combined size exceeds target, select best individuals
-        if len(combined) > self.config.initial_code_population_size:
+        # If combined size exceeds max, select best individuals
+        if len(combined) > self.config.max_code_population_size:
             logger.debug(
-                f"Selecting best {self.config.initial_code_population_size} from {len(combined)}"
+                f"Selecting best {self.config.max_code_population_size} from {len(combined)}"
             )
             # Sort by probability (descending) and take top N
             combined_sorted = sorted(combined, key=lambda x: x[1], reverse=True)
-            combined = combined_sorted[: self.config.initial_code_population_size]
+            combined = combined_sorted[: self.config.max_code_population_size]
 
         # Unpack into separate lists
         new_individuals = [ind for ind, _ in combined]
@@ -340,14 +358,14 @@ class CoevolutionOrchestrator:
             f"{len(offspring)} offspring = {len(combined)} total"
         )
 
-        # If combined size exceeds target, select best individuals
-        if len(combined) > self.config.initial_test_population_size:
+        # If combined size exceeds max, select best individuals
+        if len(combined) > self.config.max_test_population_size:
             logger.debug(
-                f"Selecting best {self.config.initial_test_population_size} from {len(combined)}"
+                f"Selecting best {self.config.max_test_population_size} from {len(combined)}"
             )
             # Sort by probability (descending) and take top N
             combined_sorted = sorted(combined, key=lambda x: x[1], reverse=True)
-            combined = combined_sorted[: self.config.initial_test_population_size]
+            combined = combined_sorted[: self.config.max_test_population_size]
 
         # Unpack into separate lists
         new_individuals = [ind for ind, _ in combined]
@@ -473,11 +491,19 @@ class CoevolutionOrchestrator:
             logger.info("STEP 5: Selecting elite individuals")
             logger.info("-" * 80)
 
+            # Calculate elite count dynamically from current population size
+            code_elite_count = max(
+                1, int(self.code_population.size * self.config.code_elite_proportion)
+            )
+            test_elite_count = max(
+                1, int(self.test_population.size * self.config.test_elite_proportion)
+            )
+
             code_elite_indices = self.selector.elitism(
-                self.code_population.probabilities, self.config.code_elitism_count
+                self.code_population.probabilities, code_elite_count
             )
             test_elite_indices = self.selector.elitism(
-                self.test_population.probabilities, self.config.test_elitism_count
+                self.test_population.probabilities, test_elite_count
             )
 
             # Convert indices to (individual, probability) tuples
@@ -505,8 +531,8 @@ class CoevolutionOrchestrator:
             logger.info("STEP 6: Generating offspring")
             logger.info("-" * 80)
 
-            code_offspring = self._generate_code_offspring()
-            test_offspring = self._generate_test_offspring()
+            code_offspring = self._generate_code_offspring(elite_count=code_elite_count)
+            test_offspring = self._generate_test_offspring(elite_count=test_elite_count)
 
             # Step 7: Create next generation
             logger.info("-" * 80)
