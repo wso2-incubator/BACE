@@ -5,138 +5,56 @@ This module provides various selection methods used in evolutionary algorithms,
 including tournament selection, roulette wheel selection, rank selection,
 random selection, and elitism.
 
-Uses the BasePopulation class for cleaner API.
+Works directly with probability arrays and returns indices for single source of truth.
 """
 
-from typing import Callable, List, Optional
-
 import numpy as np
-
-from .population import BasePopulation
+from loguru import logger
 
 
 class SelectionStrategy:
     """
     A class that encapsulates various selection strategies for evolutionary algorithms.
 
-    All methods work with BasePopulation objects (CodePopulation or TestPopulation).
+    All methods work directly with probability arrays and return indices, maintaining
+    a single source of truth - the population objects themselves hold the individuals.
+
+    Design Notes:
+    - Individual selection algorithms (binary_tournament, roulette_wheel, etc.) are
+      @staticmethod because they don't depend on instance state - they're pure functions
+      that operate on probability arrays.
+    - The configured method is stored in instance state (self.method) for consistent
+      selection throughout the evolutionary process.
+    - Returns indices instead of individuals, allowing callers to retrieve individuals
+      from their own population objects (single source of truth).
+    - This design separates algorithm implementation (static) from configuration (instance),
+      making it easy to add new selection methods and test them independently.
+
+    Args:
+        method: The selection method to use. Available: "binary_tournament",
+                "roulette_wheel", "rank_selection", "random_selection"
+
+    Raises:
+        ValueError: If an invalid selection method is specified
     """
 
-    @staticmethod
-    def binary_tournament(population: BasePopulation) -> tuple[str, float]:
+    def __init__(self, method: str = "binary_tournament"):
         """
-        Performs binary tournament selection on a population based on probabilities.
+        Initialize the selection strategy with a specific method.
 
         Args:
-            population: BasePopulation object containing individuals and their probabilities
+            method: Selection method to use for all selections
 
-        Returns:
-            Tuple of (selected_individual, selected_probability)
+        Raises:
+            ValueError: If the method is not valid
         """
-        idx1, idx2 = np.random.choice(len(population), size=2, replace=False)
-        prob1 = population.probabilities[idx1]
-        prob2 = population.probabilities[idx2]
-
-        if prob1 > prob2:
-            return population[idx1]
-        else:
-            return population[idx2]
-
-    @staticmethod
-    def elitism(population: BasePopulation, num_elites: int) -> List[tuple[str, float]]:
-        """
-        Selects the top individuals from the population based on probabilities.
-
-        Args:
-            population: BasePopulation object containing individuals and their probabilities
-            num_elites: Number of top individuals to select
-
-        Returns:
-            List of (individual, probability) tuples for elite individuals
-        """
-        return population.get_top_k_individuals(num_elites)
-
-    @staticmethod
-    def roulette_wheel(population: BasePopulation) -> tuple[str, float]:
-        """
-        Performs roulette wheel selection on a population based on probabilities.
-
-        Args:
-            population: BasePopulation object containing individuals and their probabilities
-
-        Returns:
-            Tuple of (selected_individual, selected_probability)
-        """
-        probabilities = population.probabilities
-        total_prob = np.sum(probabilities)
-
-        if total_prob == 0:
-            # Handle edge case where all probabilities are zero
-            idx = np.random.choice(len(population))
-            return population[idx]
-
-        pick = np.random.rand() * total_prob
-        current = 0
-        for i in range(len(population)):
-            current += probabilities[i]
-            if current > pick:
-                return population[i]
-
-        # Fallback in case of numerical errors
-        return population[len(population) - 1]
-
-    @staticmethod
-    def rank_selection(population: BasePopulation) -> tuple[str, float]:
-        """
-        Performs rank-based selection on a population.
-
-        Individuals are selected based on their rank (position after sorting by probability)
-        rather than their raw probability values. This helps when probability values have a large
-        range or when there are outliers.
-
-        Args:
-            population: BasePopulation object containing individuals and their probabilities
-
-        Returns:
-            Tuple of (selected_individual, selected_probability)
-        """
-        probabilities = population.probabilities
-        # Get ranks (1 to n, where n is population size)
-        # Lower probability gets lower rank, higher probability gets higher rank
-        ranks = np.argsort(np.argsort(probabilities)) + 1
-
-        # Use ranks as selection probabilities
-        total_rank = np.sum(ranks)
-        if total_rank == 0:
-            idx = np.random.choice(len(population))
-            return population[idx]
-
-        pick = np.random.rand() * total_rank
-        current = 0
-        for i, rank in enumerate(ranks):
-            current += rank
-            if current > pick:
-                return population[i]
-
-        # Fallback in case of numerical errors
-        return population[len(population) - 1]
-
-    @staticmethod
-    def random_selection(population: BasePopulation) -> tuple[str, float]:
-        """
-        Performs uniform random selection from the population.
-
-        Selects an individual uniformly at random, ignoring probability values.
-        This can be useful for maintaining diversity or as a baseline comparison.
-
-        Args:
-            population: BasePopulation object containing individuals and their probabilities
-
-        Returns:
-            Tuple of (selected_individual, selected_probability)
-        """
-        idx = np.random.choice(len(population))
-        return population[idx]
+        if method not in SelectionStrategy.get_available_methods():
+            available = ", ".join(SelectionStrategy.get_available_methods())
+            raise ValueError(
+                f"Invalid selection method: '{method}'. Available methods: {available}"
+            )
+        self.method = method
+        logger.debug(f"Initialized SelectionStrategy with method: {method}")
 
     @classmethod
     def get_available_methods(cls) -> list[str]:
@@ -153,75 +71,220 @@ class SelectionStrategy:
             "random_selection",
         ]
 
-    @classmethod
-    def _get_selection_function(
-        cls, method: str
-    ) -> Optional[Callable[[BasePopulation], tuple[str, float]]]:
-        """Internal method to get selection function by name."""
-        methods: dict[str, Callable[[BasePopulation], tuple[str, float]]] = {
-            "binary_tournament": cls.binary_tournament,
-            "roulette_wheel": cls.roulette_wheel,
-            "rank_selection": cls.rank_selection,
-            "random_selection": cls.random_selection,
-        }
-        return methods.get(method)
-
-    @classmethod
-    def select_parents(
-        cls,
-        population: BasePopulation,
-        method: str = "binary_tournament",
-    ) -> tuple[tuple[str, float], tuple[str, float]]:
+    @staticmethod
+    def binary_tournament(probabilities: np.ndarray) -> int:
         """
-        Selects two different parents from the population using the specified selection method.
+        Performs binary tournament selection based on probabilities.
 
         Args:
-            population: BasePopulation object to select from
-            method: Selection method to use. Available methods can be retrieved using
-                   get_available_methods(). Default is "binary_tournament".
+            probabilities: Array of selection probabilities
 
         Returns:
-            Tuple containing two different selected parents, each as (individual, probability)
+            Index of the selected individual
+        """
+        idx1, idx2 = np.random.choice(len(probabilities), size=2, replace=False)
+        prob1 = probabilities[idx1]
+        prob2 = probabilities[idx2]
+
+        if prob1 > prob2:
+            winner_idx = idx1
+            winner_prob = prob1
+        else:
+            winner_idx = idx2
+            winner_prob = prob2
+
+        logger.trace(
+            f"Binary tournament: idx {idx1} (prob={prob1:.4f}) vs "
+            f"idx {idx2} (prob={prob2:.4f}) → winner idx {winner_idx} (prob={winner_prob:.4f})"
+        )
+
+        return int(winner_idx)
+
+    @staticmethod
+    def elitism(probabilities: np.ndarray, num_elites: int) -> list[int]:
+        """
+        Selects the top individuals based on probabilities.
+
+        Args:
+            probabilities: Array of selection probabilities
+            num_elites: Number of top individuals to select
+
+        Returns:
+            List of indices for elite individuals (sorted by probability, descending)
+        """
+        # Get indices sorted by probability (descending)
+        elite_indices = np.argsort(probabilities)[::-1][:num_elites]
+
+        if len(elite_indices) > 0:
+            elite_probs = probabilities[elite_indices]
+            logger.debug(
+                f"Elitism: selected {len(elite_indices)} elites, "
+                f"prob range=[{np.min(elite_probs):.4f}, {np.max(elite_probs):.4f}], "
+                f"avg={np.mean(elite_probs):.4f}"
+            )
+            logger.trace(f"Elite probabilities: {[f'{p:.4f}' for p in elite_probs]}")
+
+        return [int(idx) for idx in elite_indices]
+
+    @staticmethod
+    def roulette_wheel(probabilities: np.ndarray) -> int:
+        """
+        Performs roulette wheel selection based on probabilities.
+
+        Args:
+            probabilities: Array of selection probabilities
+
+        Returns:
+            Index of the selected individual
+        """
+        total_prob = np.sum(probabilities)
+
+        if total_prob == 0:
+            # Handle edge case where all probabilities are zero
+            logger.warning(
+                "Roulette wheel: all probabilities are zero, using random selection"
+            )
+            idx = np.random.choice(len(probabilities))
+            return int(idx)
+
+        pick = np.random.rand() * total_prob
+        current = 0
+        for i in range(len(probabilities)):
+            current += probabilities[i]
+            if current > pick:
+                selected_prob = probabilities[i]
+                logger.trace(
+                    f"Roulette wheel: pick={pick:.4f}/{total_prob:.4f}, "
+                    f"selected idx {i} (prob={selected_prob:.4f})"
+                )
+                return int(i)
+
+        # Fallback in case of numerical errors
+        logger.trace("Roulette wheel: numerical fallback, selecting last individual")
+        return len(probabilities) - 1
+
+    @staticmethod
+    def rank_selection(probabilities: np.ndarray) -> int:
+        """
+        Performs rank-based selection.
+
+        Individuals are selected based on their rank (position after sorting by probability)
+        rather than their raw probability values. This helps when probability values have a large
+        range or when there are outliers.
+
+        Args:
+            probabilities: Array of selection probabilities
+
+        Returns:
+            Index of the selected individual
+        """
+        # Get ranks (1 to n, where n is population size)
+        # Lower probability gets lower rank, higher probability gets higher rank
+        ranks = np.argsort(np.argsort(probabilities)) + 1
+
+        # Use ranks as selection probabilities
+        total_rank = np.sum(ranks)
+        if total_rank == 0:
+            logger.warning("Rank selection: all ranks are zero, using random selection")
+            idx = np.random.choice(len(probabilities))
+            return int(idx)
+
+        pick = np.random.rand() * total_rank
+        current = 0
+        for i, rank in enumerate(ranks):
+            current += rank
+            if current > pick:
+                selected_prob = probabilities[i]
+                logger.trace(
+                    f"Rank selection: pick={pick:.1f}/{total_rank:.1f}, "
+                    f"selected idx {i} (rank={rank}, prob={selected_prob:.4f})"
+                )
+                return int(i)
+
+        # Fallback in case of numerical errors
+        logger.trace("Rank selection: numerical fallback, selecting last individual")
+        return len(probabilities) - 1
+
+    @staticmethod
+    def random_selection(probabilities: np.ndarray) -> int:
+        """
+        Performs uniform random selection.
+
+        Selects an individual uniformly at random, ignoring probability values.
+        This can be useful for maintaining diversity or as a baseline comparison.
+
+        Args:
+            probabilities: Array of selection probabilities (not used, but kept for API consistency)
+
+        Returns:
+            Index of the selected individual
+        """
+        idx = np.random.choice(len(probabilities))
+        selected_prob = probabilities[idx]
+        logger.trace(f"Random selection: selected idx {idx} (prob={selected_prob:.4f})")
+        return int(idx)
+
+    def select(self, probabilities: np.ndarray) -> int:
+        """
+        Selects a single individual using the configured selection method.
+
+        Args:
+            probabilities: Array of selection probabilities
+
+        Returns:
+            Index of the selected individual
+        """
+        selection_func = getattr(self, self.method)
+        result: int = selection_func(probabilities)
+        return result
+
+    def select_parents(self, probabilities: np.ndarray) -> tuple[int, int]:
+        """
+        Selects two different parents using the configured selection method.
+
+        Args:
+            probabilities: Array of selection probabilities
+
+        Returns:
+            Tuple containing indices of two different selected parents
 
         Raises:
-            ValueError: If an invalid selection method is specified or if population size < 2.
+            ValueError: If population size < 2.
         """
-        if len(population) < 2:
+        logger.trace(f"Selecting two parents using method: {self.method}")
+
+        if len(probabilities) < 2:
             raise ValueError(
                 "Population must have at least 2 individuals to select different parents"
             )
 
-        selection_func = cls._get_selection_function(method)
-        if selection_func is None:
-            available = ", ".join(cls.get_available_methods())
-            raise ValueError(
-                f"Invalid selection method: '{method}'. Available methods: {available}"
-            )
-
-        parent1_individual, parent1_prob = selection_func(population)
+        parent1_idx = self.select(probabilities)
 
         # Keep selecting until we get a different parent
         max_attempts = 100
-        for _ in range(max_attempts):
-            parent2_individual, parent2_prob = selection_func(population)
-            # Check if parents are different (compare by value)
-            if parent1_individual != parent2_individual:
+        attempts = 0
+        for attempts in range(1, max_attempts + 1):
+            parent2_idx = self.select(probabilities)
+            # Check if parents are different indices
+            if parent1_idx != parent2_idx:
+                if attempts > 10:
+                    logger.debug(f"Found different parent after {attempts} attempts")
                 break
         else:
-            # If all attempts failed (unlikely), select a random different individual
-            # Find index of parent1
-            parent1_idx = None
-            for i in range(len(population)):
-                if population.individuals[i] == parent1_individual:
-                    parent1_idx = i
-                    break
+            # If all attempts failed (unlikely), force selection of different individual
+            logger.warning(
+                f"Failed to find different parent after {max_attempts} attempts, "
+                "forcing selection of different individual"
+            )
+            # Select a random index different from parent1
+            available_indices = [
+                i for i in range(len(probabilities)) if i != parent1_idx
+            ]
+            parent2_idx = int(np.random.choice(available_indices))
 
-            if parent1_idx is not None:
-                available_indices = [
-                    i for i in range(len(population)) if i != parent1_idx
-                ]
-                if available_indices:
-                    idx = np.random.choice(available_indices)
-                    parent2_individual, parent2_prob = population[idx]
+        logger.trace(
+            f"Selected parent indices: {parent1_idx} (prob={probabilities[parent1_idx]:.4f}), "
+            f"{parent2_idx} (prob={probabilities[parent2_idx]:.4f})"
+        )
 
-        return (parent1_individual, parent1_prob), (parent2_individual, parent2_prob)
+        return parent1_idx, parent2_idx
