@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+from loguru import logger
+
 
 class TokenLimitExceededError(Exception):
     """Raised when the output token limit is exceeded."""
@@ -38,6 +40,12 @@ class LLMClient(ABC):
         self._max_output_tokens = max_output_tokens or self.DEFAULT_TOKEN_LIMIT
         self._enable_token_limit = enable_token_limit
 
+        logger.debug(
+            f"Initialized LLM client: model={model}, "
+            f"max_tokens={self._max_output_tokens}, "
+            f"limit_enabled={enable_token_limit}"
+        )
+
     @abstractmethod
     def generate(self, prompt: str, **kwargs: Any) -> str:
         """Generate text from the model."""
@@ -70,6 +78,10 @@ class LLMClient(ABC):
 
         # Check if adding these tokens would exceed the limit
         if self._enable_token_limit and new_total > self._max_output_tokens:
+            logger.error(
+                f"Token limit exceeded: adding {tokens} tokens would exceed limit of "
+                f"{self._max_output_tokens} (current: {self._total_output_tokens})"
+            )
             raise TokenLimitExceededError(
                 current_tokens=self._total_output_tokens,
                 limit=self._max_output_tokens,
@@ -78,6 +90,10 @@ class LLMClient(ABC):
             )
 
         self._total_output_tokens = new_total
+
+        logger.trace(
+            f"Added {tokens} tokens, total: {self._total_output_tokens}/{self._max_output_tokens}"
+        )
 
     @property
     def total_output_tokens(self) -> int:
@@ -90,7 +106,9 @@ class LLMClient(ABC):
 
     def reset_token_count(self) -> None:
         """Reset the output token counter to zero."""
+        old_count = self._total_output_tokens
         self._total_output_tokens = 0
+        logger.info(f"Reset token count from {old_count} to 0")
 
     @property
     def max_output_tokens(self) -> int:
@@ -130,15 +148,24 @@ class LLMClient(ABC):
             max_tokens: New maximum token limit. If None, uses the default limit.
             enabled: Whether to enable token limit enforcement.
         """
+        old_limit = self._max_output_tokens
+        old_enabled = self._enable_token_limit
+
         if max_tokens is not None:
             self._max_output_tokens = max_tokens
         else:
             self._max_output_tokens = self.DEFAULT_TOKEN_LIMIT
         self._enable_token_limit = enabled
 
+        logger.info(
+            f"Updated token limit: {old_limit} → {self._max_output_tokens}, "
+            f"enabled: {old_enabled} → {enabled}"
+        )
+
     def disable_token_limit(self) -> None:
         """Disable token limit enforcement while keeping the counter active."""
         self._enable_token_limit = False
+        logger.info("Disabled token limit enforcement")
 
     def enable_token_limit(self, max_tokens: Optional[int] = None) -> None:
         """Enable token limit enforcement.
@@ -149,6 +176,9 @@ class LLMClient(ABC):
         if max_tokens is not None:
             self._max_output_tokens = max_tokens
         self._enable_token_limit = True
+        logger.info(
+            f"Enabled token limit enforcement: max_tokens={self._max_output_tokens}"
+        )
 
 
 # ----------------------------
@@ -170,8 +200,12 @@ class OpenAIChatClient(LLMClient):
         from openai import OpenAI
 
         self.client = OpenAI(**kwargs)
+        logger.debug(f"Initialized OpenAIChatClient with model: {model}")
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
+        logger.debug(f"OpenAIChatClient generating with model: {self.model}")
+        logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -179,9 +213,12 @@ class OpenAIChatClient(LLMClient):
         )
         content = response.choices[0].message.content
         if content is None:
+            logger.error("OpenAI response content is None")
             raise ValueError("OpenAI response content is None")
 
         result = str(content)
+        logger.debug(f"Generated {len(result)} characters")
+        logger.trace(f"Response (first 200 chars): {result[:200]}...")
         self._add_output_tokens(result)
         return result
 
@@ -207,10 +244,20 @@ class OpenAIClient(LLMClient):
 
         self.reasoning_effort = reasoning_effort
         self.client = OpenAI(**kwargs)
+        logger.debug(
+            f"Initialized OpenAIClient with model: {model}, "
+            f"reasoning_effort: {reasoning_effort}"
+        )
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         # Allow overriding reasoning effort for this specific call
         reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
+
+        logger.debug(
+            f"OpenAIClient generating with model: {self.model}, "
+            f"reasoning_effort: {reasoning_effort}"
+        )
+        logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
         response = self.client.responses.create(
             model=self.model,
@@ -222,9 +269,12 @@ class OpenAIClient(LLMClient):
         content = response.output_text if hasattr(response, "output_text") else None
 
         if content is None:
+            logger.error("OpenAI Response API response content is None")
             raise ValueError("OpenAI Codex response content is None")
 
         result = str(content)
+        logger.debug(f"Generated {len(result)} characters")
+        logger.trace(f"Response (first 200 chars): {result[:200]}...")
         self._add_output_tokens(result)
         return result
 
@@ -235,7 +285,9 @@ class OpenAIClient(LLMClient):
             reasoning_effort: The reasoning effort level to use.
                             Common values: 'minimal', 'low', 'medium', 'high'
         """
+        old_effort = self.reasoning_effort
         self.reasoning_effort = reasoning_effort
+        logger.info(f"Updated reasoning effort: {old_effort} → {reasoning_effort}")
 
     def get_reasoning_effort(self) -> str:
         """Get the current reasoning effort level.
@@ -261,8 +313,12 @@ class OllamaClient(LLMClient):
         import ollama
 
         self.ollama = ollama
+        logger.debug(f"Initialized OllamaClient with model: {model}")
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
+        logger.debug(f"OllamaClient generating with model: {self.model}")
+        logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
+
         response = self.ollama.chat(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -270,8 +326,11 @@ class OllamaClient(LLMClient):
         )
         content = response["message"]["content"]
         if not isinstance(content, str):
+            logger.error(f"Expected string content, got {type(content)}")
             raise ValueError(f"Expected string content, got {type(content)}")
 
+        logger.debug(f"Generated {len(content)} characters")
+        logger.trace(f"Response (first 200 chars): {content[:200]}...")
         self._add_output_tokens(content)
         return content
 
@@ -309,6 +368,8 @@ def create_llm_client(
     """
     provider = provider.lower()
 
+    logger.info(f"Creating LLM client: provider={provider}, model={model}")
+
     # Extract special parameters from kwargs to pass to constructors
     client_kwargs = {
         k: v
@@ -336,6 +397,8 @@ def create_llm_client(
         limit_enabled = False if enable_token_limit is None else enable_token_limit
         client = OllamaClient(model, max_output_tokens, limit_enabled, **client_kwargs)
     else:
+        logger.error(f"Unsupported provider: {provider}")
         raise ValueError(f"Unsupported provider: {provider}")
 
+    logger.info(f"Successfully created {client.__class__.__name__}")
     return client

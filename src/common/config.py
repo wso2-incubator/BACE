@@ -8,7 +8,7 @@ It standardizes common configuration patterns across different experiment types.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 
 @dataclass

@@ -118,10 +118,9 @@ class CoevolutionConfig:
             raise ValueError("code_mutation_rate must be between 0 and 1")
         if not (0 <= code_edit_rate <= 1):
             raise ValueError("code_edit_rate must be between 0 and 1")
-        if code_crossover_rate + code_mutation_rate + code_edit_rate > 1.0:
+        if code_crossover_rate + code_edit_rate > 1.0:
             raise ValueError(
-                "Sum of code_crossover_rate, code_mutation_rate, and code_edit_rate "
-                "must not exceed 1.0"
+                "Sum of code_crossover_rate and code_edit_rate must not exceed 1.0"
             )
         if code_elitism_count < 0:
             raise ValueError("code_elitism_count must be non-negative")
@@ -137,10 +136,9 @@ class CoevolutionConfig:
             raise ValueError("test_mutation_rate must be between 0 and 1")
         if not (0 <= test_edit_rate <= 1):
             raise ValueError("test_edit_rate must be between 0 and 1")
-        if test_crossover_rate + test_mutation_rate + test_edit_rate > 1.0:
+        if test_crossover_rate + test_edit_rate > 1.0:
             raise ValueError(
-                "Sum of test_crossover_rate, test_mutation_rate, and test_edit_rate "
-                "must not exceed 1.0"
+                "Sum of test_crossover_rate and test_edit_rate must not exceed 1.0"
             )
         if test_elitism_count < 0:
             raise ValueError("test_elitism_count must be non-negative")

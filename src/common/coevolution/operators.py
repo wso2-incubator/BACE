@@ -675,11 +675,11 @@ And this code solution:
 ```
 
 Generate a modified version of the code that:
-1. Maintains the same functionality and passes the same tests
+1. Maintains the same functionality
 2. Explores a different algorithmic approach or implementation style
 3. Could potentially be more efficient or clearer
 
-Only return the modified code, no explanations or markdown."""
+Return the modified code in a python code block"""
 
         logger.trace(f"Original individual to mutate:\n{individual}")
         result = self._generate_and_extract(prompt)
@@ -721,7 +721,7 @@ Consider combining:
 - More efficient data structures
 - Clearer variable names or logic flow
 
-Only return the new combined code, no explanations or markdown."""
+Return the new combined code in a python code block."""
 
         logger.trace(f"Parent 1:\n{parent1}")
         logger.trace(f"Parent 2:\n{parent2}")
@@ -741,7 +741,7 @@ Only return the new combined code, no explanations or markdown."""
             An edited code solution that addresses the feedback
         """
         logger.info("CodeOperator: Editing code solution based on feedback")
-        logger.debug(f"Feedback: {feedback}")
+        logger.trace(f"Feedback: {feedback}")
         problem = self._ensure_problem()
 
         prompt = f"""Given this programming problem:
@@ -756,7 +756,7 @@ And this error/feedback:
 {feedback}
 
 Fix the code to address the error while maintaining the overall approach.
-Only return the fixed code, no explanations or markdown."""
+Return the fixed code in a python code block."""
 
         logger.trace(f"Original individual to edit:\n{individual}")
         result = self._generate_and_extract(prompt)
@@ -899,12 +899,10 @@ And this test case:
 {individual}
 ```
 
-Generate a modified test case that:
-1. Tests different edge cases or boundary conditions
-2. Maintains the same unittest structure
-3. Explores scenarios not covered by the original test
+Generate a modified test case that tests different edge cases or scenarios.
+Ensure it remains a valid unittest test case and contains only a single assertion.
 
-Only return the modified test code, no explanations or markdown."""
+Return only the test method code in a python code block."""
 
         logger.trace(f"Original test to mutate:\n{individual}")
         result = self._generate_and_extract(prompt)
@@ -943,10 +941,10 @@ Test 2:
 Create a new test case that combines assertions and test scenarios from both.
 The new test should:
 1. Include complementary assertions from both tests
-2. Cover a broader range of cases
-3. Maintain proper unittest structure
+2. Maintain proper unittest structure
+3. Include only a single assertion
 
-Only return the new combined test code, no explanations or markdown."""
+Return only the modified test method code in a python code block."""
 
         logger.trace(f"Test parent 1:\n{parent1}")
         logger.trace(f"Test parent 2:\n{parent2}")
@@ -966,7 +964,7 @@ Only return the new combined test code, no explanations or markdown."""
             An edited test case that addresses the feedback
         """
         logger.info("TestOperator: Editing test case based on feedback")
-        logger.debug(f"Feedback: {feedback}")
+        logger.trace(f"Feedback: {feedback}")
         problem = self._ensure_problem()
 
         prompt = f"""Given this programming problem:
@@ -981,8 +979,8 @@ And this feedback:
 {feedback}
 
 Improve the test case to address the feedback.
-Ensure it remains a valid unittest test case.
-Only return the improved test code, no explanations or markdown."""
+Ensure it remains a valid unittest test case and contains only a single assertion.
+Only return the improved test code in a python code block."""
 
         logger.trace(f"Original test to edit:\n{individual}")
         result = self._generate_and_extract(prompt)

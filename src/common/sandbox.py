@@ -7,14 +7,11 @@ with safety restrictions to prevent harm to the local machine.
 
 import os
 import re
-import shutil
-import signal
 import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 
