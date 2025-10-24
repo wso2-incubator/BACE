@@ -7,6 +7,7 @@ This module implements Bayesian coevolution algorithms with various selection st
 ```
 coevolution/
 ├── __init__.py          # Main module interface
+├── orchestrator.py      # Main algorithm coordinator
 ├── bayesian.py          # Bayesian belief updating logic
 ├── evaluation.py        # Observation matrix generation
 ├── operators.py         # LLM-based genetic operators
@@ -17,9 +18,87 @@ coevolution/
 └── EVALUATION_USAGE.md # Detailed usage guide for evaluation module
 ```
 
+## Quick Start
+
+```python
+from common.coevolution.config import CoevolutionConfig
+from common.coevolution.orchestrator import CoevolutionOrchestrator
+from common.llm_client import LLMClient
+from common.sandbox import SafeCodeSandbox
+from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+
+# 1. Configure the algorithm
+config = CoevolutionConfig(
+    initial_code_population_size=10,
+    initial_test_population_size=20,
+    num_generations=50,
+    code_crossover_rate=0.7,
+    code_mutation_rate=0.2,
+)
+
+# 2. Initialize dependencies
+llm_client = LLMClient(model="gpt-4")
+sandbox = SafeCodeSandbox()
+problem = CodeGenerationProblem(...)  # Your coding problem
+
+# 3. Create and run orchestrator
+orchestrator = CoevolutionOrchestrator(
+    config=config,
+    problem=problem,
+    llm_client=llm_client,
+    sandbox=sandbox
+)
+
+# 4. Run the algorithm
+best_code, best_code_prob, best_test, best_test_prob = orchestrator.run()
+
+print(f"Best code (probability={best_code_prob:.4f}):")
+print(best_code)
+```
+
 ## Modules
 
-### `evaluation.py` (NEW!)
+### `orchestrator.py` (NEW!)
+
+Main orchestrator class that coordinates the entire coevolution algorithm.
+
+**Key Class:**
+
+- `CoevolutionOrchestrator`: Manages the complete coevolution workflow
+
+**Main Method:**
+
+- `run()`: Execute the full algorithm, returns `(best_code, code_prob, best_test, test_prob)`
+
+**Algorithm Workflow:**
+
+1. Create initial populations (code and test)
+2. For each generation:
+   - Generate observation matrix (execute code vs tests)
+   - Update beliefs using Bayesian updates
+   - Select elite individuals
+   - Generate offspring using genetic operators
+   - Create next generation from elites + offspring
+3. Return best code and test
+
+**Internal Methods:**
+
+- `_create_initial_code_population()`: Initialize code population with priors
+- `_create_initial_test_population()`: Initialize test population with priors
+- `_generate_code_offspring()`: Apply genetic operators to create code offspring
+- `_generate_test_offspring()`: Apply genetic operators to create test offspring
+- `_create_next_code_generation()`: Combine elites and offspring for next generation
+- `_create_next_test_generation()`: Combine elites and offspring for next generation
+
+**Features:**
+
+- Comprehensive logging at all stages
+- Automatic population size handling
+- Elitism support
+- Configurable genetic operator rates
+- Safe test method extraction and class rebuilding
+
+### `evaluation.py`
 
 Provides functions to generate observation matrices by executing code populations against test populations in a safe sandbox environment.
 

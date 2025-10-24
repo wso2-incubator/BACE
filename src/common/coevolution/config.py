@@ -7,6 +7,8 @@ particularly for code-test coevolution with Bayesian belief updating.
 
 from typing import Optional
 
+from .selection import SelectionStrategy
+
 
 class CoevolutionConfig:
     """Complete configuration for coevolutionary algorithm orchestrator."""
@@ -101,6 +103,13 @@ class CoevolutionConfig:
         # === Validate Evolution Parameters ===
         if num_generations <= 0:
             raise ValueError("num_generations must be positive")
+
+        if selection_strategy not in SelectionStrategy.get_available_methods():
+            available = ", ".join(SelectionStrategy.get_available_methods())
+            raise ValueError(
+                f"Invalid selection_strategy: '{selection_strategy}'. "
+                f"Must be one of: {available}"
+            )
 
         # Validate code genetic operator rates
         if not (0 <= code_crossover_rate <= 1):
