@@ -6,9 +6,10 @@ language feedback suitable for consumption by LLMs in edit operations.
 
 """
 
+import numpy as np
 from loguru import logger
 
-from common.coevolution.population import TestPopulation
+from common.coevolution.population import CodePopulation, TestPopulation
 from common.sandbox import TestExecutionResult, TestResult
 
 # --- Constants ---
@@ -63,9 +64,11 @@ def _format_test_entry(
 
 
 # --- Main Feedback Generation Function ---
+# TODO: Define a common interface for feedback generation functions, the reproduction module expects a specific signature
 
 
 def generate_feedback_for_code(
+    observation_matrix: np.ndarray,
     execution_result: TestExecutionResult,
     test_population: TestPopulation,
     code_idx: int,
@@ -209,3 +212,44 @@ def generate_feedback_for_code(
     logger.debug(f"Code {code_idx}: Generated feedback ({len(feedback)} chars)")
 
     return feedback
+
+
+def generate_feedback_for_test(
+    observation_matrix: np.ndarray,
+    execution_result: TestExecutionResult,
+    code_population: CodePopulation,
+    test_idx: int,
+) -> str:
+    """
+    Generate natural language feedback for a test case based on code execution results.
+
+    Analyzes which code snippets passed or failed the given test and formats this
+    information into a feedback string suitable for LLM-based test editing operations.
+
+    Args:
+        observation_matrix: Binary numpy array where entry [i,j] = 1 if code i
+                            passed test j, else 0.
+        test_idx: Index of the test in the population.
+        code_population: CodePopulation containing the code snippets.
+
+    Returns:
+        A feedback string summarizing the test results for the given code snippets.
+    """
+    feedback_builder: list[str] = []
+    passed_code_indices = np.where(observation_matrix[:, test_idx] == 1)[0]
+
+    feedback_builder.append("The following code snippets passed the test:\n")
+    for code_idx in passed_code_indices:
+        code_snippet = code_population.individuals[code_idx]
+        feedback_builder.append("```python")
+        feedback_builder.append(code_snippet.strip())
+        feedback_builder.append("```\n")
+
+    feedback_builder.append(
+        "However, the above code snippets are buggy and need improvement."
+    )
+    feedback_builder.append(
+        "The test case could not identify the bugs in these snippets."
+    )
+
+    return "\n".join(feedback_builder).strip()

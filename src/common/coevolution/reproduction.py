@@ -79,6 +79,7 @@ class ReproductionStrategy:
         other_population: BasePopulation,
         execution_results: Dict[int, TestExecutionResult],
         feedback_generator: Callable[..., str],
+        observation_matrix: np.ndarray | None,
         offspring_size: int,
         crossover_rate: float,
         mutation_rate: float,
@@ -152,8 +153,9 @@ class ReproductionStrategy:
                 parent = population.individuals[parent_idx]
                 parent_prob = float(population.probabilities[parent_idx])
 
-                # Generate feedback using the provided feedback generator
+                # Generate feedback for the parent individual
                 feedback = feedback_generator(
+                    observation_matrix,
                     execution_results[parent_idx],
                     other_population,
                     parent_idx,
