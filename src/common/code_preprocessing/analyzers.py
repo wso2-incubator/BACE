@@ -140,6 +140,9 @@ def extract_test_methods_code(test_code: str) -> List[str]:
     # Find the first class definition
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
+            if node.name == "Solution":
+                log.debug("Skipping 'Solution' class in test code extraction")
+                continue  # Skip Solution class if present
             # Iterate through class methods
             for method in node.body:
                 if isinstance(method, ast.FunctionDef) and method.name.startswith(
