@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from datasets import load_dataset
+from loguru import logger
 
 
 class Platform(Enum):
@@ -136,14 +137,14 @@ def load_code_generation_dataset(
     if hasattr(dataset, "keys"):
         # If it's a DatasetDict, get the appropriate split
         if "train" in dataset:
-            print("Using 'train' split of the dataset.")
+            logger.info("Using 'train' split of the dataset.")
             dataset = dataset["train"]
         elif "test" in dataset:
-            print("Using 'test' split of the dataset.")
+            logger.info("Using 'test' split of the dataset.")
             dataset = dataset["test"]
         else:
             # Get the first available split
-            print("Using the first available split of the dataset.")
+            logger.info("Using the first available split of the dataset.")
             dataset = dataset[list(dataset.keys())[0]]
 
     dataset = [CodeGenerationProblem(**p) for p in dataset]
@@ -151,7 +152,7 @@ def load_code_generation_dataset(
     # Filter only problems with difficulty hard. TODO: Make this configurable.
     if diffulty is not None:
         dataset = [e for e in dataset if e.difficulty == diffulty]
-        print(f"Filtered problems by difficulty: {diffulty.value}")
+        logger.info("Filtered problems by difficulty: %s", diffulty.value)
 
     if start_date is not None:
         p_start_date = datetime.strptime(start_date, "%Y-%m-%d")
@@ -161,7 +162,7 @@ def load_code_generation_dataset(
         p_end_date = datetime.strptime(end_date, "%Y-%m-%d")
         dataset = [e for e in dataset if e.contest_date <= p_end_date]
 
-    print(f"Loaded {len(dataset)} problems")
+    logger.info("Loaded %d problems", len(dataset))
     return dataset
 
 
@@ -170,9 +171,11 @@ def load_code_generation_dataset_not_fast(
 ) -> list[CodeGenerationProblem]:
     dataset = load_dataset("livecodebench/code_generation", split="test")
     dataset = [CodeGenerationProblem(**p) for p in dataset]  # type: ignore
-    print(f"Loaded {len(dataset)} problems")
+    logger.info("Loaded %d problems", len(dataset))
     return dataset
 
 
 if __name__ == "__main__":
+    # When run as a script, use the project's loguru logger configuration (if any).
+    logger.info("Loading code generation dataset (script entry)")
     dataset = load_code_generation_dataset()
