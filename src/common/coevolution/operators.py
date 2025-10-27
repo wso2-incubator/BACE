@@ -938,13 +938,9 @@ Test 2:
 {parent2}
 ```
 
-Create a new test case that combines assertions and test scenarios from both.
-The new test should:
-1. Include complementary assertions from both tests
-2. Maintain proper unittest structure
-3. Include only a single assertion
+Summarize test 1 and test 2, then create a new test case. 
 
-Return only the modified test method code in a python code block."""
+Return only the new test method code in a python code block."""
 
         logger.trace(f"Test parent 1:\n{parent1}")
         logger.trace(f"Test parent 2:\n{parent2}")
