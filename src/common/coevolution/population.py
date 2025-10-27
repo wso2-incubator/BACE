@@ -18,6 +18,8 @@ from loguru import logger
 
 from common.code_preprocessing.builders import rebuild_unittest_with_new_methods
 
+from .selection import SelectionStrategy
+
 
 class BasePopulation(ABC):
     """
@@ -90,6 +92,15 @@ class BasePopulation(ABC):
                 f"Population consistency violated: {len(self._individuals)} individuals "
                 f"but {len(self._probabilities)} probabilities"
             )
+
+    def get_average_probability(self) -> float:
+        """Return the average correctness probability for this population.
+
+        Returns 0.0 for empty populations (though populations should not be empty).
+        """
+        if len(self._probabilities) == 0:
+            return 0.0
+        return float(np.mean(self._probabilities))
 
     def get_best_individual(self) -> tuple[str, float]:
         """
@@ -462,11 +473,22 @@ class TestPopulation(BasePopulation):
 
         super().__init__(individuals, probabilities, generation)
         self._test_class_block = test_class_block
+        # Per-test discriminative power (values in [0, 1]). Initialized to 0.0
+        # by default; callers should compute and set real values each iteration
+        # using `set_discriminations`.
+        self._discriminations = np.zeros(len(self._individuals), dtype=float)
+        # Validate the newly created discriminations array
+        self._validate_discriminations_consistency()
 
     @property
     def test_class_block(self) -> str:
         """Get the full unittest class block."""
         return self._test_class_block
+
+    @property
+    def discriminations(self) -> np.ndarray:
+        """Get the per-test discriminative power array (values in [0, 1])."""
+        return self._discriminations
 
     def set_test_class_block(self, test_class_block: str) -> None:
         """
@@ -485,6 +507,86 @@ class TestPopulation(BasePopulation):
         if not test_class_block or len(test_class_block.strip()) == 0:
             raise ValueError("test_class_block cannot be empty")
         self._test_class_block = test_class_block
+
+    def _validate_discriminations_consistency(self) -> None:
+        """Validate that discriminations length matches the population individuals.
+
+        Raises:
+            ValueError: if lengths do not match
+        """
+        if len(self._individuals) != len(self._discriminations):
+            raise ValueError(
+                f"Discriminations consistency violated: {len(self._individuals)} individuals "
+                f"but {len(self._discriminations)} discriminations"
+            )
+
+    def set_discriminations(self, new_discriminations: np.ndarray) -> None:
+        """Set the discriminative power values for all test methods.
+
+        Args:
+            new_discriminations: Sequence or numpy array of floats in [0, 1]
+
+        Raises:
+            ValueError: If length doesn't match population size or values are invalid
+        """
+        vals = np.asarray(new_discriminations, dtype=float)
+        if vals.ndim != 1 or len(vals) != len(self._individuals):
+            raise ValueError(
+                f"New discriminations size ({vals.shape}) must match population size ({len(self._individuals)})"
+            )
+        if not np.all(np.isfinite(vals)):
+            raise ValueError("Discriminations contain non-finite values")
+        if np.any(vals < 0) or np.any(vals > 1):
+            raise ValueError("Discriminations must be in the range [0, 1]")
+
+        old_avg = (
+            float(np.mean(self._discriminations))
+            if len(self._discriminations) > 0
+            else 0.0
+        )
+        self._discriminations = vals
+        new_avg = (
+            float(np.mean(self._discriminations))
+            if len(self._discriminations) > 0
+            else 0.0
+        )
+
+        logger.debug(
+            f"Updated discriminations for generation {self.generation}: "
+            f"avg {old_avg:.4f} → {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
+        )
+
+    def get_pareto_front(self) -> List[tuple[str, float]]:
+        """Return Pareto-optimal individuals as (individual, probability) tuples.
+
+        This mirrors the `get_top_k_individuals` API and returns the actual
+        (individual, probability) tuples for the Pareto front where both
+        probability and discrimination are maximized.
+
+        Returns:
+            List of (individual, probability) tuples corresponding to Pareto front.
+
+        Raises:
+            ValueError: if discriminations are missing or inconsistent
+        """
+        # Ensure discriminations are present and consistent
+        self._validate_discriminations_consistency()
+
+        # Get the Pareto front indices
+        indices = SelectionStrategy.pareto_front(
+            self._probabilities, self._discriminations
+        )
+
+        # Filter by prob > avg
+        avg_prob = self.get_average_probability()
+        filtered = [idx for idx in indices if self._probabilities[int(idx)] > avg_prob]
+        if filtered:
+            indices = filtered
+
+        return [
+            (self._individuals[int(idx)], float(self._probabilities[int(idx)]))
+            for idx in indices
+        ]
 
     def _rebuild_test_class_block(self) -> None:
         """
@@ -540,8 +642,12 @@ class TestPopulation(BasePopulation):
 
         self._individuals = new_individuals
         self._probabilities = new_probabilities
+        # Reset discriminations for the new population; they should be recomputed
+        # externally each iteration and set via `set_discriminations`.
+        self._discriminations = np.zeros(len(new_individuals), dtype=float)
         self._rebuild_test_class_block()
         self._validate_consistency()
+        self._validate_discriminations_consistency()
 
         new_avg = np.mean(new_probabilities)
         logger.info(
@@ -568,8 +674,11 @@ class TestPopulation(BasePopulation):
 
         self._individuals.append(individual)
         self._probabilities = np.append(self._probabilities, probability)
+        # New test methods start with neutral/unknown discrimination (0.0)
+        self._discriminations = np.append(self._discriminations, 0.0)
         self._rebuild_test_class_block()
         self._validate_consistency()
+        self._validate_discriminations_consistency()
 
         logger.debug(
             f"Added individual to TestPopulation (generation {self.generation}): "
@@ -602,8 +711,11 @@ class TestPopulation(BasePopulation):
         removed_individual = self._individuals.pop(index)
         removed_probability = float(self._probabilities[index])
         self._probabilities = np.delete(self._probabilities, index)
+        # Keep discriminations aligned with individuals
+        self._discriminations = np.delete(self._discriminations, index)
         self._rebuild_test_class_block()
         self._validate_consistency()
+        self._validate_discriminations_consistency()
 
         logger.debug(
             f"Removed individual at index {index} from TestPopulation "
@@ -640,8 +752,11 @@ class TestPopulation(BasePopulation):
         old_prob = float(self._probabilities[index])
         self._individuals[index] = individual
         self._probabilities[index] = probability
+        # Replaced individual likely needs a recomputed discrimination value
+        # Reset to 0.0 until externally set.
+        self._discriminations[index] = 0.0
         self._rebuild_test_class_block()
-
+        self._validate_discriminations_consistency()
         logger.debug(
             f"Replaced individual at index {index} in TestPopulation "
             f"(generation {self.generation}): prob {old_prob:.4f} → {probability:.4f}"

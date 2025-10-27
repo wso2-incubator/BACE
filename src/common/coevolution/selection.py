@@ -127,6 +127,59 @@ class SelectionStrategy:
         return [int(idx) for idx in elite_indices]
 
     @staticmethod
+    def pareto_front(
+        probabilities: np.ndarray, discriminations: np.ndarray
+    ) -> list[int]:
+        """
+        Selects the Pareto-efficient individuals by maximizing two objectives:
+        probabilities and discriminations. Returns the list of indices corresponding to Pareto-optimal points.
+
+        Args:
+            probabilities: 1-D array of selection probabilities (to maximize)
+            discriminations: 1-D array of discriminative power values (to maximize)
+
+        Returns:
+            List of integer indices of Pareto-efficient individuals.
+        """
+        if len(probabilities) != len(discriminations):
+            raise ValueError(
+                "Probabilities and discriminations must have the same length"
+            )
+
+        # Build objectives array (n_points, 2) for maximization
+        objectives = np.column_stack((probabilities, discriminations))
+
+        num_points = objectives.shape[0]
+        candidate_indices = np.arange(num_points)
+        current_objectives = objectives.copy()
+        next_comparison_idx = 0
+
+        while next_comparison_idx < len(current_objectives):
+            comp = current_objectives[next_comparison_idx]
+            # A point is NOT dominated by comp if any objective is strictly greater
+            is_not_dominated_mask = np.any(current_objectives > comp, axis=1)
+            # keep the comparison point itself
+            is_not_dominated_mask[next_comparison_idx] = True
+
+            candidate_indices = candidate_indices[is_not_dominated_mask]
+            current_objectives = current_objectives[is_not_dominated_mask]
+
+            next_comparison_idx = (
+                np.sum(is_not_dominated_mask[:next_comparison_idx]) + 1
+            )
+
+        if len(candidate_indices) > 0:
+            sel_probs = probabilities[candidate_indices]
+            sel_discs = discriminations[candidate_indices]
+            logger.debug(
+                f"Pareto front: selected {len(candidate_indices)} points, "
+                f"prob range=[{np.min(sel_probs):.4f}, {np.max(sel_probs):.4f}], "
+                f"disc range=[{np.min(sel_discs):.4f}, {np.max(sel_discs):.4f}]"
+            )
+
+        return [int(idx) for idx in candidate_indices]
+
+    @staticmethod
     def roulette_wheel(probabilities: np.ndarray) -> int:
         """
         Performs roulette wheel selection based on probabilities.
