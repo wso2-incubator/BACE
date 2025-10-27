@@ -70,7 +70,6 @@ def main() -> None:
         initial_code_population_size=10,
         initial_test_population_size=20,
         max_code_population_size=15,  # population grows over time to 15
-        max_test_population_size=30,  # population grows over time to 30
         # Bayesian parameters
         initial_code_prior=0.5,
         initial_test_prior=0.5,
@@ -89,11 +88,9 @@ def main() -> None:
         code_elite_proportion=0.5,
         code_offspring_proportion=0.5,
         # Test genetic operators
-        test_crossover_rate=0.8,
-        test_mutation_rate=0.1,
-        test_edit_rate=0.0,
-        test_elite_proportion=0.5,
-        test_offspring_proportion=0.5,
+        test_crossover_rate=0.5,
+        test_mutation_rate=0.3,
+        test_edit_rate=0.5,
         # LLM configuration
         llm_model="gpt-5",
     )

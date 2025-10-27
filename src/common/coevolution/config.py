@@ -31,9 +31,7 @@ class CoevolutionConfig:
         max_code_population_size: Optional[
             int
         ] = None,  # Max code population (None = initial)
-        max_test_population_size: Optional[
-            int
-        ] = None,  # Max test population (None = initial)
+        # Note: test population size is fixed to `initial_test_population_size`.
         # === Evolution Strategy ===
         num_generations: int = 50,  # Number of evolutionary cycles
         selection_strategy: str = "binary_tournament",  # Selection method
@@ -47,8 +45,10 @@ class CoevolutionConfig:
         test_crossover_rate: float = 0.6,
         test_mutation_rate: float = 0.3,
         test_edit_rate: float = 0.1,
-        test_elite_proportion: float = 0.5,  # Proportion of population to preserve as elites
-        test_offspring_proportion: float = 0.5,  # Proportion of max population for offspring
+        # NOTE: test_elite_proportion, test_offspring_proportion and max_test_population_size
+        # have been removed. Test population is treated as a fixed-size population
+        # equal to `initial_test_population_size` and is not governed by elite/offspring
+        # proportions or a separate max size.
         # === LLM Configuration ===
         llm_model: str = "gpt-4",  # LLM model for genetic operators
     ) -> None:
@@ -70,7 +70,8 @@ class CoevolutionConfig:
 
             # Population Size Control
             max_code_population_size: Maximum code population size (None = initial_code_population_size)
-            max_test_population_size: Maximum test population size (None = initial_test_population_size)
+            Note: test population is fixed to initial_test_population_size; there is no
+            separate max_test_population_size and test elite/offspring proportions.
 
             # Evolution Strategy
             num_generations: Number of evolutionary cycles to run
@@ -87,23 +88,22 @@ class CoevolutionConfig:
             test_crossover_rate: Probability of applying crossover to tests
             test_mutation_rate: Probability of applying mutation to tests
             test_edit_rate: Probability of applying edit to tests (based on code feedback)
-            test_elite_proportion: Proportion of current population to preserve as elites (0.0-1.0)
-            test_offspring_proportion: Proportion of max population to generate as offspring (0.0-1.0)
+            Note: test populations are fixed-size and do not use elite/offspring proportions.
 
             # LLM Configuration
             llm_model: LLM model name for genetic operators
 
         Note:
-            For fixed populations (max_population_size == initial_population_size):
-            - If elite_proportion + offspring_proportion > 1.0, offspring count will be
-              automatically reduced to fit within the available space after elite selection.
-            - For predictable behavior, ensure elite_proportion + offspring_proportion <= 1.0
-            - A warning will be logged at initialization if this constraint is violated
+                        For code populations (where max_code_population_size governs growth):
+                        - If elite_proportion + offspring_proportion > 1.0 for a fixed-size code
+                            population (max == initial), offspring count will be automatically reduced
+                            to fit within the available space after elite selection.
+                        - For predictable behavior with fixed-size code populations, ensure
+                            elite_proportion + offspring_proportion <= 1.0. A warning will be logged
+                            at initialization if this constraint is violated.
 
-            For growing populations (max_population_size > initial_population_size):
-            - elite_proportion + offspring_proportion can exceed 1.0 without issues
-            - The population will naturally grow up to max_population_size over generations
-            - Offspring count is always adjusted to fit remaining space after elites
+                        Test populations are fixed to `initial_test_population_size` and are not
+                        subject to elite/offspring proportion logic or a separate max size.
         """
         # === Validate Bayesian Parameters ===
         if not (0 < initial_code_prior < 1):
@@ -127,29 +127,16 @@ class CoevolutionConfig:
         # Set defaults for max population sizes
         if max_code_population_size is None:
             max_code_population_size = initial_code_population_size
-        if max_test_population_size is None:
-            max_test_population_size = initial_test_population_size
-
         if max_code_population_size < initial_code_population_size:
             raise ValueError(
                 "max_code_population_size must be >= initial_code_population_size"
             )
-        if max_test_population_size < initial_test_population_size:
-            raise ValueError(
-                "max_test_population_size must be >= initial_test_population_size"
-            )
 
-        # Validate elite proportions
+        # Validate elite/offspring proportions for code only
         if not (0.0 < code_elite_proportion <= 1.0):
             raise ValueError("code_elite_proportion must be in (0.0, 1.0]")
-        if not (0.0 < test_elite_proportion <= 1.0):
-            raise ValueError("test_elite_proportion must be in (0.0, 1.0]")
-
-        # Validate offspring proportions
         if not (0.0 < code_offspring_proportion <= 1.0):
             raise ValueError("code_offspring_proportion must be in (0.0, 1.0]")
-        if not (0.0 < test_offspring_proportion <= 1.0):
-            raise ValueError("test_offspring_proportion must be in (0.0, 1.0]")
 
         # === Validate Evolution Parameters ===
         if num_generations <= 0:
@@ -189,6 +176,7 @@ class CoevolutionConfig:
         # === Assign Bayesian Parameters ===
         self.initial_code_population_size = initial_code_population_size
         self.initial_test_population_size = initial_test_population_size
+
         self.initial_code_prior = initial_code_prior
         self.initial_test_prior = initial_test_prior
         self.alpha = alpha
@@ -199,8 +187,9 @@ class CoevolutionConfig:
 
         # === Assign Population Size Control ===
         self.max_code_population_size = max_code_population_size
-        self.max_test_population_size = max_test_population_size
-
+        self.max_test_population_size = (
+            initial_test_population_size  # Fixed population size for tests
+        )
         # === Assign Evolution Strategy Parameters ===
         self.num_generations = num_generations
         self.selection_strategy = selection_strategy
@@ -220,12 +209,6 @@ class CoevolutionConfig:
         self.test_crossover_rate = test_crossover_rate
         self.test_mutation_rate = test_mutation_rate
         self.test_edit_rate = test_edit_rate
-        self.test_elite_proportion = test_elite_proportion
-        self.test_offspring_proportion = test_offspring_proportion
-        # Calculate fixed offspring count from max population and proportion
-        self.test_offspring_count = int(
-            max_test_population_size * test_offspring_proportion
-        )
 
         # === Validate proportion compatibility for fixed populations ===
         # For fixed populations (max == initial), warn if proportions might cause
@@ -244,24 +227,6 @@ class CoevolutionConfig:
                     f"up to {max_code_elites} elites + {self.code_offspring_count} target offspring "
                     f"= {max_code_elites + self.code_offspring_count} (exceeds max by "
                     f"{max_code_elites + self.code_offspring_count - max_code_population_size}). "
-                    f"Offspring will be automatically reduced to fit. "
-                    f"For predictable behavior, ensure elite_proportion + offspring_proportion <= 1.0"
-                )
-
-        if max_test_population_size == initial_test_population_size:
-            # Calculate what would happen with max elites
-            max_test_elites = max(
-                1, int(max_test_population_size * test_elite_proportion)
-            )
-            if max_test_elites + self.test_offspring_count > max_test_population_size:
-                logger.warning(
-                    f"Test population configuration may reduce offspring count: "
-                    f"With fixed population size ({max_test_population_size}), "
-                    f"elite_proportion ({test_elite_proportion}) and "
-                    f"offspring_proportion ({test_offspring_proportion}) can result in "
-                    f"up to {max_test_elites} elites + {self.test_offspring_count} target offspring "
-                    f"= {max_test_elites + self.test_offspring_count} (exceeds max by "
-                    f"{max_test_elites + self.test_offspring_count - max_test_population_size}). "
                     f"Offspring will be automatically reduced to fit. "
                     f"For predictable behavior, ensure elite_proportion + offspring_proportion <= 1.0"
                 )
