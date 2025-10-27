@@ -47,10 +47,14 @@ from common.sandbox import SafeCodeSandbox, TestExecutionResult
 
 from .bayesian import initialize_prior_beliefs, update_population_beliefs
 from .config import CoevolutionConfig
-from .evaluation import execute_code_against_tests, generate_observation_matrix
-from .feedback import generate_feedback_for_code
+from .evaluation import (
+    compute_test_discriminations,
+    execute_code_against_tests,
+    generate_observation_matrix,
+)
+from .feedback import generate_feedback_for_code, generate_feedback_for_test
 from .operators import CodeOperator, TestOperator
-from .population import BasePopulation, CodePopulation, TestPopulation
+from .population import CodePopulation, TestPopulation
 from .reproduction import ReproductionStrategy
 from .selection import SelectionStrategy
 
@@ -129,6 +133,7 @@ class CoevolutionOrchestrator:
 
         # Execution results for feedback (initialized in run())
         self.last_execution_results: Dict[int, TestExecutionResult] = {}
+        self.observation_matrix: np.ndarray = np.array([])
 
         logger.info("CoevolutionOrchestrator initialized successfully")
 
@@ -241,6 +246,7 @@ class CoevolutionOrchestrator:
             crossover_rate=self.config.code_crossover_rate,
             mutation_rate=self.config.code_mutation_rate,
             edit_rate=self.config.code_edit_rate,
+            observation_matrix=self.observation_matrix,
             population_type="code",
         )
 
@@ -263,25 +269,15 @@ class CoevolutionOrchestrator:
         assert self.test_population is not None, "Test population must be initialized"
         assert self.code_population is not None, "Code population must be initialized"
 
-        # Calculate remaining space after elites
-        remaining_space = self.config.max_test_population_size - elite_count
-        # Adjust offspring count to fit remaining space (Option 3: offspring fills remainder)
-        actual_offspring_count = min(self.config.test_offspring_count, remaining_space)
-
-        # Placeholder feedback generator for tests (to be implemented)
-        def _placeholder_test_feedback(
-            execution_result: TestExecutionResult,
-            code_population: BasePopulation,
-            test_idx: int,
-        ) -> str:
-            return "Placeholder feedback for test edit operation"
+        test_offspring_size = max(0, self.config.max_test_population_size - elite_count)
 
         return self.test_reproduction.generate_offspring(
             population=self.test_population,
             other_population=self.code_population,
             execution_results=self.last_execution_results,
-            feedback_generator=_placeholder_test_feedback,
-            offspring_size=actual_offspring_count,
+            feedback_generator=generate_feedback_for_test,
+            observation_matrix=self.observation_matrix,
+            offspring_size=test_offspring_size,
             crossover_rate=self.config.test_crossover_rate,
             mutation_rate=self.config.test_mutation_rate,
             edit_rate=self.config.test_edit_rate,
@@ -357,15 +353,6 @@ class CoevolutionOrchestrator:
             f"Creating next test generation: {len(elites)} elites + "
             f"{len(offspring)} offspring = {len(combined)} total"
         )
-
-        # If combined size exceeds max, select best individuals
-        if len(combined) > self.config.max_test_population_size:
-            logger.debug(
-                f"Selecting best {self.config.max_test_population_size} from {len(combined)}"
-            )
-            # Sort by probability (descending) and take top N
-            combined_sorted = sorted(combined, key=lambda x: x[1], reverse=True)
-            combined = combined_sorted[: self.config.max_test_population_size]
 
         # Unpack into separate lists
         new_individuals = [ind for ind, _ in combined]
@@ -444,18 +431,18 @@ class CoevolutionOrchestrator:
             logger.info("STEP 3: Generating observation matrix")
             logger.info("-" * 80)
 
-            observation_matrix = generate_observation_matrix(
+            self.observation_matrix = generate_observation_matrix(
                 execution_results,
                 self.code_population.size,
                 self.test_population.size,
             )
 
             # Log observation matrix statistics
-            total_tests = observation_matrix.size
-            passed_tests = np.sum(observation_matrix)
+            total_tests = self.observation_matrix.size
+            passed_tests = np.sum(self.observation_matrix)
             pass_rate = passed_tests / total_tests if total_tests > 0 else 0
             logger.info(
-                f"Observation matrix: {observation_matrix.shape}, "
+                f"Observation matrix: {self.observation_matrix.shape}, "
                 f"pass_rate={pass_rate:.2%} ({passed_tests}/{total_tests})"
             )
 
@@ -468,7 +455,7 @@ class CoevolutionOrchestrator:
             prior_test_probs = self.test_population.probabilities.copy()
 
             posterior_code_probs, posterior_test_probs = update_population_beliefs(
-                prior_code_probs, prior_test_probs, observation_matrix, self.config
+                prior_code_probs, prior_test_probs, self.observation_matrix, self.config
             )
 
             # Update populations with new probabilities
@@ -495,35 +482,18 @@ class CoevolutionOrchestrator:
             code_elite_count = max(
                 1, int(self.code_population.size * self.config.code_elite_proportion)
             )
-            test_elite_count = max(
-                1, int(self.test_population.size * self.config.test_elite_proportion)
-            )
+            code_elites = self.code_population.get_top_k_individuals(code_elite_count)
 
-            code_elite_indices = self.selector.elitism(
-                self.code_population.probabilities, code_elite_count
+            # Test elites: use Pareto front
+            # set the discriminations before getting pareto front
+            discrimination_scores = compute_test_discriminations(
+                self.observation_matrix
             )
-            test_elite_indices = self.selector.elitism(
-                self.test_population.probabilities, test_elite_count
-            )
-
-            # Convert indices to (individual, probability) tuples
-            code_elites = [
-                (
-                    self.code_population.individuals[idx],
-                    self.code_population.probabilities[idx],
-                )
-                for idx in code_elite_indices
-            ]
-            test_elites = [
-                (
-                    self.test_population.individuals[idx],
-                    self.test_population.probabilities[idx],
-                )
-                for idx in test_elite_indices
-            ]
-
+            self.test_population.set_discriminations(discrimination_scores)
+            test_pareto_front = self.test_population.get_pareto_front()
+            pareto_size = len(test_pareto_front)
             logger.info(
-                f"Selected {len(code_elites)} code elites, {len(test_elites)} test elites"
+                f"Selected {len(code_elites)} code elites, {pareto_size} test Pareto elites"
             )
 
             # Step 6: Generate offspring using genetic operators
@@ -532,7 +502,7 @@ class CoevolutionOrchestrator:
             logger.info("-" * 80)
 
             code_offspring = self._generate_code_offspring(elite_count=code_elite_count)
-            test_offspring = self._generate_test_offspring(elite_count=test_elite_count)
+            test_offspring = self._generate_test_offspring(elite_count=pareto_size)
 
             # Step 7: Create next generation
             logger.info("-" * 80)
@@ -540,7 +510,7 @@ class CoevolutionOrchestrator:
             logger.info("-" * 80)
 
             self._create_next_code_generation(code_elites, code_offspring)
-            self._create_next_test_generation(test_elites, test_offspring)
+            self._create_next_test_generation(test_pareto_front, test_offspring)
 
         # Algorithm complete - return best individuals
         logger.info("=" * 80)
