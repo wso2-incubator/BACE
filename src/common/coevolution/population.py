@@ -545,17 +545,6 @@ class TestPopulation(BasePopulation):
         logger.debug(
             f"Setting new discriminations for {len(self._individuals)} individuals"
         )
-
-        # --- State Check ---
-        if not self._discriminations_set:
-            msg = (
-                "Cannot get Pareto front: Discriminations have not been set. "
-                "Call set_discriminations() *after* modifying the population "
-                "and *before* calling this method."
-            )
-
-            logger.error(msg)
-            raise RuntimeError(msg)
         # --- Validation Checks ---
         if new_discriminations.ndim != 1 or len(new_discriminations) != len(
             self._individuals
@@ -611,6 +600,17 @@ class TestPopulation(BasePopulation):
             ValueError: if discriminations are missing or inconsistent
         """
         logger.debug("Calculating Pareto front...")
+
+        # --- State Check ---
+        if not self._discriminations_set:
+            msg = (
+                "Cannot get Pareto front: Discriminations have not been set. "
+                "Call set_discriminations() after modifying the population "
+                "and before calling this method."
+            )
+
+            logger.error(msg)
+            raise RuntimeError(msg)
 
         # --- Validation ---
         try:
