@@ -54,12 +54,14 @@ class BasePopulation(ABC):
         """
         # Validate inputs
         if len(individuals) != len(probabilities):
-            raise ValueError(
-                f"Number of individuals ({len(individuals)}) must match "
-                f"number of probabilities ({len(probabilities)})"
-            )
+            msg = f"Number of individuals ({len(individuals)}) must match number of probabilities ({len(probabilities)})"
+            logger.error(msg)
+            raise ValueError(msg)
+
         if len(individuals) == 0:
-            raise ValueError("Population cannot be empty")
+            msg = "Population cannot be empty"
+            logger.error(msg)
+            raise ValueError(msg)
 
         self._individuals = individuals
         self._probabilities = probabilities
@@ -73,12 +75,12 @@ class BasePopulation(ABC):
     @property
     def individuals(self) -> List[str]:
         """Get the list of individuals."""
-        return self._individuals
+        return self._individuals.copy()
 
     @property
     def probabilities(self) -> np.ndarray:
         """Get the probability array."""
-        return self._probabilities
+        return self._probabilities.copy()
 
     @property
     def size(self) -> int:
@@ -148,10 +150,9 @@ class BasePopulation(ABC):
             ValueError: If the size doesn't match the population size
         """
         if len(new_probabilities) != len(self._individuals):
-            raise ValueError(
-                f"New probabilities size ({len(new_probabilities)}) must match "
-                f"population size ({len(self._individuals)})"
-            )
+            msg = f"New probabilities size ({len(new_probabilities)}) must match population size ({len(self._individuals)})"
+            logger.error(msg)
+            raise ValueError(msg)
 
         old_avg = np.mean(self._probabilities)
         self._probabilities = new_probabilities
@@ -315,12 +316,14 @@ class CodePopulation(BasePopulation):
             ValueError: If validation checks fail
         """
         if len(new_individuals) != len(new_probabilities):
-            raise ValueError(
-                f"Number of new individuals ({len(new_individuals)}) must match "
-                f"number of new probabilities ({len(new_probabilities)})"
-            )
+            msg = f"Number of new individuals ({len(new_individuals)}) must match number of new probabilities ({len(new_probabilities)})"
+            logger.error(msg)
+            raise ValueError(msg)
+
         if len(new_individuals) == 0:
-            raise ValueError("Cannot replace with empty population")
+            msg = "Cannot replace with empty population"
+            logger.error(msg)
+            raise ValueError(msg)
 
         old_size = len(self._individuals)
         old_avg = np.mean(self._probabilities)
@@ -348,7 +351,9 @@ class CodePopulation(BasePopulation):
             ValueError: If probability is not in [0, 1]
         """
         if not 0 <= probability <= 1:
-            raise ValueError(f"Probability must be in [0, 1], got {probability}")
+            msg = f"Probability must be in [0, 1], got {probability}"
+            logger.error(msg)
+            raise ValueError(msg)
 
         self._individuals.append(individual)
         self._probabilities = np.append(self._probabilities, probability)
@@ -374,11 +379,13 @@ class CodePopulation(BasePopulation):
             IndexError: If index is out of bounds
         """
         if len(self._individuals) <= 1:
-            raise ValueError("Cannot remove from population with only one individual")
+            msg = "Cannot remove from population with only one individual"
+            logger.error(msg)
+            raise ValueError(msg)
         if index < 0 or index >= len(self._individuals):
-            raise IndexError(
-                f"Index {index} out of bounds for population size {len(self._individuals)}"
-            )
+            msg = f"Index {index} out of bounds for population size {len(self._individuals)}"
+            logger.error(msg)
+            raise IndexError(msg)
 
         removed_individual = self._individuals.pop(index)
         removed_probability = float(self._probabilities[index])
@@ -409,11 +416,13 @@ class CodePopulation(BasePopulation):
             IndexError: If index is out of bounds
         """
         if not 0 <= probability <= 1:
-            raise ValueError(f"Probability must be in [0, 1], got {probability}")
+            msg = f"Probability must be in [0, 1], got {probability}"
+            logger.error(msg)
+            raise ValueError(msg)
         if index < 0 or index >= len(self._individuals):
-            raise IndexError(
-                f"Index {index} out of bounds for population size {len(self._individuals)}"
-            )
+            msg = f"Index {index} out of bounds for population size {len(self._individuals)}"
+            logger.error(msg)
+            raise IndexError(msg)
 
         old_prob = float(self._probabilities[index])
         self._individuals[index] = individual
@@ -466,10 +475,9 @@ class TestPopulation(BasePopulation):
             ValueError: If validation checks fail or test_class_block is empty
         """
         if not test_class_block or len(test_class_block.strip()) == 0:
-            raise ValueError(
-                "test_class_block is required and cannot be empty for TestPopulation. "
-                "Test populations must have a complete unittest class."
-            )
+            msg = "test_class_block is required and cannot be empty for TestPopulation"
+            logger.error(msg)
+            raise ValueError(msg)
 
         super().__init__(individuals, probabilities, generation)
         self._test_class_block = test_class_block
@@ -477,6 +485,7 @@ class TestPopulation(BasePopulation):
         # by default; callers should compute and set real values each iteration
         # using `set_discriminations`.
         self._discriminations = np.zeros(len(self._individuals), dtype=float)
+        self._discriminations_set = False
         # Validate the newly created discriminations array
         self._validate_discriminations_consistency()
 
@@ -505,7 +514,9 @@ class TestPopulation(BasePopulation):
             and the class block needs to be regenerated to match.
         """
         if not test_class_block or len(test_class_block.strip()) == 0:
-            raise ValueError("test_class_block cannot be empty")
+            msg = "test_class_block cannot be empty"
+            logger.error(msg)
+            raise ValueError(msg)
         self._test_class_block = test_class_block
 
     def _validate_discriminations_consistency(self) -> None:
@@ -515,10 +526,12 @@ class TestPopulation(BasePopulation):
             ValueError: if lengths do not match
         """
         if len(self._individuals) != len(self._discriminations):
-            raise ValueError(
+            msg = (
                 f"Discriminations consistency violated: {len(self._individuals)} individuals "
                 f"but {len(self._discriminations)} discriminations"
             )
+            logger.error(msg)
+            raise ValueError(msg)
 
     def set_discriminations(self, new_discriminations: np.ndarray) -> None:
         """Set the discriminative power values for all test methods.
@@ -529,28 +542,56 @@ class TestPopulation(BasePopulation):
         Raises:
             ValueError: If length doesn't match population size or values are invalid
         """
-        vals = np.asarray(new_discriminations, dtype=float)
-        if vals.ndim != 1 or len(vals) != len(self._individuals):
-            raise ValueError(
-                f"New discriminations size ({vals.shape}) must match population size ({len(self._individuals)})"
-            )
-        if not np.all(np.isfinite(vals)):
-            raise ValueError("Discriminations contain non-finite values")
-        if np.any(vals < 0) or np.any(vals > 1):
-            raise ValueError("Discriminations must be in the range [0, 1]")
+        logger.debug(
+            f"Setting new discriminations for {len(self._individuals)} individuals"
+        )
 
+        # --- State Check ---
+        if not self._discriminations_set:
+            msg = (
+                "Cannot get Pareto front: Discriminations have not been set. "
+                "Call set_discriminations() *after* modifying the population "
+                "and *before* calling this method."
+            )
+
+            logger.error(msg)
+            raise RuntimeError(msg)
+        # --- Validation Checks ---
+        if new_discriminations.ndim != 1 or len(new_discriminations) != len(
+            self._individuals
+        ):
+            msg = (
+                f"New discriminations size ({new_discriminations.shape}) must match "
+                f"population size ({len(self._individuals)})"
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if not np.all(np.isfinite(new_discriminations)):
+            msg = "Discriminations contain non-finite values"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if np.any(new_discriminations < 0) or np.any(new_discriminations > 1):
+            msg = "Discriminations must be in the range [0, 1]"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        # --- State Update ---
         old_avg = (
             float(np.mean(self._discriminations))
             if len(self._discriminations) > 0
             else 0.0
         )
-        self._discriminations = vals
+        self._discriminations = new_discriminations
+        self._discriminations_set = True
         new_avg = (
             float(np.mean(self._discriminations))
             if len(self._discriminations) > 0
             else 0.0
         )
 
+        # This existing log is great, captures the state change perfectly
         logger.debug(
             f"Updated discriminations for generation {self.generation}: "
             f"avg {old_avg:.4f} → {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
@@ -569,24 +610,49 @@ class TestPopulation(BasePopulation):
         Raises:
             ValueError: if discriminations are missing or inconsistent
         """
-        # Ensure discriminations are present and consistent
-        self._validate_discriminations_consistency()
+        logger.debug("Calculating Pareto front...")
 
-        # Get the Pareto front indices
+        # --- Validation ---
+        try:
+            self._validate_discriminations_consistency()
+        except ValueError as e:
+            logger.error(f"Cannot get Pareto front: {e}")
+            raise  # Re-raise the exception after logging
+
+        # --- Initial Front Calculation ---
         indices = SelectionStrategy.pareto_front(
             self._probabilities, self._discriminations
         )
+        logger.debug(f"Found {len(indices)} initial Pareto-optimal individuals")
 
-        # Filter by prob > avg
+        # --- Filtering Step ---
         avg_prob = self.get_average_probability()
-        filtered = [idx for idx in indices if self._probabilities[int(idx)] > avg_prob]
-        if filtered:
-            indices = filtered
+        logger.debug(f"Filtering front by average probability > {avg_prob:.4f}")
 
-        return [
+        filtered = [idx for idx in indices if self._probabilities[int(idx)] > avg_prob]
+
+        if filtered:
+            logger.debug(
+                f"Filtered front from {len(indices)} to {len(filtered)} individuals"
+            )
+            indices = filtered
+        else:
+            # TODO: This step may not be required as pareto front should ideally contain
+            # at least one individual above average probability, unless all are equal
+
+            logger.debug(
+                f"No individuals above average probability; "
+                f"returning original front of {len(indices)} individuals"
+            )
+
+        # --- Final Result ---
+        results = [
             (self._individuals[int(idx)], float(self._probabilities[int(idx)]))
             for idx in indices
         ]
+
+        logger.debug(f"Returning {len(results)} individuals in final Pareto front")
+        return results
 
     def _rebuild_test_class_block(self) -> None:
         """
@@ -630,12 +696,16 @@ class TestPopulation(BasePopulation):
             ValueError: If validation checks fail
         """
         if len(new_individuals) != len(new_probabilities):
-            raise ValueError(
+            msg = (
                 f"Number of new individuals ({len(new_individuals)}) must match "
                 f"number of new probabilities ({len(new_probabilities)})"
             )
+            logger.error(msg)
+            raise ValueError(msg)
         if len(new_individuals) == 0:
-            raise ValueError("Cannot replace with empty population")
+            msg = "Cannot replace with empty population"
+            logger.error(msg)
+            raise ValueError(msg)
 
         old_size = len(self._individuals)
         old_avg = np.mean(self._probabilities)
@@ -645,6 +715,7 @@ class TestPopulation(BasePopulation):
         # Reset discriminations for the new population; they should be recomputed
         # externally each iteration and set via `set_discriminations`.
         self._discriminations = np.zeros(len(new_individuals), dtype=float)
+        self._discriminations_set = False
         self._rebuild_test_class_block()
         self._validate_consistency()
         self._validate_discriminations_consistency()
@@ -670,12 +741,15 @@ class TestPopulation(BasePopulation):
             ValueError: If probability is not in [0, 1]
         """
         if not 0 <= probability <= 1:
-            raise ValueError(f"Probability must be in [0, 1], got {probability}")
+            msg = f"Probability must be in [0, 1], got {probability}"
+            logger.error(msg)
+            raise ValueError(msg)
 
         self._individuals.append(individual)
         self._probabilities = np.append(self._probabilities, probability)
         # New test methods start with neutral/unknown discrimination (0.0)
         self._discriminations = np.append(self._discriminations, 0.0)
+        self._discriminations_set = False
         self._rebuild_test_class_block()
         self._validate_consistency()
         self._validate_discriminations_consistency()
@@ -702,11 +776,13 @@ class TestPopulation(BasePopulation):
             IndexError: If index is out of bounds
         """
         if len(self._individuals) <= 1:
-            raise ValueError("Cannot remove from population with only one individual")
+            msg = "Cannot remove from population with only one individual"
+            logger.error(msg)
+            raise ValueError(msg)
         if index < 0 or index >= len(self._individuals):
-            raise IndexError(
-                f"Index {index} out of bounds for population size {len(self._individuals)}"
-            )
+            msg = f"Index {index} out of bounds for population size {len(self._individuals)}"
+            logger.error(msg)
+            raise IndexError(msg)
 
         removed_individual = self._individuals.pop(index)
         removed_probability = float(self._probabilities[index])
@@ -743,11 +819,13 @@ class TestPopulation(BasePopulation):
             IndexError: If index is out of bounds
         """
         if not 0 <= probability <= 1:
-            raise ValueError(f"Probability must be in [0, 1], got {probability}")
+            msg = f"Probability must be in [0, 1], got {probability}"
+            logger.error(msg)
+            raise ValueError(msg)
         if index < 0 or index >= len(self._individuals):
-            raise IndexError(
-                f"Index {index} out of bounds for population size {len(self._individuals)}"
-            )
+            msg = f"Index {index} out of bounds for population size {len(self._individuals)}"
+            logger.error(msg)
+            raise IndexError(msg)
 
         old_prob = float(self._probabilities[index])
         self._individuals[index] = individual
@@ -755,6 +833,7 @@ class TestPopulation(BasePopulation):
         # Replaced individual likely needs a recomputed discrimination value
         # Reset to 0.0 until externally set.
         self._discriminations[index] = 0.0
+        self._discriminations_set = False
         self._rebuild_test_class_block()
         self._validate_discriminations_consistency()
         logger.debug(
