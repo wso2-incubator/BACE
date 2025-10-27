@@ -132,3 +132,61 @@ def generate_observation_matrix(
         logger.trace(f"Code pass rates: {pass_rates}")
 
     return observation_matrix
+
+
+def compute_code_pass_rates(observation_matrix: np.ndarray) -> np.ndarray:
+    """
+    Compute the pass rate for each code (row) in the observation matrix.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+
+    Returns:
+        1D numpy array of pass rates for each code (fraction of tests passed)
+    """
+    if observation_matrix.shape[1] == 0:
+        return np.zeros(observation_matrix.shape[0], dtype=float)
+    return np.asarray(
+        np.sum(observation_matrix, axis=1) / float(observation_matrix.shape[1])
+    )
+
+
+def compute_test_pass_rates(observation_matrix: np.ndarray) -> np.ndarray:
+    """
+    Compute the pass rate for each test (column) in the observation matrix.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+
+    Returns:
+        1D numpy array of pass rates for each test (fraction of codes that passed)
+    """
+    if observation_matrix.shape[0] == 0:
+        return np.zeros(observation_matrix.shape[1], dtype=float)
+    return np.asarray(
+        np.sum(observation_matrix, axis=0) / float(observation_matrix.shape[0])
+    )
+
+
+def compute_test_discriminations(observation_matrix: np.ndarray) -> np.ndarray:
+    """
+    Compute the discrimination (entropy) for each test case (column) given the observation matrix.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+
+    Returns:
+        1D numpy array of discrimination values (entropy) for each test, in [0, 1]
+
+    Raises:
+        ValueError: If any computed discrimination is not in [0, 1]
+    """
+    pass_rates = compute_test_pass_rates(observation_matrix)
+    # Avoid log2(0) by clipping x to [eps, 1-eps]
+    eps = 1e-12
+    x = np.clip(pass_rates, eps, 1 - eps)
+    entropy = -x * np.log2(x) - (1 - x) * np.log2(1 - x)
+    # Normalize: entropy is in [0,1] for binary variable
+    if not (np.all(entropy >= 0) and np.all(entropy <= 1)):
+        raise ValueError("Discriminations (entropy) must be in [0, 1] for all tests")
+    return np.asarray(entropy)
