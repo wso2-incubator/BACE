@@ -975,7 +975,6 @@ And this feedback:
 {feedback}
 
 Improve the test case to address the feedback.
-Ensure it remains a valid unittest test case and contains only a single assertion.
 Only return the improved test code in a python code block."""
 
         logger.trace(f"Original test to edit:\n{individual}")
