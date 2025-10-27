@@ -144,11 +144,22 @@ def compute_code_pass_rates(observation_matrix: np.ndarray) -> np.ndarray:
     Returns:
         1D numpy array of pass rates for each code (fraction of tests passed)
     """
-    if observation_matrix.shape[1] == 0:
-        return np.zeros(observation_matrix.shape[0], dtype=float)
-    return np.asarray(
-        np.sum(observation_matrix, axis=1) / float(observation_matrix.shape[1])
+    num_codes, num_tests = observation_matrix.shape
+    logger.debug(
+        f"Computing code pass rates for matrix with shape ({num_codes}, {num_tests})"
     )
+
+    if num_tests == 0:
+        logger.warning(
+            f"Observation matrix has 0 tests. Returning zero pass rates for {num_codes} codes."
+        )
+        return np.zeros(num_codes, dtype=float)
+
+    pass_rates = np.sum(observation_matrix, axis=1) / float(num_tests)
+    logger.debug(
+        f"Computed code pass rates, returning array with shape {pass_rates.shape}"
+    )
+    return np.asarray(pass_rates)
 
 
 def compute_test_pass_rates(observation_matrix: np.ndarray) -> np.ndarray:
@@ -161,16 +172,30 @@ def compute_test_pass_rates(observation_matrix: np.ndarray) -> np.ndarray:
     Returns:
         1D numpy array of pass rates for each test (fraction of codes that passed)
     """
-    if observation_matrix.shape[0] == 0:
-        return np.zeros(observation_matrix.shape[1], dtype=float)
-    return np.asarray(
-        np.sum(observation_matrix, axis=0) / float(observation_matrix.shape[0])
+    num_codes, num_tests = observation_matrix.shape
+    logger.debug(
+        f"Computing test pass rates for matrix with shape ({num_codes}, {num_tests})"
     )
+
+    if num_codes == 0:
+        logger.warning(
+            f"Observation matrix has 0 codes. Returning zero pass rates for {num_tests} tests."
+        )
+        return np.zeros(num_tests, dtype=float)
+
+    pass_rates = np.sum(observation_matrix, axis=0) / float(num_codes)
+    logger.debug(
+        f"Computed test pass rates, returning array with shape {pass_rates.shape}"
+    )
+    return np.asarray(pass_rates)
 
 
 def compute_test_discriminations(observation_matrix: np.ndarray) -> np.ndarray:
     """
     Compute the discrimination (entropy) for each test case (column) given the observation matrix.
+
+    A test that passes for 50% of codes has maximum discrimination (1.0).
+    A test that passes for 0% or 100% of codes has minimum discrimination (0.0).
 
     Args:
         observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
@@ -181,12 +206,28 @@ def compute_test_discriminations(observation_matrix: np.ndarray) -> np.ndarray:
     Raises:
         ValueError: If any computed discrimination is not in [0, 1]
     """
+    logger.debug(
+        f"Computing test discriminations for matrix with shape {observation_matrix.shape}"
+    )
+
     pass_rates = compute_test_pass_rates(observation_matrix)
+    logger.trace(f"Computed pass rates: {pass_rates}")
+
     # Avoid log2(0) by clipping x to [eps, 1-eps]
     eps = 1e-12
     x = np.clip(pass_rates, eps, 1 - eps)
+    logger.trace(f"Clipped pass rates with eps={eps}: {x}")
+
     entropy = -x * np.log2(x) - (1 - x) * np.log2(1 - x)
+    logger.trace(f"Computed entropy: {entropy}")
+
     # Normalize: entropy is in [0,1] for binary variable
     if not (np.all(entropy >= 0) and np.all(entropy <= 1)):
-        raise ValueError("Discriminations (entropy) must be in [0, 1] for all tests")
+        msg = "Discriminations (entropy) must be in [0, 1] for all tests"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    logger.debug(
+        f"Computed test discriminations, returning array with shape {entropy.shape}"
+    )
     return np.asarray(entropy)
