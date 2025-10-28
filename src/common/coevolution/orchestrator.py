@@ -133,7 +133,7 @@ class CoevolutionOrchestrator:
 
         # Execution results for feedback (initialized in run())
         self.last_execution_results: Dict[int, TestExecutionResult] = {}
-        self.observation_matrix: np.ndarray = np.array([])
+        self.last_observation_matrix: np.ndarray = np.array([])
 
         logger.info("CoevolutionOrchestrator initialized successfully")
 
@@ -246,7 +246,7 @@ class CoevolutionOrchestrator:
             crossover_rate=self.config.code_crossover_rate,
             mutation_rate=self.config.code_mutation_rate,
             edit_rate=self.config.code_edit_rate,
-            observation_matrix=self.observation_matrix,
+            observation_matrix=self.last_observation_matrix,
             population_type="code",
         )
 
@@ -256,9 +256,6 @@ class CoevolutionOrchestrator:
 
         Delegates to ReproductionStrategy for the actual offspring generation.
         Adjusts offspring count to ensure it fits within remaining population space.
-
-        Note: Edit operation for tests is not yet implemented. The feedback_generator
-        is a placeholder that will be replaced when test feedback generation is ready.
 
         Args:
             elite_count: Number of elite individuals being preserved
@@ -276,7 +273,7 @@ class CoevolutionOrchestrator:
             other_population=self.code_population,
             execution_results=self.last_execution_results,
             feedback_generator=generate_feedback_for_test,
-            observation_matrix=self.observation_matrix,
+            observation_matrix=self.last_observation_matrix,
             offspring_size=test_offspring_size,
             crossover_rate=self.config.test_crossover_rate,
             mutation_rate=self.config.test_mutation_rate,
@@ -431,18 +428,18 @@ class CoevolutionOrchestrator:
             logger.info("STEP 3: Generating observation matrix")
             logger.info("-" * 80)
 
-            self.observation_matrix = generate_observation_matrix(
+            self.last_observation_matrix = generate_observation_matrix(
                 execution_results,
                 self.code_population.size,
                 self.test_population.size,
             )
 
             # Log observation matrix statistics
-            total_tests = self.observation_matrix.size
-            passed_tests = np.sum(self.observation_matrix)
+            total_tests = self.last_observation_matrix.size
+            passed_tests = np.sum(self.last_observation_matrix)
             pass_rate = passed_tests / total_tests if total_tests > 0 else 0
             logger.info(
-                f"Observation matrix: {self.observation_matrix.shape}, "
+                f"Observation matrix: {self.last_observation_matrix.shape}, "
                 f"pass_rate={pass_rate:.2%} ({passed_tests}/{total_tests})"
             )
 
@@ -455,7 +452,10 @@ class CoevolutionOrchestrator:
             prior_test_probs = self.test_population.probabilities.copy()
 
             posterior_code_probs, posterior_test_probs = update_population_beliefs(
-                prior_code_probs, prior_test_probs, self.observation_matrix, self.config
+                prior_code_probs,
+                prior_test_probs,
+                self.last_observation_matrix,
+                self.config,
             )
 
             # Update populations with new probabilities
@@ -487,7 +487,7 @@ class CoevolutionOrchestrator:
             # Test elites: use Pareto front
             # set the discriminations before getting pareto front
             discrimination_scores = compute_test_discriminations(
-                self.observation_matrix
+                self.last_observation_matrix
             )
             self.test_population.set_discriminations(discrimination_scores)
             test_pareto_front = self.test_population.get_pareto_front()
