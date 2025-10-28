@@ -2,7 +2,10 @@
 
 import ast
 import logging
+import re
 from typing import List, Optional
+
+from lcb_runner.benchmarks.code_generation import Test, TestType
 
 from .exceptions import CodeParsingError, CodeTransformationError
 
@@ -346,3 +349,144 @@ def rebuild_unittest_with_new_methods(
     rebuilt_code = ast.unparse(tree)
 
     return rebuilt_code
+
+
+# --- FOR LCB Specific Test Cases, Building Test Block ---
+def _convert_to_unittest_from_stdin_tests(test_cases: List[Test]) -> str:
+    """
+    Converts a list of STDIN Test objects into a Python unittest class string.
+    This is for the actual test cases defined in LCB Problems.
+    """
+
+    if not test_cases:
+        return "# No test cases provided."
+
+    # Start building the output file string
+    output_lines = [
+        "import unittest",
+        "",
+        "class TestSolution(unittest.TestCase):",
+        "    def setUp(self):",
+        "        self.solution = Solution()",
+        "",
+    ]
+
+    # Loop through each test object and create a method
+    for i, test_obj in enumerate(test_cases, 1):
+        method_name = f"test_case_{i}"
+
+        # Get input/output directly from the object attributes
+        # Use repr() to create a valid, escaped Python string literal
+        input_literal = repr(test_obj.input)
+        output_literal = repr(test_obj.output)
+
+        test_method = [
+            f"    def {method_name}(self):",
+            f"        input_str = {input_literal}",
+            f"        expected_output = {output_literal}",
+            "        self.assertEqual(self.solution.sol(input_str), expected_output)",
+            "",
+        ]
+        output_lines.extend(test_method)
+
+    # Add the main block to run the tests
+    output_lines.extend(
+        [
+            "if __name__ == '__main__':",
+            # Using argv and exit is robust for running in various environments
+            "    unittest.main(verbosity=2)",
+        ]
+    )
+
+    # Join all lines into a single string
+    return "\n".join(output_lines)
+
+
+def _convert_to_unittest_functional_tests(
+    test_cases: List[Test], starter_code: str
+) -> str:
+    """
+    Converts a list of FUNCTIONAL Test objects into a Python unittest class string.
+    """
+
+    # 1. Parse the starter code to find class and method names
+    class_match = re.search(r"class\s+(\w+):", starter_code)
+    # Regex to find the first method defined with 'self'
+    method_match = re.search(r"def\s+(\w+)\s*\(\s*self\s*[,)]", starter_code)
+
+    if not class_match or not method_match:
+        return "# Error: Could not parse class and method name from starter code."
+
+    class_name = class_match.group(1)
+    method_name = method_match.group(1)
+
+    # 2. Build the output file string
+    output_lines = [
+        "import unittest",
+        "from typing import * # Import common types for function signatures",
+        "",
+        f"class Test{class_name}(unittest.TestCase):",
+        "    def setUp(self):",
+        f"        self.solution = {class_name}()",
+        "",
+    ]
+
+    # 3. Loop through each test object and create a method
+    for i, test_obj in enumerate(test_cases, 1):
+        method_name_test = f"test_case_{i}"
+
+        # Get the list of string-based arguments
+        input_args_list = test_obj.input.split("\n")
+
+        # Create repr() strings for the generated code
+        input_lines_repr = repr(input_args_list)
+        expected_output_repr = repr(test_obj.output)
+
+        test_method = [
+            f"    def {method_name_test}(self):",
+            f"        # Original Input: {repr(test_obj.input)}",
+            f"        input_lines = {input_lines_repr}",
+            "        args = [eval(line) for line in input_lines]",
+            f"        expected_output = eval({expected_output_repr})",
+            f"        self.assertEqual(self.solution.{method_name}(*args), expected_output)",
+            "",
+        ]
+        output_lines.extend(test_method)
+
+    # 4. Add the main block to run the tests
+    output_lines.extend(
+        [
+            "if __name__ == '__main__':",
+            "    unittest.main(verbosity=2)",
+        ]
+    )
+
+    # Join all lines into a single string
+    return "\n".join(output_lines)
+
+
+# -- public api for building unittest block for lcb problems -- #
+def build_unittest_block_for_lcb_problem_from_given_tests(
+    test_cases: List[Test], starter_code: str | None = None
+) -> str:
+    """
+    Dispatches to the correct unittest generation function based on test type.
+    """
+    if not test_cases:
+        return "# No test cases provided."
+
+    # Check the type of the first test case
+    first_test_type = test_cases[0].testtype
+
+    if first_test_type == TestType.FUNCTIONAL:
+        if not starter_code:
+            return "# Error: Functional test cases require starter_code."
+        # Call the functional test generator
+        return _convert_to_unittest_functional_tests(test_cases, starter_code)
+
+    elif first_test_type == TestType.STDIN:
+        # Call the STDIN test generator (starter_code is ignored)
+        return _convert_to_unittest_from_stdin_tests(test_cases)
+
+    else:
+        return f"# Error: Unknown test type '{first_test_type}'."
