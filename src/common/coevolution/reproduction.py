@@ -14,8 +14,12 @@ Design:
 - Selection-agnostic: Uses provided selection strategy
 - Symmetric: Code and test offspring generation use the same interface
   (both require the "other" population for feedback in edit operations)
+- Parallelized: Uses ThreadPoolExecutor for concurrent offspring generation
+- feedback_generator: A callable to generate feedback for edit operations, needs to follow the signature:
+    feedback_generator(observation_matrix, execution_results, other_population, parent_idx) -> str
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
@@ -73,6 +77,81 @@ class ReproductionStrategy:
         self.operator = operator
         self.initial_prior = initial_prior
 
+    def _generate_single_offspring(
+        self,
+        idx: int,
+        population: BasePopulation,
+        other_population: BasePopulation,
+        execution_results: Dict[int, TestExecutionResult],
+        feedback_generator: Callable[..., str],
+        observation_matrix: np.ndarray | None,
+        crossover_rate: float,
+        mutation_rate: float,
+        edit_rate: float,
+        population_type: str,
+    ) -> Tuple[Tuple[str, float], int]:
+        """
+        Generate a single offspring using genetic operators.
+
+        Args:
+            idx: Index of the offspring being generated (for logging).
+            population: Population to generate offspring from.
+            other_population: Complementary population for feedback generation.
+            execution_results: Execution results for feedback generation.
+            feedback_generator: Function to generate feedback for edit operations.
+            observation_matrix: Observation matrix for feedback generation.
+            crossover_rate: Probability of applying crossover as primary operation.
+            mutation_rate: Probability of applying mutation after primary operation.
+            edit_rate: Probability of applying edit as primary operation.
+            population_type: Type name for logging (e.g., "code", "test").
+
+        Returns:
+            A tuple containing the offspring (individual, probability) and its index.
+        """
+        rand = np.random.random()
+        operation = ""
+
+        if rand < crossover_rate:
+            # Apply crossover
+            parent1_idx, parent2_idx = self.selector.select_parents(
+                population.probabilities
+            )
+            parent1 = population.individuals[parent1_idx]
+            parent2 = population.individuals[parent2_idx]
+            parent1_prob = float(population.probabilities[parent1_idx])
+            parent2_prob = float(population.probabilities[parent2_idx])
+
+            child = self.operator.crossover(parent1, parent2)
+            child_prob = max(min(parent1_prob, parent2_prob), self.initial_prior)
+            operation = "crossover"
+
+        elif rand < crossover_rate + edit_rate:
+            # Apply edit operation using feedback
+            parent_idx = self.selector.select(population.probabilities)
+            parent = population.individuals[parent_idx]
+            parent_prob = float(population.probabilities[parent_idx])
+
+            feedback = feedback_generator(
+                observation_matrix, execution_results, other_population, parent_idx
+            )
+            child = self.operator.edit(parent, feedback)
+            child_prob = max(parent_prob, self.initial_prior)
+            operation = "edit"
+
+        else:
+            # Reproduction (copy without modification)
+            child_idx = self.selector.select(population.probabilities)
+            child = population.individuals[child_idx]
+            child_prob = float(population.probabilities[child_idx])
+            operation = "reproduction"
+
+        # Apply mutation independently with probability mutation_rate
+        if np.random.random() < mutation_rate:
+            child = self.operator.mutate(child)
+            operation += "+mutation"
+
+        return (child, child_prob), idx
+
     def generate_offspring(
         self,
         population: BasePopulation,
@@ -100,103 +179,58 @@ class ReproductionStrategy:
         - feedback_generator: Function to generate feedback for edit operations
 
         Args:
-            population: Population to generate offspring from
-            other_population: The complementary population for feedback generation
-            execution_results: Execution results for feedback generation
+            population: Population to generate offspring from.
+            other_population: Complementary population for feedback generation.
+            execution_results: Execution results for feedback generation.
             feedback_generator: Function to generate feedback for edit operations.
-                              Expected signature: (execution_result, other_population, individual_idx) -> feedback_str
-                              The actual population types can be specific (TestPopulation, CodePopulation)
-            offspring_size: Number of offspring to generate
-            crossover_rate: Probability of applying crossover as primary operation
-            mutation_rate: Probability of applying mutation after primary operation
-            edit_rate: Probability of applying edit as primary operation
-            population_type: Type name for logging (e.g., "code", "test")
+            observation_matrix: Observation matrix for feedback generation.
+            offspring_size: Number of offspring to generate.
+            crossover_rate: Probability of applying crossover as primary operation.
+            mutation_rate: Probability of applying mutation after primary operation.
+            edit_rate: Probability of applying edit as primary operation.
+            population_type: Type name for logging (e.g., "code", "test").
 
         Returns:
-            List of (offspring_individual, probability) tuples
+            List of (offspring_individual, probability) tuples.
         """
         logger.info(
             f"Generating {offspring_size} {population_type} offspring "
-            f"(crossover={crossover_rate:.2f}, "
-            f"mutation={mutation_rate:.2f}, "
-            f"edit={edit_rate:.2f})"
+            f"(crossover={crossover_rate:.2f}, mutation={mutation_rate:.2f}, edit={edit_rate:.2f})"
         )
 
         offspring = []
-        for i in range(offspring_size):
-            rand = np.random.random()
-            operation = ""
-
-            if rand < crossover_rate:
-                # Apply crossover
-                logger.debug(f"offspring {i + 1}: selecting parents for crossover")
-                parent1_idx, parent2_idx = self.selector.select_parents(
-                    population.probabilities
-                )
-                parent1 = population.individuals[parent1_idx]
-                parent2 = population.individuals[parent2_idx]
-                parent1_prob = float(population.probabilities[parent1_idx])
-                parent2_prob = float(population.probabilities[parent2_idx])
-
-                child = self.operator.crossover(parent1, parent2)
-
-                # Prior is max of (min of parent probs, initial_prior)
-                child_prob = max(min(parent1_prob, parent2_prob), self.initial_prior)
-                operation = "crossover"
-                logger.trace(
-                    f"{population_type.capitalize()} offspring {i + 1}: crossover "
-                    f"(parent probs: {parent1_prob:.4f}, {parent2_prob:.4f} → {child_prob:.4f})"
-                )
-
-            elif rand < crossover_rate + edit_rate:
-                # Apply edit operation using feedback
-                logger.debug(f"offspring {i + 1}: selecting parent for edit")
-                parent_idx = self.selector.select(population.probabilities)
-                parent = population.individuals[parent_idx]
-                parent_prob = float(population.probabilities[parent_idx])
-
-                # Generate feedback for the parent individual
-                feedback = feedback_generator(
-                    observation_matrix,
-                    execution_results,
+        with ThreadPoolExecutor(max_workers=offspring_size) as executor:
+            logger.info(
+                f"Using ThreadPoolExecutor with {offspring_size} workers for offspring generation"
+            )
+            futures = {
+                executor.submit(
+                    self._generate_single_offspring,
+                    i,
+                    population,
                     other_population,
-                    parent_idx,
-                )
+                    execution_results,
+                    feedback_generator,
+                    observation_matrix,
+                    crossover_rate,
+                    mutation_rate,
+                    edit_rate,
+                    population_type,
+                ): i
+                for i in range(offspring_size)
+            }
 
-                # Use LLM to edit based on feedback
-                child = self.operator.edit(parent, feedback)
-
-                # Prior is max of (parent prob, initial_prior)
-                child_prob = max(parent_prob, self.initial_prior)
-                operation = "edit"
-                logger.trace(
-                    f"{population_type.capitalize()} offspring {i + 1}: edit with feedback "
-                    f"({len(feedback)} chars, parent prob: {parent_prob:.4f} → {child_prob:.4f})"
-                )
-
-            else:
-                # Reproduction (copy without modification)
-                logger.debug(f"offspring {i + 1}: selecting parent for reproduction")
-                child_idx = self.selector.select(population.probabilities)
-                child = population.individuals[child_idx]
-                child_prob = float(population.probabilities[child_idx])
-                operation = "reproduction"
-                logger.trace(
-                    f"{population_type.capitalize()} offspring {i + 1}: reproduction "
-                    f"(prob: {child_prob:.4f})"
-                )
-
-            # Apply mutation independently with probability mutation_rate
-            if np.random.random() < mutation_rate:
-                logger.debug(f"offspring {i + 1}: chosen for mutation")
-                child = self.operator.mutate(child)
-                operation += "+mutation"
-                logger.trace(
-                    f"{population_type.capitalize()} offspring {i + 1}: mutation applied "
-                    f"(after {operation.split('+')[0]})"
-                )
-
-            offspring.append((child, child_prob))
+            for future in as_completed(futures):
+                try:
+                    result, idx = future.result()
+                    offspring.append(result)
+                    logger.debug(
+                        f"Offspring {idx + 1}/{offspring_size} generated successfully."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error generating offspring {futures[future] + 1}: {e}"
+                    )
 
         logger.debug(f"Generated {len(offspring)} {population_type} offspring")
         return offspring

@@ -1,18 +1,18 @@
 """
 Coevolution orchestrator for code-test evolutionary algorithms.
 
-This module provides the main orchestrator class that coordinates the coevolution
-of code solutions and test cases using Bayesian belief updating and genetic
-operators.
+This module provides the `CoevolutionOrchestrator`, the central class that
+manages the co-evolutionary process. It coordinates multiple components
+(populations, operators, evaluation, selection, and Bayesian inference)
+to simultaneously evolve populations of code solutions and test cases.
 
-The orchestrator manages:
-- Initial population generation for both code and test
-- Observation matrix generation through code execution
-- Bayesian belief updates based on test results
-- Genetic operations (crossover, mutation, edit) with configurable rates
-- Selection strategies for parent selection
-- Elitism to preserve best individuals
-- Generation cycling and termination
+Key Responsibilities:
+- Manages the entire evolutionary loop, iterating through generations.
+- Initializes code and test case populations using an LLM.
+- Orchestrates evaluation by running code against generated, public, and private tests.
+- Updates population beliefs (fitness) using Bayesian inference based on test outcomes.
+- Performs selection, including elitism for code and Pareto front selection for tests.
+- Coordinates reproduction (crossover, mutation, edit) using LLM-based operators.
 
 Example:
     >>> from common.llm_client import LLMClient
@@ -248,7 +248,7 @@ class CoevolutionOrchestrator:
 
         # Calculate remaining space after elites
         remaining_space = self.config.max_code_population_size - elite_count
-        # Adjust offspring count to fit remaining space (Option 3: offspring fills remainder)
+        # Adjust offspring count to fit remaining space
         actual_offspring_count = min(self.config.code_offspring_count, remaining_space)
 
         return self.code_reproduction.generate_offspring(
@@ -572,10 +572,10 @@ class CoevolutionOrchestrator:
            - Selects elite individuals
            - Generates offspring using genetic operators
            - Creates next generation from elites and offspring
-        3. Returns the best code solution and test case
+        3. Returns the final populations.
 
         Returns:
-            tuple of (best_code, best_code_prob, best_test, best_test_prob)
+            tuple of (final_code_population, final_test_population)
 
         Raises:
             RuntimeError: If algorithm encounters unrecoverable errors
@@ -614,7 +614,7 @@ class CoevolutionOrchestrator:
 
             self._eval_against_generated_tests()
             self._eval_against_public_tests()
-            self._log_against_private_test_cases()
+            self._log_against_private_test_cases()  # Optional logging against private tests each generation
 
             # Step 3: Update population beliefs using Bayesian updates
             logger.info("-" * 80)

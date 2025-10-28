@@ -6,7 +6,7 @@ where both code and test populations evolve simultaneously with mutual
 evaluation and belief updates.
 
 The public-facing functions operate in probability space for user convenience,
-while internal calculations are performed in log-odds space for numerical stability.
+while internal calculations are performed in log-odds space for numerical stability and efficiency.
 """
 
 from typing import Tuple
@@ -354,7 +354,6 @@ def update_population_beliefs(
     return posterior_code_probs, posterior_test_probs
 
 
-# --- NEW PUBLIC FUNCTION ---
 def update_code_population_beliefs(
     prior_code_probs: np.ndarray,
     prior_test_probs: np.ndarray,

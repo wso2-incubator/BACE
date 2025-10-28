@@ -562,11 +562,6 @@ class TestPopulation(BasePopulation):
             logger.error(msg)
             raise ValueError(msg)
 
-        if not np.all(np.isfinite(new_discriminations)):
-            msg = "Discriminations contain non-finite values"
-            logger.error(msg)
-            raise ValueError(msg)
-
         if np.any(new_discriminations < 0) or np.any(new_discriminations > 1):
             msg = "Discriminations must be in the range [0, 1]"
             logger.error(msg)
@@ -586,7 +581,6 @@ class TestPopulation(BasePopulation):
             else 0.0
         )
 
-        # This existing log is great, captures the state change perfectly
         logger.debug(
             f"Updated discriminations for generation {self.generation}: "
             f"avg {old_avg:.4f} → {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
@@ -643,9 +637,6 @@ class TestPopulation(BasePopulation):
             )
             indices = filtered
         else:
-            # TODO: This step may not be required as pareto front should ideally contain
-            # at least one individual above average probability, unless all are equal
-
             logger.debug(
                 f"No individuals above average probability; "
                 f"returning original front of {len(indices)} individuals"
@@ -848,6 +839,9 @@ class TestPopulation(BasePopulation):
         )
 
 
+# Factory Functions for common population initializations
+
+
 def create_actual_test_population_from_lcb_problem(
     lcb_problem: CodeGenerationProblem,
     test_type: Literal["public", "private"] = "public",
@@ -861,8 +855,8 @@ def create_actual_test_population_from_lcb_problem(
     using Bayesian prior beliefs.
 
     Args:
-        lcb_problem: CodeGenerationProblem instance containing private tests
-
+        lcb_problem: CodeGenerationProblem instance containing private tests, public tests, and starter code
+        test_type: Type of tests to use for the population ("public" or "private")
     Returns:
         TestPopulation initialized with private test methods and prior probabilities
     """

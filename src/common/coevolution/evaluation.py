@@ -1,21 +1,20 @@
 """
 Code and test evaluation using a sandbox environment.
 
-This module has been refactored into a two-phase process:
 
 1. execute_code_against_tests(): Execute code against tests and return detailed results
 2. generate_observation_matrix(): Transform execution results into a binary matrix
-
-This separation allows:
-- Reusing execution results for multiple purposes (observation matrix, feedback, etc.)
-- Pure functions that are easier to test and reason about
-- Flexible result consumption by different parts of the system
+3. compute_code_pass_rates(): Compute pass rates for each code snippet
+4. compute_test_pass_rates(): Compute pass rates for each test case
+5. compute_test_discriminations(): Compute discrimination (entropy) for each test case
 
 The observation matrix is used for Bayesian belief updates.
 For LLM feedback generation, see feedback.py.
 """
 
-from typing import Dict
+import multiprocessing
+import os
+from typing import Optional
 
 import numpy as np
 from loguru import logger
@@ -25,67 +24,125 @@ from common.coevolution.population import CodePopulation, TestPopulation
 from common.sandbox import SafeCodeSandbox, TestExecutionResult
 
 
+def _execute_single_code(
+    code_idx: int,
+    code_snippet: str,
+    test_class_block: str,
+    sandbox: SafeCodeSandbox,
+) -> tuple[int, Optional[TestExecutionResult]]:
+    """
+    Worker function to execute a single code snippet against the test suite.
+
+    Args:
+        args: A tuple containing (code_idx, code_snippet, test_class_block, sandbox)
+
+    Returns:
+        A tuple containing (code_idx, execution_result) or (code_idx, None) if execution failed.
+    """
+    try:
+        logger.trace(f"Worker (PID {os.getpid()}): Evaluating code {code_idx}")
+        script = builders.build_test_script_for_lcb(code_snippet, test_class_block)
+        execution_result = sandbox.execute_test_script(script)
+        logger.trace(f"Worker (PID {os.getpid()}): Finished code {code_idx}")
+        return code_idx, execution_result
+    except Exception as e:
+        # Log the error and return None for the result part
+        logger.error(
+            f"Worker (PID {os.getpid()}): Error evaluating code {code_idx}: {e}",
+            exc_info=True,
+        )
+        return code_idx, None  # Return None on failure
+
+
+# --- Main Evaluation Function ---
+
+
 def execute_code_against_tests(
     code_population: CodePopulation,
     test_population: TestPopulation,
     sandbox: SafeCodeSandbox,
-) -> Dict[int, TestExecutionResult]:
+) -> dict[int, TestExecutionResult]:
     """
-    Execute each code snippet against all tests and collect detailed results.
-
-    This function performs the actual code execution and returns comprehensive
-    results including test outcomes, error messages, and execution details.
-    The results can be used both for generating observation matrices and for
-    providing feedback to LLM-based editing operations.
+    Execute each code snippet against all tests using multiprocessing and collect detailed results.
+    Failed executions within workers are excluded from the results dictionary.
 
     Args:
-        code_population: Population of code snippets to test
-        test_population: Population of test cases to run
-        sandbox: Safe execution environment for testing code
+        code_population: Population of code snippets to test.
+        test_population: Population of test cases (provides the test_class_block).
+        sandbox: Safe execution environment instance.
 
     Returns:
-        Dictionary mapping code index to TestExecutionResult.
-        Each TestExecutionResult contains:
-        - test_results: List of individual test outcomes
-        - tests_passed/failed/errors: Aggregate counts
-        - Detailed error messages and tracebacks for failures
-
-    Example:
-        >>> results = execute_code_against_tests(codes, tests, sandbox)
-        >>> results[0].test_results[0].status  # 'passed', 'failed', or 'error'
-        >>> results[0].test_results[0].details  # Error message if failed
+        dictionary mapping code index to TestExecutionResult for successfully executed codes.
     """
-    execution_results: Dict[int, TestExecutionResult] = {}
+    execution_results_dict: dict[int, TestExecutionResult] = {}
+    total_evaluations = code_population.size * test_population.size
+    num_codes_to_run = code_population.size
+
+    # Determine the number of workers: use CPU count, capped by population size
+    try:
+        cpu_count = os.cpu_count() or 1
+    except NotImplementedError:
+        cpu_count = 1
+    num_workers = min(cpu_count, num_codes_to_run)
 
     logger.info(
-        f"Executing code against tests: {code_population.size} code × "
-        f"{test_population.size} tests = "
-        f"{code_population.size * test_population.size} evaluations"
+        f"Executing code against tests: {num_codes_to_run} code x "
+        f"{test_population.size} tests = {total_evaluations} evaluations "
+        f"using {num_workers} workers."
     )
 
-    for code_idx, (code_snippet, _) in enumerate(code_population):
-        logger.debug(f"Evaluating code snippet {code_idx + 1}/{code_population.size}")
+    # Prepare arguments for each task
+    tasks = [
+        (code_idx, code_snippet, test_population.test_class_block, sandbox)
+        for code_idx, (code_snippet, _) in enumerate(code_population)
+    ]
 
-        script = builders.build_test_script_for_lcb(
-            code_snippet, test_population.test_class_block
+    results: list[tuple[int, Optional[TestExecutionResult]]] = []
+    failed_indices = []
+    try:
+        # Use context manager for pool cleanup
+        # Using 'spawn' context can improve stability on some OSes
+        # context = multiprocessing.get_context("spawn")
+        # with context.Pool(processes=num_workers) as pool:
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            # starmap applies the worker function to each item in tasks
+            results = pool.starmap(_execute_single_code, tasks)
+
+    except Exception as e:
+        logger.error(
+            f"Multiprocessing pool encountered a fatal error: {e}", exc_info=True
         )
-        execution_result = sandbox.execute_test_script(script)
+        # In case of catastrophic pool failure, return empty results
+        return {}
+    finally:
+        logger.debug("Multiprocessing pool processing complete.")
 
-        # Store the complete execution result
-        execution_results[code_idx] = execution_result
-
-        # Log individual test outcomes at trace level
-        for test_idx, test in enumerate(execution_result.test_results):
-            logger.trace(
-                f"Code {code_idx}, Test {test_idx} ({test.name}): {test.status}"
+    # Convert list of results back to dictionary, handling None for failures
+    for code_idx, execution_result in results:
+        if execution_result is not None:
+            execution_results_dict[code_idx] = execution_result
+        else:
+            # Keep track of indices that failed in the worker
+            failed_indices.append(code_idx)
+            logger.warning(
+                f"Execution failed for code index {code_idx} in worker process."
             )
 
-    logger.debug(f"Completed executing {len(execution_results)} code snippets")
-    return execution_results
+    successful_evals = len(execution_results_dict)
+    failed_evals = len(failed_indices)
+
+    logger.info(
+        f"Completed executing {num_codes_to_run} code snippets. Successful executions: {successful_evals}, Failed executions: {failed_evals}."
+    )
+    # Detailed logging for failures if any occurred
+    if failed_evals > 0:
+        logger.warning(f"Failed execution indices: {failed_indices}")
+
+    return execution_results_dict
 
 
 def generate_observation_matrix(
-    execution_results: Dict[int, TestExecutionResult],
+    execution_results: dict[int, TestExecutionResult],
     num_codes: int,
     num_tests: int,
 ) -> np.ndarray:
@@ -96,7 +153,7 @@ def generate_observation_matrix(
     where entry [i,j] is 1 if code i passed test j, else 0.
 
     Args:
-        execution_results: Dictionary mapping code index to TestExecutionResult
+        execution_results: dictionary mapping code index to TestExecutionResult
                           (output from execute_code_against_tests)
         num_codes: Size of code population (number of rows)
         num_tests: Size of test population (number of columns)

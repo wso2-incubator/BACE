@@ -754,6 +754,16 @@ class SafeCodeSandbox:
             execution_time = time.time() - start_time
 
             # Limit output size
+            if len(result.stdout) > self.max_output_size:
+                logger.warning(
+                    f"Truncating stdout from {len(result.stdout)} to {self.max_output_size} characters"
+                )
+
+            if len(result.stderr) > self.max_output_size:
+                logger.warning(
+                    f"Truncating stderr from {len(result.stderr)} to {self.max_output_size} characters"
+                )
+
             stdout = result.stdout[: self.max_output_size] if result.stdout else ""
             stderr = result.stderr[: self.max_output_size] if result.stderr else ""
 
@@ -909,9 +919,9 @@ def create_safe_test_environment() -> SafeCodeSandbox:
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=60,  # 60 seconds max
+        timeout=120,  # 120 seconds max
         max_memory_mb=100,  # 100MB max memory
-        max_output_size=10000,  # 10KB max output
+        max_output_size=1_000_000,  # 1MB max output
         allowed_imports=[
             "math",
             "random",
@@ -943,7 +953,7 @@ def create_test_executor() -> TestExecutor:
     return TestExecutor(
         timeout=30,  # 30 seconds max
         max_memory_mb=100,  # 100MB max memory
-        max_output_size=10000,  # 10KB max output
+        max_output_size=1_000_000,  # 1MB max output
         allowed_imports=[
             "math",
             "random",
@@ -976,15 +986,15 @@ def check_test_execution_status(result: TestExecutionResult) -> str:
         String describing the execution status
     """
     if result.script_error:
-        return f"❌ SCRIPT ERROR: {result.summary}"
+        return f"SCRIPT ERROR: {result.summary}"
     elif result.has_failures:
-        return f"⚠️  TESTS FAILED: {result.tests_passed} passed, {result.tests_failed} failed, {result.tests_errors} errors"
+        return f"TESTS FAILED: {result.tests_passed} passed, {result.tests_failed} failed, {result.tests_errors} errors"
     elif result.all_tests_passed:
-        return f"✅ ALL TESTS PASSED: {result.tests_passed} tests successful"
+        return f"ALL TESTS PASSED: {result.tests_passed} tests successful"
     elif result.total_tests == 0:
-        return "⚪ NO TESTS: No test cases found or executed"
+        return "NO TESTS: No test cases found or executed"
     else:
-        return f"❓ UNKNOWN STATUS: {result.summary}"
+        return f"UNKNOWN STATUS: {result.summary}"
 
 
 # Example usage
