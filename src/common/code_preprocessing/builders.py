@@ -5,7 +5,8 @@ import logging
 import re
 from typing import List, Optional
 
-from lcb_runner.benchmarks.code_generation import Test, TestType
+from lcb_runner.benchmarks.code_generation import Test  # type: ignore
+from lcb_runner.benchmarks.code_generation import TestType
 
 from .exceptions import CodeParsingError, CodeTransformationError
 
