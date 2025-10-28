@@ -1,13 +1,11 @@
 """Transform and extract code segments using AST."""
 
 import ast
-import logging
 from typing import List
 
-from .exceptions import CodeParsingError, CodeTransformationError
+from loguru import logger
 
-# Setup logging
-log = logging.getLogger(__name__)
+from .exceptions import CodeParsingError, CodeTransformationError
 
 
 def extract_function_with_helpers(code_string: str, target_function_name: str) -> str:
@@ -35,7 +33,7 @@ def extract_function_with_helpers(code_string: str, target_function_name: str) -
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing code: {e}")
+        logger.error(f"Syntax error parsing code: {e}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # Find target function and helpers
@@ -53,7 +51,7 @@ def extract_function_with_helpers(code_string: str, target_function_name: str) -
                 helper_functions.append(node)
 
     if target_function is None:
-        log.error(f"Target function '{target_function_name}' not found")
+        logger.error(f"Target function '{target_function_name}' not found")
         raise CodeTransformationError(
             f"Target function '{target_function_name}' not found"
         )
@@ -108,7 +106,7 @@ def extract_class_block(code_string: str) -> str:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing code: {e}")
+        logger.error(f"Syntax error parsing code: {e}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # Find first class definition
@@ -116,7 +114,7 @@ def extract_class_block(code_string: str) -> str:
         if isinstance(node, ast.ClassDef):
             return ast.unparse(node)
 
-    log.error("No class definition found in code")
+    logger.error("No class definition found in code")
     raise CodeTransformationError("No class definition found in code")
 
 
@@ -147,7 +145,7 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing test code: {e}")
+        logger.error(f"Syntax error parsing test code: {e}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -158,7 +156,7 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
             break
 
     if class_node is None:
-        log.error("No class definition found in test code")
+        logger.error("No class definition found in test code")
         raise CodeTransformationError("No class definition found in test code")
 
     # Build new class body: non-test elements + new test methods
@@ -182,9 +180,9 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
             if method_tree.body and isinstance(method_tree.body[0], ast.FunctionDef):
                 new_body.append(method_tree.body[0])
             else:
-                log.warning(f"Invalid test method code: {test_method_str[:50]}...")
+                logger.warning(f"Invalid test method code: {test_method_str[:50]}...")
         except SyntaxError as e:
-            log.warning(f"Failed to parse test method: {e}")
+            logger.warning(f"Failed to parse test method: {e}")
             continue
 
     # Update class body
@@ -192,3 +190,42 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
 
     # Return the unparsed class
     return ast.unparse(class_node)
+
+
+def remove_if_main_block(code_string: str) -> str:
+    """
+    Remove the 'if __name__ == "__main__":' block from the code string.
+
+    Args:
+        code_string: Python source code
+    Returns:
+        Code string without the main block
+    """
+
+    try:
+        tree = ast.parse(code_string)
+    except SyntaxError as e:
+        logger.error(f"Syntax error parsing code: {e}")
+        raise CodeParsingError(f"Failed to parse code: {e}") from e
+
+    # Filter out the if __name__ == "__main__": block
+    new_body = []
+    for node in tree.body:
+        if isinstance(node, ast.If):
+            # Check if this is the main block
+            if (
+                isinstance(node.test, ast.Compare)
+                and isinstance(node.test.left, ast.Name)
+                and node.test.left.id == "__name__"
+                and len(node.test.ops) == 1
+                and isinstance(node.test.ops[0], ast.Eq)
+                and len(node.test.comparators) == 1
+                and isinstance(node.test.comparators[0], ast.Constant)
+                and node.test.comparators[0].value == "__main__"
+            ):
+                logger.debug("Found and skipping if __name__ == '__main__' block")
+                continue  # Skip this block
+        new_body.append(node)
+
+    tree.body = new_body
+    return ast.unparse(tree)
