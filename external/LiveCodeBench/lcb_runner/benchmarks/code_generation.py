@@ -126,7 +126,7 @@ def load_code_generation_dataset(
     release_version: str = "release_v5",
     start_date: str | None = None,
     end_date: str | None = None,
-    diffulty: Difficulty | None = None,
+    difficulty: Difficulty | None = None,
 ) -> list[CodeGenerationProblem]:
     dataset = load_dataset(
         "livecodebench/code_generation_lite",
@@ -150,9 +150,9 @@ def load_code_generation_dataset(
     dataset = [CodeGenerationProblem(**p) for p in dataset]
 
     # Filter only problems with difficulty hard. TODO: Make this configurable.
-    if diffulty is not None:
-        dataset = [e for e in dataset if e.difficulty == diffulty]
-        logger.info("Filtered problems by difficulty: %s", diffulty.value)
+    if difficulty is not None:
+        dataset = [e for e in dataset if e.difficulty == difficulty]
+        logger.info(f"Filtered problems by difficulty: {difficulty.value}")
 
     if start_date is not None:
         p_start_date = datetime.strptime(start_date, "%Y-%m-%d")
@@ -162,7 +162,7 @@ def load_code_generation_dataset(
         p_end_date = datetime.strptime(end_date, "%Y-%m-%d")
         dataset = [e for e in dataset if e.contest_date <= p_end_date]
 
-    logger.info("Loaded %d problems", len(dataset))
+    logger.info(f"Loaded {len(dataset)} problems")
     return dataset
 
 
