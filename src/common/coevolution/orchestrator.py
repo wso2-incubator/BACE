@@ -409,7 +409,7 @@ class CoevolutionOrchestrator:
 
     def _eval_against_public_tests(self) -> None:
         """
-        Evaluate code population against public test cases and update beliefs.
+        Evaluate code population against public test cases.
         """
 
         assert self.code_population is not None, "Code population must be initialized"
@@ -452,7 +452,7 @@ class CoevolutionOrchestrator:
 
     def _eval_against_generated_tests(self) -> None:
         """
-        Evaluate both populations against generated test cases and update beliefs.
+        Evaluate both populations against generated test cases
         """
 
         assert self.code_population is not None, "Code population must be initialized"
