@@ -34,7 +34,6 @@ def main() -> None:
         rotation="100 MB",  # New file every 100 MB
         retention="10 days",  # Keep logs for 10 days
         compression="zip",  # Compress old logs
-        enqueue=True,  # Makes logging asynchronous (non-blocking)
     )
 
     logger.info("=" * 80)
@@ -46,7 +45,7 @@ def main() -> None:
     dataset = code_generation.load_code_generation_dataset(
         release_version="release_v5",
         start_date="2024-01-01",
-        diffulty=code_generation.Difficulty.HARD,
+        difficulty=code_generation.Difficulty.HARD,
     )
     problem = dataset[0]
 
@@ -56,7 +55,8 @@ def main() -> None:
 
     # Step 2: Create LLM client
     logger.info("Creating LLM client...")
-    llm_client = create_llm_client(provider="openai", model="gpt-5")
+    llm_model = "gpt-4.1"  # Specify the LLM model to use
+    llm_client = create_llm_client(provider="openai", model=llm_model)
     logger.info(f"Using model: {llm_client.model}")
 
     # Step 3: Create sandbox environment
@@ -92,7 +92,7 @@ def main() -> None:
         test_mutation_rate=0.3,
         test_edit_rate=0.5,
         # LLM configuration
-        llm_model="gpt-5",
+        llm_model=llm_model,
     )
 
     logger.info(
