@@ -129,6 +129,7 @@ class ReproductionStrategy:
 
             if rand < crossover_rate:
                 # Apply crossover
+                logger.debug(f"offspring {i + 1}: selecting parents for crossover")
                 parent1_idx, parent2_idx = self.selector.select_parents(
                     population.probabilities
                 )
@@ -149,6 +150,7 @@ class ReproductionStrategy:
 
             elif rand < crossover_rate + edit_rate:
                 # Apply edit operation using feedback
+                logger.debug(f"offspring {i + 1}: selecting parent for edit")
                 parent_idx = self.selector.select(population.probabilities)
                 parent = population.individuals[parent_idx]
                 parent_prob = float(population.probabilities[parent_idx])
@@ -156,7 +158,7 @@ class ReproductionStrategy:
                 # Generate feedback for the parent individual
                 feedback = feedback_generator(
                     observation_matrix,
-                    execution_results[parent_idx],
+                    execution_results,
                     other_population,
                     parent_idx,
                 )
@@ -174,6 +176,7 @@ class ReproductionStrategy:
 
             else:
                 # Reproduction (copy without modification)
+                logger.debug(f"offspring {i + 1}: selecting parent for reproduction")
                 child_idx = self.selector.select(population.probabilities)
                 child = population.individuals[child_idx]
                 child_prob = float(population.probabilities[child_idx])
@@ -185,6 +188,7 @@ class ReproductionStrategy:
 
             # Apply mutation independently with probability mutation_rate
             if np.random.random() < mutation_rate:
+                logger.debug(f"offspring {i + 1}: chosen for mutation")
                 child = self.operator.mutate(child)
                 operation += "+mutation"
                 logger.trace(
