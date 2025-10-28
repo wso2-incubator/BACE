@@ -15,7 +15,6 @@ coevolution/
 ├── selection.py         # Selection strategies for evolutionary algorithms
 ├── config.py            # Configuration parameters
 ├── README.md           # This file
-└── EVALUATION_USAGE.md # Detailed usage guide for evaluation module
 ```
 
 ## Quick Start
@@ -146,8 +145,10 @@ Configuration classes for coevolutionary algorithms.
 - `test_crossover_rate`: Probability of crossover operation (default: 0.6)
 - `test_mutation_rate`: Probability of mutation operation (default: 0.3)
 - `test_edit_rate`: Probability of edit operation based on feedback (default: 0.1)
-- `test_elitism_count`: Number of elite individuals to preserve (default: 1)
-- `test_offspring_size`: Offspring generated per generation (default: None = population_size)
+
+Note: test populations are fixed-size and do not use separate elite/offspring counts
+or a separate maximum population size. Control the size of the test population with
+`initial_test_population_size` in `CoevolutionConfig`.
 
 *LLM Configuration:*
 
@@ -199,7 +200,7 @@ config = CoevolutionConfig(
     test_crossover_rate=0.6,
     test_mutation_rate=0.3,
     test_edit_rate=0.1,
-    test_elitism_count=1,
+    
     # LLM configuration
     llm_model="gpt-4"
 )
@@ -457,7 +458,6 @@ config = CoevolutionConfig(
     code_elitism_count=2,
     test_crossover_rate=0.6,
     test_mutation_rate=0.3,
-    test_elitism_count=1,
     llm_model="gpt-4"
 )
 
