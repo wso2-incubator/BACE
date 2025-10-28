@@ -974,10 +974,11 @@ This test case:
 And this feedback:
 {feedback}
 
-Improve the test case to address the feedback.
-Only return the improved test code in a python code block."""
+Summarize the feedback and provide a single new test case method that can help identify these issues.
+Only return the new test code in a python code block"""
 
         logger.trace(f"Original test to edit:\n{individual}")
         result = self._generate_and_extract(prompt)
+
         logger.info("TestOperator: Edit completed")
         return result
