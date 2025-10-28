@@ -445,7 +445,7 @@ class CoevolutionOrchestrator:
             passed_public_tests / total_public_tests if total_public_tests > 0 else 0
         )
         logger.info(
-            f"Public Observation Matrix:\n{self.last_public_observation_matrix.shape}, "
+            f"Public Observation Matrix: {self.last_public_observation_matrix.shape}, "
             f"pass_rate={public_pass_rate:.2%} "
             f"({passed_public_tests}/{total_public_tests})"
         )
