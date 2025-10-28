@@ -861,10 +861,10 @@ class TestOperator(BaseLLMOperator):
         # Count test methods and verify we got at least the requested number
         test_count = result.count("def test_")
 
-        if test_count < population_size:
+        if test_count != population_size:
             error_msg = (
                 f"Failed to generate requested number of test methods. "
-                f"Expected at least {population_size}, got {test_count} test methods."
+                f"Expected {population_size}, got {test_count} test methods."
             )
             logger.error(error_msg)
             raise LLMGenerationError(error_msg)
