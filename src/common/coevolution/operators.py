@@ -73,6 +73,7 @@ from common.code_preprocessing.parsers import (
     extract_all_code_blocks_from_response,
     extract_code_block_from_response,
 )
+from common.code_preprocessing.transformers import remove_if_main_block
 from common.llm_client import LLMClient
 
 # === Custom Exceptions ===
@@ -648,6 +649,10 @@ class CodeOperator(BaseLLMOperator):
         logger.info(
             f"CodeOperator: Successfully generated {len(solutions)} solutions for initial population"
         )
+
+        logger.debug("Removing if __name__ == '__main__' blocks from solutions")
+        solutions = [remove_if_main_block(sol) for sol in solutions]
+
         return solutions
 
     def mutate(self, individual: str) -> str:
