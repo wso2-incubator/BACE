@@ -32,10 +32,8 @@ Example:
     >>>
     >>> # Run coevolution
     >>> orchestrator = CoevolutionOrchestrator(config, problem, llm, sandbox)
-    >>> best_code, best_test = orchestrator.run()
+    >>> final_code_population, final_test_population = orchestrator.run()
 """
-
-from typing import Dict, List, Tuple
 
 import numpy as np
 from lcb_runner.benchmarks.code_generation import CodeGenerationProblem  # type: ignore
@@ -45,7 +43,11 @@ from common.code_preprocessing.analyzers import extract_test_methods_code
 from common.llm_client import LLMClient
 from common.sandbox import SafeCodeSandbox, TestExecutionResult
 
-from .bayesian import initialize_prior_beliefs, update_population_beliefs
+from .bayesian import (
+    initialize_prior_beliefs,
+    update_code_population_beliefs,
+    update_population_beliefs,
+)
 from .config import CoevolutionConfig
 from .evaluation import (
     compute_test_discriminations,
@@ -54,7 +56,11 @@ from .evaluation import (
 )
 from .feedback import generate_feedback_for_code, generate_feedback_for_test
 from .operators import CodeOperator, TestOperator
-from .population import CodePopulation, TestPopulation
+from .population import (
+    CodePopulation,
+    TestPopulation,
+    create_actual_test_population_from_lcb_problem,
+)
 from .reproduction import ReproductionStrategy
 from .selection import SelectionStrategy
 
@@ -132,8 +138,16 @@ class CoevolutionOrchestrator:
         self.generation = 0
 
         # Execution results for feedback (initialized in run())
-        self.last_execution_results: Dict[int, TestExecutionResult] = {}
+        self.last_execution_results: dict[int, TestExecutionResult] = {}
         self.last_observation_matrix: np.ndarray = np.array([])
+
+        # Create private and public test population from actual tests
+        self.private_test_population: TestPopulation = (
+            create_actual_test_population_from_lcb_problem(problem, test_type="private")
+        )
+        self.public_test_population: TestPopulation = (
+            create_actual_test_population_from_lcb_problem(problem, test_type="public")
+        )
 
         logger.info("CoevolutionOrchestrator initialized successfully")
 
@@ -216,7 +230,7 @@ class CoevolutionOrchestrator:
 
         return test_population
 
-    def _generate_code_offspring(self, elite_count: int) -> List[Tuple[str, float]]:
+    def _generate_code_offspring(self, elite_count: int) -> list[tuple[str, float]]:
         """
         Generate offspring for the code population using genetic operators.
 
@@ -227,7 +241,7 @@ class CoevolutionOrchestrator:
             elite_count: Number of elite individuals being preserved
 
         Returns:
-            List of (offspring_code, probability) tuples
+            list of (offspring_code, probability) tuples
         """
         assert self.code_population is not None, "Code population must be initialized"
         assert self.test_population is not None, "Test population must be initialized"
@@ -250,7 +264,7 @@ class CoevolutionOrchestrator:
             population_type="code",
         )
 
-    def _generate_test_offspring(self, elite_count: int) -> List[Tuple[str, float]]:
+    def _generate_test_offspring(self, elite_count: int) -> list[tuple[str, float]]:
         """
         Generate offspring for the test population using genetic operators.
 
@@ -261,7 +275,7 @@ class CoevolutionOrchestrator:
             elite_count: Number of elite individuals being preserved
 
         Returns:
-            List of (offspring_test, probability) tuples
+            list of (offspring_test, probability) tuples
         """
         assert self.test_population is not None, "Test population must be initialized"
         assert self.code_population is not None, "Code population must be initialized"
@@ -282,7 +296,7 @@ class CoevolutionOrchestrator:
         )
 
     def _create_next_code_generation(
-        self, elites: List[Tuple[str, float]], offspring: List[Tuple[str, float]]
+        self, elites: list[tuple[str, float]], offspring: list[tuple[str, float]]
     ) -> None:
         """
         Update the code population with the next generation from elites and offspring.
@@ -292,8 +306,8 @@ class CoevolutionOrchestrator:
         individuals are selected based on their probabilities.
 
         Args:
-            elites: List of (code, probability) tuples for elite individuals
-            offspring: List of (code, probability) tuples for offspring
+            elites: list of (code, probability) tuples for elite individuals
+            offspring: list of (code, probability) tuples for offspring
         """
         assert self.code_population is not None, "Code population must be initialized"
 
@@ -328,7 +342,7 @@ class CoevolutionOrchestrator:
         )
 
     def _create_next_test_generation(
-        self, elites: List[Tuple[str, float]], offspring: List[Tuple[str, float]]
+        self, elites: list[tuple[str, float]], offspring: list[tuple[str, float]]
     ) -> None:
         """
         Update the test population with the next generation from elites and offspring.
@@ -338,8 +352,8 @@ class CoevolutionOrchestrator:
         individuals are selected based on their probabilities.
 
         Args:
-            elites: List of (test_method, probability) tuples for elite individuals
-            offspring: List of (test_method, probability) tuples for offspring
+            elites: list of (test_method, probability) tuples for elite individuals
+            offspring: list of (test_method, probability) tuples for offspring
         """
         assert self.test_population is not None, "Test population must be initialized"
 
@@ -364,7 +378,189 @@ class CoevolutionOrchestrator:
             f"size={self.test_population.size}, avg_prob={np.mean(new_probabilities):.4f}"
         )
 
-    def run(self) -> Tuple[str, float, str, float]:
+    def _log_against_private_test_cases(self) -> None:
+        """
+        Evaluate current populations against private test cases and log results.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+
+        logger.info("-" * 80)
+        logger.info("EVALUATING AGAINST PRIVATE TEST CASES")
+        logger.info("-" * 80)
+
+        private_execution_results = execute_code_against_tests(
+            self.code_population,
+            self.private_test_population,
+            self.sandbox,
+        )
+
+        logger.trace(f"Private test execution results: {private_execution_results}")
+
+        private_observation_matrix = generate_observation_matrix(
+            private_execution_results,
+            self.code_population.size,
+            self.private_test_population.size,
+        )
+
+        # Log observation matrix statistics
+        logger.debug(f"Private Observation Matrix:\n{private_observation_matrix}")
+
+    def _eval_against_public_tests(self) -> None:
+        """
+        Evaluate code population against public test cases and update beliefs.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+        assert self.test_population is not None, "Test population must be initialized"
+
+        logger.info("-" * 80)
+        logger.info("EVALUATING AGAINST PUBLIC TEST CASES")
+        logger.info("-" * 80)
+
+        self.last_public_execution_results = execute_code_against_tests(
+            self.code_population,
+            self.public_test_population,
+            self.sandbox,
+        )
+
+        logger.trace(
+            f"Public test execution results: {self.last_public_execution_results}"
+        )
+
+        self.last_public_observation_matrix = generate_observation_matrix(
+            self.last_public_execution_results,
+            self.code_population.size,
+            self.public_test_population.size,
+        )
+
+        # Log observation matrix statistics
+        logger.debug(
+            f"Public Observation Matrix:\n{self.last_public_observation_matrix}"
+        )
+        total_public_tests = self.last_public_observation_matrix.size
+        passed_public_tests = np.sum(self.last_public_observation_matrix)
+        public_pass_rate = (
+            passed_public_tests / total_public_tests if total_public_tests > 0 else 0
+        )
+        logger.info(
+            f"Public Observation Matrix:\n{self.last_public_observation_matrix.shape}, "
+            f"pass_rate={public_pass_rate:.2%} "
+            f"({passed_public_tests}/{total_public_tests})"
+        )
+
+    def _eval_against_generated_tests(self) -> None:
+        """
+        Evaluate both populations against generated test cases and update beliefs.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+        assert self.test_population is not None, "Test population must be initialized"
+
+        logger.info("-" * 80)
+        logger.info("EVALUATING AGAINST GENERATED TEST CASES")
+        logger.info("-" * 80)
+
+        self.last_execution_results = execute_code_against_tests(
+            self.code_population,
+            self.test_population,
+            self.sandbox,
+        )
+
+        logger.trace(f"Generated test execution results: {self.last_execution_results}")
+
+        self.last_observation_matrix = generate_observation_matrix(
+            self.last_execution_results,
+            self.code_population.size,
+            self.test_population.size,
+        )
+
+        # Log observation matrix statistics
+        logger.debug(f"Generated Observation Matrix:\n{self.last_observation_matrix}")
+        total_tests = self.last_observation_matrix.size
+        passed_tests = np.sum(self.last_observation_matrix)
+        pass_rate = passed_tests / total_tests if total_tests > 0 else 0
+        logger.info(
+            f"Observation matrix: {self.last_observation_matrix.shape}, "
+            f"pass_rate={pass_rate:.2%} ({passed_tests}/{total_tests})"
+        )
+
+    def _update_beliefs_on_generated_tests(self) -> None:
+        """
+        Update beliefs of both populations based on generated test results.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+        assert self.test_population is not None, "Test population must be initialized"
+
+        logger.info("-" * 80)
+        logger.info("UPDATING CODE POPULATION BELIEFS ON GENERATED TESTS")
+        logger.info("-" * 80)
+
+        prior_code_probs = self.code_population.probabilities
+        prior_test_probs = self.test_population.probabilities
+
+        logger.debug(f"Prior code probabilities: {prior_code_probs}")
+        logger.debug(f"Prior test probabilities: {prior_test_probs}")
+
+        posterior_code_probs, posterior_test_probs = update_population_beliefs(
+            prior_code_probs,
+            prior_test_probs,
+            self.last_observation_matrix,
+            self.config,
+        )
+
+        # Update populations with new probabilities
+        self.code_population.update_probabilities(posterior_code_probs)
+        self.test_population.update_probabilities(posterior_test_probs)
+
+        logger.info(
+            f"Updated code probabilities: avg_prior={np.mean(prior_code_probs):.4f} -> "
+            f"avg_posterior={np.mean(posterior_code_probs):.4f}"
+        )
+        logger.info(
+            f"Updated test probabilities: avg_prior={np.mean(prior_test_probs):.4f} -> "
+            f"avg_posterior={np.mean(posterior_test_probs):.4f}"
+        )
+
+        logger.debug(f"Posterior code probabilities: {posterior_code_probs}")
+        logger.debug(f"Posterior test probabilities: {posterior_test_probs}")
+
+    def _update_code_beliefs_on_public_tests(self) -> None:
+        """
+        Update beliefs of code population based on public test results.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+
+        logger.info("-" * 80)
+        logger.info("UPDATING CODE POPULATION BELIEFS ON PUBLIC TESTS")
+        logger.info("-" * 80)
+
+        prior_code_probs = self.code_population.probabilities
+        prior_test_probs = self.public_test_population.probabilities
+
+        logger.debug(f"Prior code probabilities: {prior_code_probs}")
+        logger.debug(f"Prior test probabilities of public tests: {prior_test_probs}")
+
+        posterior_code_probs = update_code_population_beliefs(
+            prior_code_probs,
+            prior_test_probs,
+            self.last_public_observation_matrix,
+            self.config,
+        )
+
+        # Update code population with new probabilities
+        self.code_population.update_probabilities(posterior_code_probs)
+
+        logger.info(
+            f"Updated code probabilities on public tests: avg_prior={np.mean(prior_code_probs):.4f} -> "
+            f"avg_posterior={np.mean(posterior_code_probs):.4f}"
+        )
+
+        logger.debug(f"Posterior code probabilities: {posterior_code_probs}")
+
+    def run(self) -> tuple[CodePopulation, TestPopulation]:
         """
         Run the complete coevolution algorithm.
 
@@ -379,7 +575,7 @@ class CoevolutionOrchestrator:
         3. Returns the best code solution and test case
 
         Returns:
-            Tuple of (best_code, best_code_prob, best_test, best_test_prob)
+            tuple of (best_code, best_code_prob, best_test, best_test_prob)
 
         Raises:
             RuntimeError: If algorithm encounters unrecoverable errors
@@ -416,51 +612,17 @@ class CoevolutionOrchestrator:
             logger.info("STEP 2: Executing code against tests")
             logger.info("-" * 80)
 
-            execution_results = execute_code_against_tests(
-                self.code_population, self.test_population, self.sandbox
-            )
+            self._eval_against_generated_tests()
+            self._eval_against_public_tests()
+            self._log_against_private_test_cases()
 
-            # Store execution results for later use in edit operations
-            self.last_execution_results = execution_results
-
-            # Step 3: Generate observation matrix from execution results
+            # Step 3: Update population beliefs using Bayesian updates
             logger.info("-" * 80)
-            logger.info("STEP 3: Generating observation matrix")
+            logger.info("STEP 3: Updating population beliefs")
             logger.info("-" * 80)
 
-            self.last_observation_matrix = generate_observation_matrix(
-                execution_results,
-                self.code_population.size,
-                self.test_population.size,
-            )
-
-            # Log observation matrix statistics
-            total_tests = self.last_observation_matrix.size
-            passed_tests = np.sum(self.last_observation_matrix)
-            pass_rate = passed_tests / total_tests if total_tests > 0 else 0
-            logger.info(
-                f"Observation matrix: {self.last_observation_matrix.shape}, "
-                f"pass_rate={pass_rate:.2%} ({passed_tests}/{total_tests})"
-            )
-
-            # Step 4: Update population beliefs using Bayesian updates
-            logger.info("-" * 80)
-            logger.info("STEP 4: Updating population beliefs")
-            logger.info("-" * 80)
-
-            prior_code_probs = self.code_population.probabilities.copy()
-            prior_test_probs = self.test_population.probabilities.copy()
-
-            posterior_code_probs, posterior_test_probs = update_population_beliefs(
-                prior_code_probs,
-                prior_test_probs,
-                self.last_observation_matrix,
-                self.config,
-            )
-
-            # Update populations with new probabilities
-            self.code_population.update_probabilities(posterior_code_probs)
-            self.test_population.update_probabilities(posterior_test_probs)
+            self._update_beliefs_on_generated_tests()
+            self._update_code_beliefs_on_public_tests()
 
             # Log best individuals
             best_code, best_code_prob = self.code_population.get_best_individual()
@@ -473,9 +635,9 @@ class CoevolutionOrchestrator:
             logger.trace(f"Best code snippet:\n{best_code}")
             logger.trace(f"Best test method:\n{best_test}")
 
-            # Step 5: Select elites
+            # Step 4: Select elites
             logger.info("-" * 80)
-            logger.info("STEP 5: Selecting elite individuals")
+            logger.info("STEP 4: Selecting elite individuals")
             logger.info("-" * 80)
 
             # Calculate elite count dynamically from current population size
@@ -496,17 +658,17 @@ class CoevolutionOrchestrator:
                 f"Selected {len(code_elites)} code elites, {pareto_size} test Pareto elites"
             )
 
-            # Step 6: Generate offspring using genetic operators
+            # Step 5: Generate offspring using genetic operators
             logger.info("-" * 80)
-            logger.info("STEP 6: Generating offspring")
+            logger.info("STEP 5: Generating offspring")
             logger.info("-" * 80)
 
             code_offspring = self._generate_code_offspring(elite_count=code_elite_count)
             test_offspring = self._generate_test_offspring(elite_count=pareto_size)
 
-            # Step 7: Create next generation
+            # Step 6: Create next generation
             logger.info("-" * 80)
-            logger.info("STEP 7: Creating next generation")
+            logger.info("STEP 6: Creating next generation")
             logger.info("-" * 80)
 
             self._create_next_code_generation(code_elites, code_offspring)
@@ -525,4 +687,4 @@ class CoevolutionOrchestrator:
         logger.info(f"Final code population size: {self.code_population.size}")
         logger.info(f"Final test population size: {self.test_population.size}")
 
-        return best_code, best_code_prob, best_test, best_test_prob
+        return self.code_population, self.test_population
