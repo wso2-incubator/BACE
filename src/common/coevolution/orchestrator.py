@@ -561,6 +561,22 @@ class CoevolutionOrchestrator:
 
         logger.debug(f"Posterior code probabilities: {posterior_code_probs}")
 
+    def _log_populations(self) -> None:
+        """
+        Log current populations for debugging.
+        """
+
+        assert self.code_population is not None, "Code population must be initialized"
+        assert self.test_population is not None, "Test population must be initialized"
+
+        logger.trace("Current Code Population:")
+        for i, (code, prob) in enumerate(self.code_population):
+            logger.trace(f"Code #{i}: prob={prob:.4f}\n{code}\n")
+
+        logger.trace("Current Test Population:")
+        for i, (test, prob) in enumerate(self.test_population):
+            logger.trace(f"Test #{i}: prob={prob:.4f}\n{test}\n")
+
     def run(self) -> tuple[CodePopulation, TestPopulation]:
         """
         Run the complete coevolution algorithm.
@@ -601,6 +617,8 @@ class CoevolutionOrchestrator:
 
         self.code_population = self._create_initial_code_population()
         self.test_population = self._create_initial_test_population()
+
+        self._log_populations()
 
         # Main evolution loop
         for generation in range(self.config.num_generations):
@@ -674,6 +692,8 @@ class CoevolutionOrchestrator:
 
             self._create_next_code_generation(code_elites, code_offspring)
             self._create_next_test_generation(test_pareto_front, test_offspring)
+
+            self._log_populations()
 
         # Algorithm complete - return final populations
         logger.info("=" * 80)
