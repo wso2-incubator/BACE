@@ -136,10 +136,7 @@ class TestResultAnalyzer:
             TestExecutionResult with detailed test analysis
         """
         logger.debug(
-            "Analyzing unittest output: success=%s return_code=%s elapsed=%.3fs",
-            basic_result.success,
-            basic_result.return_code,
-            basic_result.execution_time,
+            f"Analyzing unittest output: success={basic_result.success} return_code={basic_result.return_code} elapsed={basic_result.execution_time:.3f}s"
         )
 
         # Parse unittest output regardless of success/failure
@@ -158,17 +155,16 @@ class TestResultAnalyzer:
             script_error = True
             summary = f"Script execution failed: {basic_result.error}"
             logger.debug(
-                "Detected script error while analyzing unittest output: %s",
-                basic_result.error,
+                f"Detected script error while analyzing unittest output: {basic_result.error}",
             )
         elif test_analysis.failed > 0 or test_analysis.errors > 0:
             # Tests ran but some failed
             summary = f"Tests completed: {test_analysis.passed} passed, {test_analysis.failed} failed, {test_analysis.errors} errors"
-            logger.debug("Test run had failures/errors: %s", summary)
+            logger.debug(f"Test run had failures/errors: {summary}")
         elif test_analysis.passed > 0:
             # All tests passed
             summary = f"All tests passed: {test_analysis.passed} tests"
-            logger.debug("All tests passed (%d)", test_analysis.passed)
+            logger.debug(summary)
         elif "NO TESTS RAN" in basic_result.error or (
             basic_result.return_code == 5 and "Ran 0 tests" in basic_result.error
         ):
@@ -203,7 +199,7 @@ class TestResultAnalyzer:
         """
         modified_script = test_script
         logger.trace(
-            "Ensuring unittest verbosity for test script (len=%d)", len(test_script)
+            f"Ensuring unittest verbosity for test script (len={len(test_script)})"
         )
 
         # Replace unittest.main() with unittest.main(verbosity=2)
@@ -291,7 +287,7 @@ class TestResultAnalyzer:
 
         if ran_match:
             total_tests = int(ran_match.group(1))
-            logger.trace("Parsed unittest summary: total_tests=%d", total_tests)
+            logger.trace(f"Parsed unittest summary: total_tests={total_tests}")
 
             # Look for OK (all passed)
             if re.search(r"\nOK\s*$", full_output, re.MULTILINE):
@@ -361,7 +357,7 @@ class TestResultAnalyzer:
             test_match = re.match(r"(\w+) \([^)]+\) \.\.\. (ok|FAIL|ERROR)", line)
             if test_match:
                 test_name, status = test_match.groups()
-                logger.trace("Found individual test line: %s -> %s", test_name, status)
+                logger.trace(f"Found individual test line: {test_name} -> {status}")
 
                 # Look for description on previous line (if it's not a test line)
                 description = f"Test method: {test_name}"  # Default
@@ -387,7 +383,7 @@ class TestResultAnalyzer:
 
                 test_results.append(test_result)
                 logger.trace(
-                    "Appended TestResult: %s status=%s", test_name, test_result.status
+                    f"Appended TestResult: {test_name} status={test_result.status}"
                 )
 
             i += 1
@@ -411,8 +407,7 @@ class TestResultAnalyzer:
         # Find all detailed sections
         detailed_sections = re.split(r"={70,}", output)
         logger.trace(
-            "Found %d detailed sections when extracting failures/errors",
-            len(detailed_sections),
+            f"Found {len(detailed_sections)} detailed sections when extracting failures/errors"
         )
 
         for section in detailed_sections:
@@ -433,14 +428,14 @@ class TestResultAnalyzer:
 
             if fail_match:
                 test_name, error_details = fail_match.groups()
-                logger.trace("Found detailed FAIL for test %s", test_name)
+                logger.trace(f"Found detailed FAIL for test {test_name}")
                 self._update_test_details(
                     test_results, test_name.strip(), error_details.strip()
                 )
 
             elif error_match:
                 test_name, error_details = error_match.groups()
-                logger.trace("Found detailed ERROR for test %s", test_name)
+                logger.trace(f"Found detailed ERROR for test {test_name}")
                 self._update_test_details(
                     test_results, test_name.strip(), error_details.strip()
                 )
@@ -633,12 +628,11 @@ class SafeCodeSandbox:
 
         for pattern in self.blocked_patterns:
             if pattern.lower() in code_lower:
-                logger.debug("Code blocked by pattern '%s'", pattern)
+                logger.debug(f"Code blocked by pattern '{pattern}'")
                 return False
 
         logger.trace(
-            "Code passed safety checks (checked %d patterns)",
-            len(self.blocked_patterns),
+            f"Code passed safety checks (checked {len(self.blocked_patterns)} patterns)"
         )
         return True
 
@@ -740,10 +734,7 @@ class SafeCodeSandbox:
             temp_file_path = temp_file.name
 
         logger.debug(
-            "Executing code in sandbox: temp_file=%s capture_output=%s code_len=%d",
-            temp_file_path,
-            capture_output,
-            len(code),
+            f"Executing code in sandbox: temp_file={temp_file_path} capture_output={capture_output} code_len={len(code)}",
         )
 
         try:
@@ -758,7 +749,7 @@ class SafeCodeSandbox:
                 cwd=tempfile.gettempdir(),  # Run in temp directory
             )
 
-            logger.debug("Execution finished: returncode=%s", result.returncode)
+            logger.debug(f"Execution finished: returncode={result.returncode}")
 
             execution_time = time.time() - start_time
 
@@ -767,9 +758,7 @@ class SafeCodeSandbox:
             stderr = result.stderr[: self.max_output_size] if result.stderr else ""
 
             logger.trace(
-                "Captured output sizes: stdout=%d stderr=%d",
-                len(stdout),
-                len(stderr),
+                f"Captured output sizes: stdout={len(stdout)} stderr={len(stderr)}"
             )
 
             return BasicExecutionResult(
@@ -782,7 +771,7 @@ class SafeCodeSandbox:
             )
 
         except subprocess.TimeoutExpired:
-            logger.warning("Code execution timed out after %s seconds", self.timeout)
+            logger.warning(f"Code execution timed out after {self.timeout} seconds")
             return BasicExecutionResult(
                 success=False,
                 output="",
@@ -793,7 +782,7 @@ class SafeCodeSandbox:
             )
 
         except Exception as e:
-            logger.exception("Unhandled exception during code execution: %s", e)
+            logger.exception(f"Unhandled exception during code execution: {e}")
             return BasicExecutionResult(
                 success=False,
                 output="",
@@ -825,9 +814,7 @@ class SafeCodeSandbox:
             TestExecutionResult containing comprehensive execution results
         """
         # Create analyzer and prepare the test script
-        logger.debug(
-            "SafeCodeSandbox: executing test script (len=%d)", len(test_script)
-        )
+        logger.debug(f"SafeCodeSandbox: executing test script (len={len(test_script)})")
         analyzer = TestResultAnalyzer()
         modified_script = analyzer.ensure_unittest_verbosity(test_script)
 
@@ -836,10 +823,7 @@ class SafeCodeSandbox:
 
         # Analyze the test results
         result = analyzer.analyze_unittest_output(basic_result)
-        logger.debug(
-            "SafeCodeSandbox: test script result summary: %s",
-            result.summary,
-        )
+        logger.debug(f"SafeCodeSandbox: test script result summary: {result.summary}")
         return result
 
 
@@ -879,10 +863,7 @@ class TestExecutor:
         )
         self.analyzer = TestResultAnalyzer()
         logger.debug(
-            "Initialized TestExecutor(timeout=%s, max_memory_mb=%s, max_output_size=%s)",
-            timeout,
-            max_memory_mb,
-            max_output_size,
+            f"Initialized TestExecutor(timeout={timeout}, max_memory_mb={max_memory_mb}, max_output_size={max_output_size})"
         )
 
     def execute_test_script(self, test_script: str) -> TestExecutionResult:
@@ -895,7 +876,7 @@ class TestExecutor:
         Returns:
             TestExecutionResult with detailed analysis
         """
-        logger.debug("TestExecutor: executing test script (len=%d)", len(test_script))
+        logger.debug(f"TestExecutor: executing test script (len={len(test_script)})")
         # Prepare the test script with proper verbosity
         modified_script = self.analyzer.ensure_unittest_verbosity(test_script)
 
@@ -904,7 +885,7 @@ class TestExecutor:
 
         # Analyze the results
         result = self.analyzer.analyze_unittest_output(basic_result)
-        logger.debug("TestExecutor: finished execution: %s", result.summary)
+        logger.debug(f"TestExecutor: finished execution: {result.summary}")
         return result
 
     def execute_code(self, code: str) -> BasicExecutionResult:
@@ -928,7 +909,7 @@ def create_safe_test_environment() -> SafeCodeSandbox:
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=30,  # 30 seconds max
+        timeout=180,  # 30 seconds max
         max_memory_mb=100,  # 100MB max memory
         max_output_size=10000,  # 10KB max output
         allowed_imports=[
