@@ -21,19 +21,18 @@ def main() -> None:
     """Run a simple coevolution experiment."""
 
     # Configure logging
-    logger.remove()  # 1. Remove the default 'DEBUG' level handler
+    logger.remove()  # Remove the default 'DEBUG' level handler
     logger.add(
         sys.stderr,
-        level="INFO",
+        level="DEBUG",
     )
-
-    # 3. Add a file logger (TRACE level and above)
     logger.add(
         "logs/experiment_{time:YYYY-MM-DD}.log",
         level="TRACE",  # This captures ALL levels
         rotation="100 MB",  # New file every 100 MB
         retention="10 days",  # Keep logs for 10 days
         compression="zip",  # Compress old logs
+        enqueue=True,  # Use a queue for thread safety
     )
 
     logger.info("=" * 80)
@@ -45,7 +44,7 @@ def main() -> None:
     dataset = code_generation.load_code_generation_dataset(
         release_version="release_v5",
         start_date="2024-01-01",
-        difficulty=code_generation.Difficulty.HARD,
+        difficulty=code_generation.Difficulty.MEDIUM,
     )
     problem = dataset[0]
 
@@ -55,7 +54,7 @@ def main() -> None:
 
     # Step 2: Create LLM client
     logger.info("Creating LLM client...")
-    llm_model = "gpt-4.1"  # Specify the LLM model to use
+    llm_model = "gpt-5-mini"  # Specify the LLM model to use
     llm_client = create_llm_client(provider="openai", model=llm_model)
     logger.info(f"Using model: {llm_client.model}")
 
@@ -101,6 +100,8 @@ def main() -> None:
         f"{config.initial_test_population_size} test cases"
     )
 
+    logger.trace(f"Full configuration: {config}")
+
     # Step 5: Create and run orchestrator
     logger.info("Initializing orchestrator...")
     orchestrator = CoevolutionOrchestrator(
@@ -108,7 +109,10 @@ def main() -> None:
     )
 
     logger.info("Starting coevolution...")
-    best_code, best_code_prob, best_test, best_test_prob = orchestrator.run()
+    code_population, test_population = orchestrator.run()
+
+    best_code_individual, best_code_prob = code_population.get_best_individual()
+    best_test_individual, best_test_prob = test_population.get_best_individual()
 
     # Step 6: Display results
     logger.info("=" * 80)
@@ -120,12 +124,20 @@ def main() -> None:
     print("\n" + "=" * 80)
     print("BEST CODE SOLUTION:")
     print("=" * 80)
-    print(best_code)
+    print(best_code_individual)
 
     print("\n" + "=" * 80)
     print("BEST TEST CASE:")
     print("=" * 80)
-    print(best_test)
+    print(best_test_individual)
+
+    logger.trace("Final code population:")
+    for i, (individual, prob) in enumerate(code_population):
+        logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
+
+    logger.trace("Final test population:")
+    for i, (individual, prob) in enumerate(test_population):
+        logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
 
     logger.info("Experiment completed successfully!")
 
