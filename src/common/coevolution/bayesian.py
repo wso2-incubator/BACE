@@ -224,10 +224,21 @@ def initialize_prior_beliefs(
     """
     logger.debug(f"Initializing {size} prior beliefs with probability {prior:.4f}")
 
-    if not (0.0 < prior < 1.0):
-        raise ValueError("Prior probability must be in the range (0.0, 1.0)")
+    if not (0.0 <= prior <= 1.0):
+        msg = "Prior probability must be in the range [0.0, 1.0]"
+        logger.error(msg)
+        raise ValueError(msg)
     if size <= 0:
-        raise ValueError("Size must be a positive integer")
+        msg = "Size must be a positive integer"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if prior == 0.0:
+        prior += _NUMERICAL_STABILITY_EPSILON
+        logger.debug("Prior probability of 0.0 adjusted to avoid numerical instability")
+    elif prior == 1.0:
+        prior -= _NUMERICAL_STABILITY_EPSILON
+        logger.debug("Prior probability of 1.0 adjusted to avoid numerical instability")
 
     beliefs = np.full(size, prior, dtype=float)
     logger.trace(f"Created prior beliefs array with shape {beliefs.shape}")
@@ -245,95 +256,83 @@ def update_population_beliefs(
     Performs a full generation update for both code and test populations.
 
     Args:
-        prior_code_probs: Prior correctness probabilities for the code population.
-        prior_test_probs: Prior correctness probabilities for the test population.
-        observation_matrix: Matrix of interactions between the two populations.
+        prior_code_probs: Prior correctness probabilities P(C_i) for the code population.
+        prior_test_probs: Prior correctness probabilities P(T_j) for the test population.
+        observation_matrix: Matrix D of interactions (D_ij = 1 for pass, 0 for fail).
         config: The coevolution configuration object.
-        use_intermediate_updates: If True, uses updated code probabilities when calculating
-                                 test updates. If False, uses prior code probabilities.
 
     Returns:
-        A tuple of the posterior correctness probabilities for codes and tests.
+        A tuple of the posterior correctness probabilities for codes and tests:
+        (posterior_code_probs, posterior_test_probs).
     """
     logger.info(
-        f"Updating beliefs: {len(prior_code_probs)} codes × "
+        f"Updating beliefs: {len(prior_code_probs)} codes x "
         f"{len(prior_test_probs)} tests"
     )
 
     # Log prior statistics
     prior_code_mean = np.mean(prior_code_probs)
-    prior_code_std = np.std(prior_code_probs)
     prior_test_mean = np.mean(prior_test_probs)
-    prior_test_std = np.std(prior_test_probs)
-
     logger.debug(
-        f"Prior code beliefs: mean={prior_code_mean:.4f}, std={prior_code_std:.4f}, "
-        f"min={np.min(prior_code_probs):.4f}, max={np.max(prior_code_probs):.4f}"
+        f"Prior code beliefs: mean={prior_code_mean:.4f}, min={np.min(prior_code_probs):.4f}, max={np.max(prior_code_probs):.4f}"
     )
     logger.debug(
-        f"Prior test beliefs: mean={prior_test_mean:.4f}, std={prior_test_std:.4f}, "
-        f"min={np.min(prior_test_probs):.4f}, max={np.max(prior_test_probs):.4f}"
+        f"Prior test beliefs: mean={prior_test_mean:.4f}, min={np.min(prior_test_probs):.4f}, max={np.max(prior_test_probs):.4f}"
     )
     logger.debug(
-        f"Learning rate: {config.learning_rate}, "
-        f"Intermediate updates: {config.use_intermediate_updates}"
+        f"Learning rate: {config.learning_rate}, Sequential update: {config.use_intermediate_updates}"
     )
 
-    # 1. Pre-calculate the WoE matrices based on current probabilities for code only
-    logger.trace("Calculating WoE matrix for code updates")
+    # 1. Pre-calculate WoE for code update
+    logger.trace("Calculating WoE matrix for code updates using prior test probs")
     woe_for_code = _calculate_woe_for_code_update(prior_test_probs, config)
 
-    # 2. Convert prior probabilities to log-odds for the internal update step
+    # 2. Convert priors to log-odds
     logger.trace("Converting prior probabilities to log-odds")
     prior_code_log_odds = _probabilities_to_log_odds_array(prior_code_probs)
     prior_test_log_odds = _probabilities_to_log_odds_array(prior_test_probs)
 
-    # 3. Update beliefs in log-odds space for code only
+    # 3. Update code beliefs
     logger.debug("Updating code beliefs in log-odds space")
     posterior_code_log_odds = _update_code_beliefs(
         prior_code_log_odds, observation_matrix, woe_for_code, config
     )
 
-    # 4. Pre-calculate WoE for test update based on updated code probabilities
+    # 4. Calculate WoE for test update
     if config.use_intermediate_updates:
-        logger.trace("Using intermediate code updates for test WoE calculation")
-        updated_code_probs = _log_odds_array_to_probabilities(posterior_code_log_odds)
-        woe_for_test = _calculate_woe_for_test_update(updated_code_probs, config)
+        logger.trace("Calculating WoE for test updates using *updated* code probs")
+        intermediate_code_probs = _log_odds_array_to_probabilities(
+            posterior_code_log_odds
+        )
+        woe_for_test = _calculate_woe_for_test_update(intermediate_code_probs, config)
     else:
-        logger.trace("Using prior code probabilities for test WoE calculation")
+        logger.trace("Calculating WoE for test updates using *prior* code probs")
         woe_for_test = _calculate_woe_for_test_update(prior_code_probs, config)
 
-    # 5. Update beliefs in log-odds space for tests
+    # 5. Update test beliefs
     logger.debug("Updating test beliefs in log-odds space")
     posterior_test_log_odds = _update_test_beliefs(
         prior_test_log_odds, observation_matrix, woe_for_test, config
     )
 
-    # 6. Convert posterior log-odds back to probabilities for the output
+    # 6. Convert posteriors back to probabilities
     logger.trace("Converting posterior log-odds to probabilities")
     posterior_code_probs = _log_odds_array_to_probabilities(posterior_code_log_odds)
     posterior_test_probs = _log_odds_array_to_probabilities(posterior_test_log_odds)
 
-    # Log posterior statistics and belief changes
+    # Log posterior statistics
     posterior_code_mean = np.mean(posterior_code_probs)
-    posterior_code_std = np.std(posterior_code_probs)
     posterior_test_mean = np.mean(posterior_test_probs)
-    posterior_test_std = np.std(posterior_test_probs)
-
     code_belief_delta = posterior_code_mean - prior_code_mean
     test_belief_delta = posterior_test_mean - prior_test_mean
-
     logger.debug(
-        f"Posterior code beliefs: mean={posterior_code_mean:.4f}, std={posterior_code_std:.4f}, "
-        f"min={np.min(posterior_code_probs):.4f}, max={np.max(posterior_code_probs):.4f}"
+        f"Posterior code beliefs: mean={posterior_code_mean:.4f}, min={np.min(posterior_code_probs):.4f}, max={np.max(posterior_code_probs):.4f}"
     )
     logger.debug(
-        f"Posterior test beliefs: mean={posterior_test_mean:.4f}, std={posterior_test_std:.4f}, "
-        f"min={np.min(posterior_test_probs):.4f}, max={np.max(posterior_test_probs):.4f}"
+        f"Posterior test beliefs: mean={posterior_test_mean:.4f}, min={np.min(posterior_test_probs):.4f}, max={np.max(posterior_test_probs):.4f}"
     )
     logger.info(
-        f"Belief update complete: code Δ={code_belief_delta:+.4f}, "
-        f"test Δ={test_belief_delta:+.4f}"
+        f"Belief update complete: code avg Δ={code_belief_delta:+.4f}, test avg Δ={test_belief_delta:+.4f}"
     )
 
     # Log individual belief changes at trace level
@@ -353,3 +352,64 @@ def update_population_beliefs(
     )
 
     return posterior_code_probs, posterior_test_probs
+
+
+# --- NEW PUBLIC FUNCTION ---
+def update_code_population_beliefs(
+    prior_code_probs: np.ndarray,
+    prior_test_probs: np.ndarray,
+    observation_matrix: np.ndarray,
+    config: CoevolutionConfig,
+) -> np.ndarray:
+    """
+    Performs a Bayesian update for only the code population beliefs.
+
+    This function calculates the posterior probabilities for code candidates
+    based on their interactions with the test population, using the provided
+    prior beliefs for tests. It does not update the test beliefs.
+
+    Args:
+        prior_code_probs: Prior correctness probabilities P(C_i) for the code population.
+        prior_test_probs: Prior correctness probabilities P(T_j) for the test population.
+                          (Used to calculate evidence, but not updated).
+        observation_matrix: Matrix D of interactions (D_ij = 1 for pass, 0 for fail).
+        config: The coevolution configuration object.
+
+    Returns:
+        The posterior correctness probabilities for the code population.
+    """
+    logger.info(
+        f"Updating beliefs for code population ({len(prior_code_probs)} codes)..."
+    )
+    logger.debug(
+        f"Using prior test beliefs (mean={np.mean(prior_test_probs):.4f}) for evidence."
+    )
+
+    # 1. Calculate WoE for code update based on prior test probabilities
+    logger.trace("Calculating WoE matrix for code updates using prior test probs")
+    woe_for_code = _calculate_woe_for_code_update(prior_test_probs, config)
+
+    # 2. Convert code priors to log-odds
+    logger.trace("Converting prior code probabilities to log-odds")
+    prior_code_log_odds = _probabilities_to_log_odds_array(prior_code_probs)
+
+    # 3. Update code beliefs in log-odds space
+    logger.debug("Updating code beliefs in log-odds space")
+    posterior_code_log_odds = _update_code_beliefs(
+        prior_code_log_odds, observation_matrix, woe_for_code, config
+    )
+
+    # 4. Convert code posteriors back to probabilities
+    logger.trace("Converting posterior code log-odds to probabilities")
+    posterior_code_probs = _log_odds_array_to_probabilities(posterior_code_log_odds)
+
+    # Log posterior statistics for codes
+    prior_code_mean = np.mean(prior_code_probs)
+    posterior_code_mean = np.mean(posterior_code_probs)
+    code_belief_delta = posterior_code_mean - prior_code_mean
+    logger.debug(
+        f"Posterior code beliefs: mean={posterior_code_mean:.4f}, min={np.min(posterior_code_probs):.4f}, max={np.max(posterior_code_probs):.4f}"
+    )
+    logger.info(f"Code belief update complete: code avg Δ={code_belief_delta:+.4f}")
+
+    return posterior_code_probs
