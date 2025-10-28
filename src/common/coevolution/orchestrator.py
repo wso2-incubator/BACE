@@ -381,6 +381,7 @@ class CoevolutionOrchestrator:
     def _log_against_private_test_cases(self) -> None:
         """
         Evaluate current populations against private test cases and log results.
+        No belief updates are performed. This is for monitoring only.
         """
 
         assert self.code_population is not None, "Code population must be initialized"
