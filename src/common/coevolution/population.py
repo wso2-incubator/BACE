@@ -11,12 +11,18 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterator, List
+from typing import Iterator, List, Literal
 
 import numpy as np
+from lcb_runner.benchmarks.code_generation import CodeGenerationProblem  # type: ignore
 from loguru import logger
 
-from common.code_preprocessing.builders import rebuild_unittest_with_new_methods
+from common.code_preprocessing.analyzers import extract_test_methods_code
+from common.code_preprocessing.builders import (
+    build_unittest_block_for_lcb_problem_from_given_tests,
+    rebuild_unittest_with_new_methods,
+)
+from common.coevolution.bayesian import initialize_prior_beliefs
 
 from .selection import SelectionStrategy
 
@@ -840,3 +846,53 @@ class TestPopulation(BasePopulation):
             f"Replaced individual at index {index} in TestPopulation "
             f"(generation {self.generation}): prob {old_prob:.4f} → {probability:.4f}"
         )
+
+
+def create_actual_test_population_from_lcb_problem(
+    lcb_problem: CodeGenerationProblem,
+    test_type: Literal["public", "private"] = "public",
+) -> TestPopulation:
+    """
+    Create a private TestPopulation for a given CodeGenerationProblem.
+
+    This function initializes a TestPopulation using the private test cases
+    defined in the CodeGenerationProblem. It extracts individual test methods
+    from the full unittest class and initializes their correctness probabilities
+    using Bayesian prior beliefs.
+
+    Args:
+        lcb_problem: CodeGenerationProblem instance containing private tests
+
+    Returns:
+        TestPopulation initialized with private test methods and prior probabilities
+    """
+    logger.info(f"Creating {test_type} TestPopulation from CodeGenerationProblem")
+
+    test_block: str = ""
+    if test_type == "public":
+        test_block = build_unittest_block_for_lcb_problem_from_given_tests(
+            lcb_problem.public_test_cases, lcb_problem.starter_code
+        )
+    elif test_type == "private":
+        test_block = build_unittest_block_for_lcb_problem_from_given_tests(
+            lcb_problem.private_test_cases, lcb_problem.starter_code
+        )
+    else:
+        msg = f"Invalid test_type '{test_type}'; must be 'public' or 'private'"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    test_individuals = extract_test_methods_code(test_block)
+    test_probs = initialize_prior_beliefs(len(test_individuals), 1.0)
+    test_population = TestPopulation(
+        individuals=test_individuals,
+        probabilities=test_probs,
+        generation=0,
+        test_class_block=test_block,
+    )
+
+    logger.info(
+        f"Created TestPopulation with {len(test_individuals)} {test_type} test methods"
+    )
+
+    return test_population
