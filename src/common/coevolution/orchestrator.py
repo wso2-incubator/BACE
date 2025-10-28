@@ -674,17 +674,11 @@ class CoevolutionOrchestrator:
             self._create_next_code_generation(code_elites, code_offspring)
             self._create_next_test_generation(test_pareto_front, test_offspring)
 
-        # Algorithm complete - return best individuals
+        # Algorithm complete - return final populations
         logger.info("=" * 80)
         logger.info("COEVOLUTION COMPLETE")
         logger.info("=" * 80)
 
-        best_code, best_code_prob = self.code_population.get_best_individual()
-        best_test, best_test_prob = self.test_population.get_best_individual()
-
-        logger.info(f"Final best code probability: {best_code_prob:.4f}")
-        logger.info(f"Final best test probability: {best_test_prob:.4f}")
-        logger.info(f"Final code population size: {self.code_population.size}")
-        logger.info(f"Final test population size: {self.test_population.size}")
+        self._log_against_private_test_cases()
 
         return self.code_population, self.test_population
