@@ -6,6 +6,8 @@ language feedback suitable for consumption by LLMs in edit operations.
 
 """
 
+import random
+
 import numpy as np
 from loguru import logger
 
@@ -69,7 +71,7 @@ def _format_test_entry(
 
 def generate_feedback_for_code(
     observation_matrix: np.ndarray,
-    execution_result: TestExecutionResult,
+    execution_results: dict[int, TestExecutionResult],
     test_population: TestPopulation,
     code_idx: int,
 ) -> str:
@@ -137,6 +139,14 @@ def generate_feedback_for_code(
         The execution_result.test_results order matches test_population.individuals order.
     """
     # --- Initial Checks ---
+    if code_idx not in execution_results:
+        logger.debug(
+            f"Code {code_idx}: No execution result found, no feedback generated"
+        )
+        raise KeyError(f"No execution result for code index {code_idx}")
+
+    execution_result = execution_results[code_idx]
+
     if execution_result.tests_failed == 0 and execution_result.tests_errors == 0:
         logger.trace(f"Code {code_idx}: All tests passed, no feedback needed")
         return ""
@@ -210,7 +220,7 @@ def generate_feedback_for_code(
     # Use strip() to remove any potential trailing newline added by the last entry
     feedback = "\n".join(feedback_builder).strip()
     logger.debug(f"Code {code_idx}: Generated feedback ({len(feedback)} chars)")
-
+    logger.trace(f"Code {code_idx} Feedback:\n{feedback}")
     return feedback
 
 
@@ -236,20 +246,55 @@ def generate_feedback_for_test(
         A feedback string summarizing the test results for the given code snippets.
     """
     feedback_builder: list[str] = []
-    passed_code_indices = np.where(observation_matrix[:, test_idx] == 1)[0]
 
-    feedback_builder.append("The following code snippets passed the test:\n")
-    for code_idx in passed_code_indices:
+    # Identify which code snippets passed this test
+    passed_code_indices = np.where(observation_matrix[:, test_idx] == 1)[0]
+    failed_code_indices = np.where(observation_matrix[:, test_idx] == 0)[0]
+    logger.debug(
+        f"Test {test_idx}: Found {len(passed_code_indices)} passing code snippet(s) "
+        f"out of {observation_matrix.shape[0]} total code snippets"
+    )
+
+    if len(passed_code_indices) == 0:
+        logger.debug(f"Test {test_idx}: No code snippets passed this test")
+        feedback_builder.append("No code snippets passed this test case")
+        feedback_builder.append("The following code snippet failed the test:\n")
+
+        code_idx = random.choice(failed_code_indices)
         code_snippet = code_population.individuals[code_idx]
         feedback_builder.append("```python")
         feedback_builder.append(code_snippet.strip())
-        feedback_builder.append("```\n")
+        feedback_builder.append("```")
+        feedback_builder.append("")
+        feedback_builder.append("However, the above code snippet is correct.")
+        feedback_builder.append(
+            "This indicates that the test case is incorrect, or too hard."
+        )
 
-    feedback_builder.append(
-        "However, the above code snippets are buggy and need improvement."
-    )
-    feedback_builder.append(
-        "The test case could not identify the bugs in these snippets."
-    )
+    else:
+        feedback_builder.append("The following code snippet passed the test:\n")
+        code_idx = random.choice(passed_code_indices)
+        code_snippet = code_population.individuals[code_idx]
 
-    return "\n".join(feedback_builder).strip()
+        feedback_builder.append("```python")
+        feedback_builder.append(code_snippet.strip())
+        feedback_builder.append("```")
+        feedback_builder.append("")
+
+        # Trace-level logging for each snippet added to feedback
+        logger.trace(
+            f"Test {test_idx}: Added passing snippet from code index {code_idx} "
+            f"(chars={len(code_snippet)})"
+        )
+
+        feedback_builder.append(
+            "However, the above code snippet is buggy and needs improvement."
+        )
+        feedback_builder.append(
+            "The test case could not identify the bugs in this snippet."
+        )
+
+    feedback = "\n".join(feedback_builder).strip()
+    logger.debug(f"Test {test_idx}: Generated feedback ({len(feedback)} chars)")
+    logger.trace(f"Test {test_idx} Feedback:\n{feedback}")
+    return feedback
