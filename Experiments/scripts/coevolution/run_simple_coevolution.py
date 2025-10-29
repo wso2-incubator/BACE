@@ -19,12 +19,31 @@ from common.sandbox import create_safe_test_environment
 
 def main() -> None:
     """Run a simple coevolution experiment."""
-
     # Configure logging
     logger.remove()  # Remove the default 'DEBUG' level handler
+
+    console_format = (
+        "<green>{time:HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>[{extra[problem_id]: <8}]</cyan> | "  # Use extra context
+        "<cyan>{name}:{function}:{line}</cyan> - "
+        "<level>{message}</level>"
+    )
+
+    file_format = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+        "{level: <8} | "
+        "[{extra[problem_id]: <8}] | "  # Use extra context
+        "{process}:{thread} | "
+        "{name}:{function}:{line} - {message}"
+    )
+
+    logger.configure(extra={"problem_id": "SETUP"})
+
     logger.add(
         sys.stderr,
         level="DEBUG",
+        format=console_format,
     )
     logger.add(
         "logs/experiment_{time:YYYY-MM-DD}.log",
@@ -33,6 +52,7 @@ def main() -> None:
         retention="10 days",  # Keep logs for 10 days
         compression="zip",  # Compress old logs
         enqueue=True,  # Use a queue for thread safety
+        format=file_format,
     )
 
     logger.info("=" * 80)
@@ -52,94 +72,95 @@ def main() -> None:
     logger.info(f"Problem ID: {problem.question_id}")
     logger.info(f"Difficulty: {problem.difficulty}")
 
-    # Step 2: Create LLM client
-    logger.info("Creating LLM client...")
-    llm_model = "gpt-5-mini"  # Specify the LLM model to use
-    llm_client = create_llm_client(provider="openai", model=llm_model)
-    logger.info(f"Using model: {llm_client.model}")
+    with logger.contextualize(problem_id=problem.question_id):
+        # Step 2: Create LLM client
+        logger.info("Creating LLM client...")
+        llm_model = "gpt-5-mini"  # Specify the LLM model to use
+        llm_client = create_llm_client(provider="openai", model=llm_model)
+        logger.info(f"Using model: {llm_client.model}")
 
-    # Step 3: Create sandbox environment
-    logger.info("Creating sandbox environment...")
-    sandbox = create_safe_test_environment()
+        # Step 3: Create sandbox environment
+        logger.info("Creating sandbox environment...")
+        sandbox = create_safe_test_environment()
 
-    # Step 4: Configure coevolution
-    logger.info("Configuring coevolution parameters...")
-    config = CoevolutionConfig(
-        # Population sizes
-        initial_code_population_size=10,
-        initial_test_population_size=20,
-        max_code_population_size=15,  # population grows over time to 15
-        # Bayesian parameters
-        initial_code_prior=0.5,
-        initial_test_prior=0.5,
-        alpha=0.01,
-        beta=0.2,
-        gamma=0.2,
-        learning_rate=0.1,
-        use_intermediate_updates=False,
-        # Evolution parameters
-        num_generations=3,  # Small number for quick testing
-        selection_strategy="roulette_wheel",
-        # Code genetic operators
-        code_crossover_rate=0.2,
-        code_mutation_rate=0.1,
-        code_edit_rate=0.8,
-        code_elite_proportion=0.5,
-        code_offspring_proportion=0.5,
-        # Test genetic operators
-        test_crossover_rate=0.5,
-        test_mutation_rate=0.3,
-        test_edit_rate=0.5,
-        # LLM configuration
-        llm_model=llm_model,
-    )
+        # Step 4: Configure coevolution
+        logger.info("Configuring coevolution parameters...")
+        config = CoevolutionConfig(
+            # Population sizes
+            initial_code_population_size=10,
+            initial_test_population_size=20,
+            max_code_population_size=15,  # population grows over time to 15
+            # Bayesian parameters
+            initial_code_prior=0.5,
+            initial_test_prior=0.5,
+            alpha=0.01,
+            beta=0.2,
+            gamma=0.2,
+            learning_rate=0.1,
+            use_intermediate_updates=False,
+            # Evolution parameters
+            num_generations=3,  # Small number for quick testing
+            selection_strategy="roulette_wheel",
+            # Code genetic operators
+            code_crossover_rate=0.2,
+            code_mutation_rate=0.1,
+            code_edit_rate=0.8,
+            code_elite_proportion=0.5,
+            code_offspring_proportion=0.5,
+            # Test genetic operators
+            test_crossover_rate=0.5,
+            test_mutation_rate=0.3,
+            test_edit_rate=0.5,
+            # LLM configuration
+            llm_model=llm_model,
+        )
 
-    logger.info(
-        f"Configuration: {config.num_generations} generations, "
-        f"{config.initial_code_population_size} code solutions, "
-        f"{config.initial_test_population_size} test cases"
-    )
+        logger.info(
+            f"Configuration: {config.num_generations} generations, "
+            f"{config.initial_code_population_size} code solutions, "
+            f"{config.initial_test_population_size} test cases"
+        )
 
-    logger.trace(f"Full configuration: {config}")
+        logger.trace(f"Full configuration: {config}")
 
-    # Step 5: Create and run orchestrator
-    logger.info("Initializing orchestrator...")
-    orchestrator = CoevolutionOrchestrator(
-        config=config, problem=problem, llm_client=llm_client, sandbox=sandbox
-    )
+        # Step 5: Create and run orchestrator
+        logger.info("Initializing orchestrator...")
+        orchestrator = CoevolutionOrchestrator(
+            config=config, problem=problem, llm_client=llm_client, sandbox=sandbox
+        )
 
-    logger.info("Starting coevolution...")
-    code_population, test_population = orchestrator.run()
+        logger.info("Starting coevolution...")
+        code_population, test_population = orchestrator.run()
 
-    best_code_individual, best_code_prob = code_population.get_best_individual()
-    best_test_individual, best_test_prob = test_population.get_best_individual()
+        best_code_individual, best_code_prob = code_population.get_best_individual()
+        best_test_individual, best_test_prob = test_population.get_best_individual()
 
-    # Step 6: Display results
-    logger.info("=" * 80)
-    logger.info("COEVOLUTION RESULTS")
-    logger.info("=" * 80)
-    logger.info(f"Best code probability: {best_code_prob:.4f}")
-    logger.info(f"Best test probability: {best_test_prob:.4f}")
+        # Step 6: Display results
+        logger.info("=" * 80)
+        logger.info("COEVOLUTION RESULTS")
+        logger.info("=" * 80)
+        logger.info(f"Best code probability: {best_code_prob:.4f}")
+        logger.info(f"Best test probability: {best_test_prob:.4f}")
 
-    print("\n" + "=" * 80)
-    print("BEST CODE SOLUTION:")
-    print("=" * 80)
-    print(best_code_individual)
+        print("\n" + "=" * 80)
+        print("BEST CODE SOLUTION:")
+        print("=" * 80)
+        print(best_code_individual)
 
-    print("\n" + "=" * 80)
-    print("BEST TEST CASE:")
-    print("=" * 80)
-    print(best_test_individual)
+        print("\n" + "=" * 80)
+        print("BEST TEST CASE:")
+        print("=" * 80)
+        print(best_test_individual)
 
-    logger.trace("Final code population:")
-    for i, (individual, prob) in enumerate(code_population):
-        logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
+        logger.trace("Final code population:")
+        for i, (individual, prob) in enumerate(code_population):
+            logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
 
-    logger.trace("Final test population:")
-    for i, (individual, prob) in enumerate(test_population):
-        logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
+        logger.trace("Final test population:")
+        for i, (individual, prob) in enumerate(test_population):
+            logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
 
-    logger.info("Experiment completed successfully!")
+        logger.info("Experiment completed successfully!")
 
 
 if __name__ == "__main__":
