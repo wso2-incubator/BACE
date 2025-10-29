@@ -163,7 +163,7 @@ class CoevolutionOrchestrator:
         )
 
         # Generate initial code solutions using LLM operator
-        code_individuals = self.code_operator.create_initial_population(
+        code_individuals = self.code_operator.create_initial_individuals(
             self.config.initial_code_population_size
         )
 
@@ -198,8 +198,8 @@ class CoevolutionOrchestrator:
         )
 
         # Generate initial test class using LLM operator
-        # Note: test_operator.create_initial_population returns a single unittest class string
-        test_class_block = self.test_operator.create_initial_population(
+        # Note: test_operator.create_initial_individuals returns a single unittest class string
+        test_class_block = self.test_operator.create_initial_individuals(
             self.config.initial_test_population_size
         )
 
@@ -569,11 +569,12 @@ class CoevolutionOrchestrator:
         assert self.code_population is not None, "Code population must be initialized"
         assert self.test_population is not None, "Test population must be initialized"
 
-        logger.trace("Current Code Population:")
+        logger.trace(f"Generation {self.code_population.generation} populations:")
+        logger.trace("Code Population:")
         for i, (code, prob) in enumerate(self.code_population):
             logger.trace(f"Code #{i}: prob={prob:.4f}\n{code}\n")
 
-        logger.trace("Current Test Population:")
+        logger.trace("Test Population:")
         for i, (test, prob) in enumerate(self.test_population):
             logger.trace(f"Test #{i}: prob={prob:.4f}\n{test}\n")
 

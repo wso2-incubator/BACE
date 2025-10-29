@@ -15,7 +15,7 @@ Custom Exceptions:
     CodeValidationError: Raised when generated code fails validation checks
 
 Genetic Operations:
-    - create_initial_population: Generate initial population of individuals
+    - create_initial_individuals: Generate initial population of individuals
     - mutate: Modify an individual to explore variations
     - crossover: Combine two parents to create offspring
     - edit: Fix an individual based on feedback/errors
@@ -396,7 +396,7 @@ class Solution:
                 logger.warning("LLM returned empty code block")
                 raise LLMGenerationError("LLM returned empty code block")
 
-            logger.trace(f"Extracted code:\n{extracted_code}")
+            logger.trace(f"Extracted code [:20]:\n{extracted_code[:20]}")
 
             # Validate extracted code
             self._validate_generated_code(extracted_code)
@@ -495,7 +495,7 @@ class Solution:
 
     # --- Define the Abstract Interface for Operators ---
     @abstractmethod
-    def create_initial_population(self, population_size: int) -> List[str] | str:
+    def create_initial_individuals(self, population_size: int) -> List[str] | str:
         """
         Generate an initial population of individuals.
 
@@ -613,7 +613,7 @@ class CodeOperator(BaseLLMOperator):
         >>> fixed = code_op.edit(solutions[0], "NameError: x is not defined")
     """
 
-    def create_initial_population(self, population_size: int) -> List[str]:
+    def create_initial_individuals(self, population_size: int) -> List[str]:
         """
         Generate an initial population of code solutions.
 
@@ -835,7 +835,7 @@ class TestOperator(BaseLLMOperator):
         >>> improved = test_op.edit(individual_tests[0], "Test too broad, add edge cases")
     """
 
-    def create_initial_population(self, population_size: int) -> str:
+    def create_initial_individuals(self, population_size: int) -> str:
         """
         Generate an initial population of test cases as a single unittest class.
 

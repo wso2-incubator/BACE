@@ -14,7 +14,7 @@ from common.coevolution.operators import (
 class ConcreteOperator(BaseLLMOperator):
     """Concrete implementation for testing."""
 
-    def create_initial_population(self, population_size: int) -> list[str] | str:
+    def create_initial_individuals(self, population_size: int) -> list[str] | str:
         return []
 
     def mutate(self, individual: str, population: list[str]) -> str:
