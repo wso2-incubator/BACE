@@ -39,6 +39,7 @@ Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 from . import (
     bayesian,
     config,
+    core,
     evaluation,
     feedback,
     operators,
@@ -58,4 +59,5 @@ __all__ = [
     "feedback",
     "reproduction",
     "orchestrator",
+    "core",
 ]
