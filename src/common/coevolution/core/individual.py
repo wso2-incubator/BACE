@@ -89,7 +89,7 @@ class TestIndividual(BaseIndividual):
         # discrimination is only for test individuals
         self._discrimination: float | None = None
 
-        self._id = f"Core_T{next(TestIndividual._core_test_counter)}"
+        self._id = f"T{next(TestIndividual._core_test_counter)}"
         self.add_to_log(f"Born as {self._id}")
 
         logger.debug(f"Created new {self!r}")  # Use __repr__ for log

@@ -62,7 +62,7 @@ class OperatorRatesConfig:
             raise ValueError("edit_rate must be in the range [0.0, 1.0]")
 
 
-@dataclass(frozen=True)
+@dataclass
 class PopulationConfig:
     """
     A data structure to hold the hyperparameters for population management.
@@ -72,17 +72,29 @@ class PopulationConfig:
 
     initial_prior: float
     initial_population_size: int
-    max_population_size: int
-    elitism_rate: float
-    offspring_rate: float
 
     def __post_init__(self) -> None:
         if not (0.0 < self.initial_prior < 1.0):
             raise ValueError("initial_prior must be in the range (0.0, 1.0)")
         if self.initial_population_size <= 0:
             raise ValueError("initial_population_size must be positive.")
-        if self.max_population_size < self.initial_population_size:
-            raise ValueError("max_population_size must be >= initial_population_size.")
+
+
+@dataclass
+class CodePopulationConfig(PopulationConfig):
+    """
+    A data structure to hold the hyperparameters for Code population management.
+    Inherits from PopulationConfig.
+    """
+
+    max_population_size: int
+    elitism_rate: float
+    offspring_rate: float
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.max_population_size <= 0:
+            raise ValueError("max_population_size must be positive.")
         if not (0.0 <= self.elitism_rate <= 1.0):
             raise ValueError("elitism_rate must be in the range [0.0, 1.0]")
         if not (0.0 <= self.offspring_rate <= 1.0):
@@ -444,7 +456,7 @@ class ICodeInitializer(Protocol):
     initial code snippets.
     """
 
-    def create_initial_individuals(self, population_size: int) -> list[str]:
+    def create_initial_snippets(self, population_size: int) -> list[str]:
         """
         Generate an initial population of code snippets.
 
@@ -462,7 +474,7 @@ class ITestInitializer(Protocol):
     Abstract interface (Protocol) for a Test Population initializer.
     """
 
-    def create_initial_individuals(self, population_size: int) -> tuple[list[str], str]:
+    def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
         """
         Generate an initial population of test snippets.
 

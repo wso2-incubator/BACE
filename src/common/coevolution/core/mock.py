@@ -85,7 +85,7 @@ class MockCodeOperator(ICodeOperator):
     def __init__(self, problem: Problem) -> None:
         self.problem = problem
 
-    def create_initial_individuals(self, population_size: int) -> list[str]:
+    def create_initial_snippets(self, population_size: int) -> list[str]:
         logger.debug(f"MockCodeOperator: Creating {population_size} code snippets...")
         return [
             self.problem.starter_code + f"    pass # mock code {i}"
@@ -112,7 +112,7 @@ class MockTestOperator(ITestOperator):
     def __init__(self, problem: Problem) -> None:
         self.problem = problem
 
-    def create_initial_individuals(self, population_size: int) -> tuple[list[str], str]:
+    def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
         logger.debug(
             f"MockTestInitializer: Creating {population_size} test snippets..."
         )
@@ -372,17 +372,17 @@ class MockTestBeliefUpdater(IBeliefUpdater):
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
-        observation_matrix_transposed: np.ndarray,  # Expects (Tests x Code)
+        observation_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         logger.trace("MockTestBeliefUpdater called")
 
         # Mock logic: if a test fails > 50% of code,
         # its probability (of being correct) increases, otherwise decreases.
-        if observation_matrix_transposed.shape[1] == 0:  # No code
+        if observation_matrix.shape[0] == 0:  # No code
             return prior_test_probs
 
-        fail_rates = 1.0 - np.mean(observation_matrix_transposed, axis=1)
+        fail_rates = 1.0 - np.mean(observation_matrix, axis=0)
 
         # Simple update rule
         adjustment = (fail_rates - 0.5) * config.learning_rate

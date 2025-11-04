@@ -11,6 +11,7 @@ Functions:
 """
 
 import sys
+from typing import Any
 
 from loguru import logger
 
@@ -19,6 +20,7 @@ def setup_logging(
     console_level: str = "INFO",
     file_level: str = "TRACE",
     log_file_base_name: str = "coevolution_run",
+    setup_gen_log: bool = False,
 ) -> None:
     """
     Configures Loguru handlers for console and file logging.
@@ -59,12 +61,17 @@ def setup_logging(
         "{name}:{function}:{line} - {message}"
     )
 
+    # Define a filter to exclude generation logs from the main log
+    def exclude_gen_logs(record: Any) -> bool:
+        return "GEN_LOG" not in record["extra"]
+
     # Add the console logger
     logger.add(
         sys.stderr,
         level=console_level.upper(),
         format=console_format,
         colorize=True,
+        filter=exclude_gen_logs,
     )
 
     # Add the file logger
@@ -77,7 +84,21 @@ def setup_logging(
         retention="10 days",
         compression="zip",
         enqueue=True,  # Makes logging safe for multiprocessing
+        filter=exclude_gen_logs,
     )
+
+    if setup_gen_log:
+        gen_log_file = f"logs/generations/{log_file_base_name}_{{time:YYYYMMDD}}.log"
+        logger.info(f"Adding generation log sink: {gen_log_file}")
+        logger.add(
+            gen_log_file,
+            level="INFO",
+            filter=lambda record: "GEN_LOG" in record["extra"],
+            format="{message}",  # Only log the raw message
+            enqueue=True,
+            rotation="10 MB",
+            compression="zip",
+        )
 
     logger.configure(extra=default_context)
     logger.info(
