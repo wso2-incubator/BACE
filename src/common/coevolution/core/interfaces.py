@@ -1,7 +1,7 @@
 # coevolution/core/interfaces.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Iterator, Literal, Protocol, overload
 
 import numpy as np
 from loguru import logger
@@ -158,6 +158,8 @@ class BaseIndividual(ABC):
         self._creation_op = creation_op
         self._generation_born = generation_born
         self._parent_ids = parent_ids
+
+        BaseIndividual._validate_probability(probability)
         self._probability = probability
 
     def add_to_log(self, change_description: str) -> None:
@@ -174,8 +176,13 @@ class BaseIndividual(ABC):
         """
         pass
 
-    # --- Concrete Properties (Shared implementation) ---
+    # -- helper for validation of probability --
+    @staticmethod
+    def _validate_probability(value: float) -> None:
+        if not (0.0 <= value <= 1.0):
+            raise ValueError("Probability must be between 0.0 and 1.0")
 
+    # --- Concrete Properties (Shared implementation) ---
     @property
     def snippet(self) -> str:
         """The underlying code or test snippet."""
@@ -189,8 +196,7 @@ class BaseIndividual(ABC):
     @probability.setter
     def probability(self, value: float) -> None:
         """Setter for the individual's probability."""
-        if not (0.0 <= value <= 1.0):
-            raise ValueError("Probability must be between 0.0 and 1.0")
+        BaseIndividual._validate_probability(value)
         logger.trace(f"{self.id} probability set to {value:.4f}")
         self._probability = value
 
@@ -253,7 +259,24 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
     def __len__(self) -> int:
         return len(self._individuals)
 
+    @overload
     def __getitem__(self, index: int) -> T_Individual:
+        """Gets a single individual by integer index."""
+        ...
+
+    @overload
+    def __getitem__(self, index: slice) -> list[T_Individual]:
+        """Gets a list of individuals by slice."""
+        ...
+
+    def __getitem__(self, index: int | slice) -> T_Individual | list[T_Individual]:
+        """
+        Gets an individual by index or a list of individuals by slice.
+
+        This relies on the underlying list's __getitem__ which
+        already supports both integers and slices.
+        """
+        # The list's __getitem__ handles both types automatically
         return self._individuals[index]
 
     def __iter__(self) -> Iterator[T_Individual]:
