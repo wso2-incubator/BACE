@@ -77,7 +77,7 @@ class TestIndividual(BaseIndividual):
         Initializes the individual by passing all state
         to the base class.
         """
-        # --- Pass all arguments to the base class ---
+
         super().__init__(
             snippet,
             probability,
