@@ -10,7 +10,7 @@ from typing import Any
 
 from loguru import logger
 
-import common.logging_utils as logging_utils
+import common.coevolution.logging_utils as logging_utils
 from common.coevolution.core.interfaces import (
     BayesianConfig,
     CodePopulationConfig,
