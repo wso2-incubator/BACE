@@ -5,7 +5,7 @@ import random
 import numpy as np
 from loguru import logger
 
-import common.logging_utils as logging_utils
+import common.coevolution.logging_utils as logging_utils
 
 # Import concrete classes
 from .breeding_strategy import BreedingStrategy
@@ -13,6 +13,7 @@ from .individual import CodeIndividual, TestIndividual
 
 # Import all interfaces, configs, and types
 from .interfaces import (
+    BasePopulation,
     BayesianConfig,
     CodePopulationConfig,
     EvolutionConfig,
@@ -373,12 +374,45 @@ class Orchestrator:
 
         # --- Test Elites (Pareto Front) ---
         test_elites = test_population.get_pareto_front()
-
         logger.info(
             f"Selected {len(code_elites)} code elites and {len(test_elites)} test elites (Pareto)."
         )
 
         return code_elites, test_elites
+
+    def _notify_elites[IndT: CodeIndividual | TestIndividual](
+        self, elites: list[IndT], generation: int
+    ) -> None:
+        """
+        Helper to notify elite individuals about their selection.
+        """
+        for elite in elites:
+            elite.notify_selected_as_elite(generation=generation)
+
+    def _notify_removed_individuals[IndT: CodeIndividual | TestIndividual](
+        self,
+        population: BasePopulation[IndT],
+        next_gen_individuals: list[IndT],
+    ) -> None:
+        """
+        Helper to notify individuals that were removed from the population
+        (failed to survive to the next generation) about their death.
+
+        Args:
+            population: The current population before transition
+            next_gen_individuals: The list of individuals that will form the next generation
+        """
+        current_ids = {ind.id for ind in population}
+        next_ids = {ind.id for ind in next_gen_individuals}
+        removed_ids = current_ids - next_ids
+
+        if removed_ids:
+            logger.debug(
+                f"Notifying {len(removed_ids)} removed individuals about death in gen {population.generation}"
+            )
+            for ind in population:
+                if ind.id in removed_ids:
+                    ind.notify_died(generation=population.generation)
 
     def _breed_code(
         self,
@@ -511,6 +545,9 @@ class Orchestrator:
                 code_population, test_population
             )
 
+            self._notify_elites(code_elites, generation=code_population.generation)
+            self._notify_elites(test_elites, generation=test_population.generation)
+
             # --- Step 4: Generate Offspring ---
             logger.debug("Step 4: Generating offspring...")
             code_offsprings: list[CodeIndividual] = self._breed_code(
@@ -536,6 +573,8 @@ class Orchestrator:
             assert len(new_code_gen) <= self.code_pop_config.max_population_size, (
                 "Code population exceeded max size"
             )
+            # Notify removed individuals before transitioning
+            self._notify_removed_individuals(code_population, new_code_gen)
             code_population.set_next_generation(new_code_gen)
 
             # 5b. Test Population
@@ -543,6 +582,8 @@ class Orchestrator:
             assert len(new_test_gen) == self.test_pop_config.initial_population_size, (
                 "Test population size mismatch"
             )
+            # Notify removed individuals before transitioning
+            self._notify_removed_individuals(test_population, new_test_gen)
             test_population.set_next_generation(new_test_gen)
 
             logger.info(

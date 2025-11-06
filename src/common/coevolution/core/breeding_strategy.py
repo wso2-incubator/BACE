@@ -13,7 +13,6 @@ from .interfaces import (
     ISelectionStrategy,
     Operations,
     OperatorRatesConfig,
-    ParentProbabilities,
 )
 
 
@@ -62,7 +61,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
     def _perform_crossover(
         self, population: BasePopulation[T_self]
-    ) -> tuple[str, list[str], ParentProbabilities]:
+    ) -> tuple[str, list[T_self]]:
         """Selects two parents and performs crossover."""
         logger.trace("Worker selecting parents for crossover")
         p1_idx, p2_idx = self.selector.select_parents(population.probabilities)
@@ -75,10 +74,8 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         logger.trace(
             f"{pop_type} offspring: crossover (parents: {parent1.id}, {parent2.id})"
         )
-
-        parent_ids = [parent1.id, parent2.id]
-        parent_probs = [parent1.probability, parent2.probability]
-        return new_snippet, parent_ids, parent_probs
+        parents = [parent1, parent2]
+        return new_snippet, parents
 
     def _perform_edit(
         self,
@@ -87,7 +84,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         execution_results: ExecutionResults,
         observation_matrix: np.ndarray,
         feedback_generator: IFeedbackGenerator[T_other],
-    ) -> tuple[str, list[str], ParentProbabilities]:
+    ) -> tuple[str, list[T_self]]:
         """Selects one parent and performs a feedback-driven edit."""
         if not feedback_generator:
             # This is a safeguard; __init__ check should prevent this.
@@ -113,14 +110,11 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         logger.trace(
             f"{pop_type} offspring: edit ({len(feedback)} chars feedback, parent: {parent.id})"
         )
-
-        parent_ids = [parent.id]
-        parent_probs = [parent.probability]
-        return new_snippet, parent_ids, parent_probs
+        return new_snippet, [parent]
 
     def _perform_reproduction(
         self, population: BasePopulation[T_self]
-    ) -> tuple[str, list[str], ParentProbabilities]:
+    ) -> tuple[str, list[T_self]]:
         """Selects one parent and copies it (reproduction)."""
         logger.trace("Worker selecting parent for reproduction")
         parent_idx = self.selector.select(population.probabilities)
@@ -128,21 +122,38 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
         logger.trace(f"{self._get_population_type(population)} offspring: reproduction")
 
-        parent_ids = [parent.id]
-        parent_probs = [parent.probability]
         # Return the original snippet, not a copy
-        return parent.snippet, parent_ids, parent_probs
+        return parent.snippet, [parent]
 
-    def _apply_mutation(self, snippet: str, operation: Operations) -> str:
+    def _apply_mutation(self, snippet: str, prev_operation: Operations) -> str:
         """
         Applies mutation to a snippet based on the mutation rate.
-        Returns the (potentially) mutated snippet and the final operation name.
         """
 
         logger.trace("Worker applying mutation")
         mutated_snippet = self.operator.mutate(snippet)
-        logger.trace(f"Offspring: {operation} (after mutation)")
+        logger.trace(f"Offspring: mutated after {prev_operation}")
         return mutated_snippet
+
+    def _notify_parents(
+        self,
+        parents: list[T_self],
+        operation: Operations,
+        offspring_id: str,
+        generation: int,
+    ) -> None:
+        """
+        Notifies parent individuals that they have produced offspring.
+        Each parent handles its own logging internally.
+
+        Args:
+            parents: List of parent individuals.
+            operation: The genetic operation used.
+            offspring_id: The ID of the offspring produced.
+            generation: The generation when this parenting occurred.
+        """
+        for parent in parents:
+            parent.notify_parent_of(offspring_id, operation, generation)
 
     def generate_single_offspring(
         self,
@@ -176,21 +187,25 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
                        or feedback generator to be handled by the parallel executor.
         """
         rand = np.random.random()
-        operation: Operations = "reproduction"  # Default
+        base_operation: Operations = "reproduction"  # Default
         new_snippet: str = ""
-        new_prob: float = self.initial_prior
-        parent_ids: list[str] = []
-        parent_probs: ParentProbabilities = []
+        offspring: T_self
+        final_operation: Operations
+        final_prob: float
+        parents: list[T_self]
+        parent_ids: list[str]
+        parent_probs: list[float]
 
         current_gen = population.generation
 
+        # Step 1: Determine base genetic operation (crossover/edit/reproduction)
         if rand < operation_rates.crossover_rate:
-            operation = "crossover"
-            new_snippet, parent_ids, parent_probs = self._perform_crossover(population)
+            base_operation = "crossover"
+            new_snippet, parents = self._perform_crossover(population)
 
         elif rand < operation_rates.crossover_rate + operation_rates.edit_rate:
-            operation = "edit"
-            new_snippet, parent_ids, parent_probs = self._perform_edit(
+            base_operation = "edit"
+            new_snippet, parents = self._perform_edit(
                 population,
                 other_population,
                 execution_results,
@@ -199,31 +214,40 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
             )
 
         else:
-            operation = "reproduction"
-            new_snippet, parent_ids, parent_probs = self._perform_reproduction(
-                population
-            )
+            base_operation = "reproduction"
+            new_snippet, parents = self._perform_reproduction(population)
 
-        if np.random.random() < operation_rates.mutation_rate:
-            operation = "mutation"
-            new_snippet = self._apply_mutation(new_snippet, operation)
+        parent_ids = [parent.id for parent in parents]
+        parent_probs = [parent.probability for parent in parents]
 
-        new_prob = self.probability_assigner(
-            operation=operation,
+        # Step 2: Determine if mutation will be applied
+        will_mutate = np.random.random() < operation_rates.mutation_rate
+
+        # Step 3: Determine final operation and snippet
+        if will_mutate:
+            final_operation = "mutation"
+            final_snippet = self._apply_mutation(new_snippet, base_operation)
+        else:
+            final_operation = base_operation
+            final_snippet = new_snippet
+
+        # Step 4: Calculate probability based on final operation
+        final_prob = self.probability_assigner(
+            operation=final_operation,
             parent_probs=parent_probs,
             initial_prior=self.initial_prior,
         )
 
-        logger.trace(
-            f"Assigned new probability for {operation} offspring: {new_prob:.4f}"
-        )
-
+        # Step 5: Create offspring with final values
         offspring = self.individual_factory(
-            snippet=new_snippet,
-            probability=new_prob,
-            creation_op=operation,
-            generation_born=current_gen,
+            snippet=final_snippet,
+            probability=final_prob,
+            creation_op=final_operation,
+            generation_born=current_gen + 1,  # increment generation for offspring
             parent_ids=parent_ids,
         )
+
+        # Step 6: Notify parents of their role in producing offspring
+        self._notify_parents(parents, final_operation, offspring.id, current_gen)
 
         return offspring

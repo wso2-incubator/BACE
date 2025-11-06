@@ -1,6 +1,7 @@
 # coevolution/core/interfaces.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Protocol, overload
 
 import numpy as np
@@ -16,6 +17,32 @@ if TYPE_CHECKING:
     # We are only importing these for type-hinting, not for runtime logic.
     # This assumes they are defined in .population and .individual
     from .population import CodePopulation, TestPopulation
+
+
+class LifecycleEvent(Enum):
+    """Enumeration of lifecycle events for individuals."""
+
+    CREATED = "created"
+    BECAME_PARENT = "became_parent"
+    SELECTED_AS_ELITE = "selected_as_elite"
+    DIED = "died"
+    SURVIVED = "survived"
+
+
+@dataclass(frozen=True)
+class LogEntry:
+    """
+    A structured log entry for an individual's lifecycle event.
+
+    Attributes:
+        generation: The generation number when this event occurred.
+        event: The type of lifecycle event.
+        details: Additional event-specific information.
+    """
+
+    generation: int
+    event: LifecycleEvent
+    details: dict[str, Any]
 
 
 @dataclass
@@ -138,6 +165,9 @@ class BaseIndividual(ABC):
     Implements all shared logic and state for individuals,
     such as storing snippets, probabilities, and provenance.
 
+    All core attributes (snippet, probability, creation_op) are immutable
+    after creation to maintain consistency and prevent accidental modifications.
+
     Subclasses are only required to implement the 'id' property
     and the '__repr__' method.
     """
@@ -153,7 +183,7 @@ class BaseIndividual(ABC):
         """
         Initializes the shared state for all individuals.
         """
-        self.log: list[str] = []
+        self.lifecycle_log: list[LogEntry] = []
         self._snippet = snippet
         self._creation_op = creation_op
         self._generation_born = generation_born
@@ -162,8 +192,112 @@ class BaseIndividual(ABC):
         BaseIndividual._validate_probability(probability)
         self._probability = probability
 
-    def add_to_log(self, change_description: str) -> None:
-        self.log.append(change_description)
+        # Log creation event
+        self._log_event(
+            generation=generation_born,
+            event=LifecycleEvent.CREATED,
+            creation_op=creation_op,
+            probability=probability,
+        )
+
+    def _log_event(
+        self, generation: int, event: LifecycleEvent, **details: Any
+    ) -> None:
+        """
+        Internal method to record structured lifecycle events.
+
+        Args:
+            generation: The generation number when this event occurred.
+            event: The type of lifecycle event.
+            **details: Additional event-specific information.
+        """
+        entry = LogEntry(generation=generation, event=event, details=details)
+        self.lifecycle_log.append(entry)
+        logger.trace(f"Lifecycle event: {event.value} at gen {generation} - {details}")
+
+    def notify_parent_of(
+        self, offspring_id: str, operation: Operations, generation: int
+    ) -> None:
+        """
+        Called when this individual is used as a parent.
+        Logs the lifecycle event of producing offspring.
+
+        Args:
+            offspring_id: The ID of the offspring produced.
+            operation: The genetic operation used (crossover, edit, reproduction, mutation).
+            generation: The generation number when this parenting occurred.
+        """
+        self._log_event(
+            generation=generation,
+            event=LifecycleEvent.BECAME_PARENT,
+            offspring_id=offspring_id,
+            operation=operation,
+        )
+
+    def notify_selected_as_elite(self, generation: int) -> None:
+        """
+        Called when this individual is selected as an elite.
+
+        Args:
+            generation: The generation number when selected as elite.
+        """
+        self._log_event(
+            generation=generation,
+            event=LifecycleEvent.SELECTED_AS_ELITE,
+        )
+
+    def notify_died(self, generation: int) -> None:
+        """
+        Called when this individual is removed from the population.
+
+        Args:
+            generation: The generation number when this individual died.
+        """
+        self._log_event(
+            generation=generation,
+            event=LifecycleEvent.DIED,
+        )
+
+    def notify_survived(self, generation: int) -> None:
+        """
+        Called when this individual survives to the end of the evolutionary run.
+
+        Args:
+            generation: The final generation number.
+        """
+        self._log_event(
+            generation=generation,
+            event=LifecycleEvent.SURVIVED,
+        )
+
+    def get_complete_record(self) -> dict[str, Any]:
+        """
+        Returns a complete record of this individual for logging purposes.
+
+        This method is called when the individual's lifecycle ends (either by
+        dying or surviving to the end of the run) to capture all information
+        about the individual including its full lifecycle history.
+
+        Returns:
+            A dictionary containing all individual attributes and lifecycle events.
+        """
+        return {
+            "id": self.id,
+            "type": self.__class__.__name__,
+            "snippet": self.snippet,
+            "creation_op": self.creation_op,
+            "generation_born": self.generation_born,
+            "probability": self.probability,
+            "parent_ids": self.parent_ids,
+            "lifecycle_events": [
+                {
+                    "generation": entry.generation,
+                    "event": entry.event.value,
+                    "details": entry.details,
+                }
+                for entry in self.lifecycle_log
+            ],
+        }
 
     # --- Abstract Properties (Must be implemented by subclasses) ---
 
@@ -185,24 +319,40 @@ class BaseIndividual(ABC):
     # --- Concrete Properties (Shared implementation) ---
     @property
     def snippet(self) -> str:
-        """The underlying code or test snippet."""
+        """
+        The underlying code or test snippet (immutable after creation).
+        """
         return self._snippet
 
     @property
     def probability(self) -> float:
-        """The belief in this individual's correctness."""
+        """
+        The belief in this individual's correctness.
+
+        This value is mutable and gets updated via Bayesian belief updates
+        based on test execution results.
+        """
         return self._probability
 
     @probability.setter
     def probability(self, value: float) -> None:
-        """Setter for the individual's probability."""
+        """
+        Setter for the individual's probability.
+
+        Called during Bayesian belief updates to adjust confidence
+        based on test execution results.
+        """
         BaseIndividual._validate_probability(value)
-        logger.trace(f"{self.id} probability set to {value:.4f}")
+        logger.trace(
+            f"{self.id} probability updated: {self._probability:.4f} -> {value:.4f}"
+        )
         self._probability = value
 
     @property
     def creation_op(self) -> str:
-        """The name of the operation that created this individual."""
+        """
+        The name of the operation that created this individual (immutable).
+        """
         return self._creation_op
 
     @property
@@ -319,20 +469,24 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         Replaces the entire current population with a new set of individuals
         and advances the generation counter.
 
-        This method also logs which individuals were kept (elites),
+        This method logs which individuals were kept (elites),
         added (offspring), and removed (not selected).
+
+        Note: This method does NOT notify individuals about lifecycle events.
+        The caller (typically the Orchestrator) is responsible for notifying
+        removed individuals about their death before calling this method.
         """
         if not new_individuals:
             raise ValueError("Cannot set an empty population for the next generation.")
 
         # Logging the differences between old and new populations
-        old_ids = {ind.id for ind in self._individuals}
+        old_ids_map = {ind.id: ind for ind in self._individuals}
         new_ids = {ind.id for ind in new_individuals}
 
         # Calculate the differences
-        deleted_ids = old_ids - new_ids  # In old_ids but not in new_ids
-        added_ids = new_ids - old_ids  # In new_ids but not in old_ids
-        kept_ids = old_ids & new_ids  # In both (set intersection)
+        deleted_ids = set(old_ids_map.keys()) - new_ids  # In old_ids but not in new_ids
+        added_ids = new_ids - set(old_ids_map.keys())  # In new_ids but not in old_ids
+        kept_ids = set(old_ids_map.keys()) & new_ids  # In both (set intersection)
 
         logger.debug(
             f"Gen {self._generation} -> {self._generation + 1}: "
