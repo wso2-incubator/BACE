@@ -187,7 +187,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
                        or feedback generator to be handled by the parallel executor.
         """
         rand = np.random.random()
-        base_operation: Operations = "reproduction"  # Default
+        base_operation: Operations = Operations.REPRODUCTION  # Default
         new_snippet: str = ""
         offspring: T_self
         final_operation: Operations
@@ -200,11 +200,11 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
         # Step 1: Determine base genetic operation (crossover/edit/reproduction)
         if rand < operation_rates.crossover_rate:
-            base_operation = "crossover"
+            base_operation = Operations.CROSSOVER
             new_snippet, parents = self._perform_crossover(population)
 
         elif rand < operation_rates.crossover_rate + operation_rates.edit_rate:
-            base_operation = "edit"
+            base_operation = Operations.EDIT
             new_snippet, parents = self._perform_edit(
                 population,
                 other_population,
@@ -214,7 +214,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
             )
 
         else:
-            base_operation = "reproduction"
+            base_operation = Operations.REPRODUCTION
             new_snippet, parents = self._perform_reproduction(population)
 
         parent_ids = [parent.id for parent in parents]
@@ -225,7 +225,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
         # Step 3: Determine final operation and snippet
         if will_mutate:
-            final_operation = "mutation"
+            final_operation = Operations.MUTATION
             final_snippet = self._apply_mutation(new_snippet, base_operation)
         else:
             final_operation = base_operation

@@ -180,7 +180,7 @@ class MockProbabilityAssigner(IProbabilityAssigner):
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
-        if operation == "initial":
+        if operation == Operations.INITIAL:
             return initial_prior
         if not parent_probs:
             return initial_prior

@@ -29,6 +29,7 @@ from .interfaces import (
     ISelectionStrategy,
     ITestBlockBuilder,
     ITestOperator,
+    Operations,
     OperatorRatesConfig,
     PopulationConfig,
     Problem,
@@ -165,7 +166,7 @@ class Orchestrator:
                 TestIndividual(
                     snippet=snippet,
                     probability=fixed_prior,
-                    creation_op="initial",
+                    creation_op=Operations.INITIAL,
                     generation_born=0,
                     parent_ids=[],
                 )
@@ -204,7 +205,7 @@ class Orchestrator:
             CodeIndividual(
                 snippet=s,
                 probability=self.code_pop_config.initial_prior,
-                creation_op="initial",
+                creation_op=Operations.INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -225,7 +226,7 @@ class Orchestrator:
             TestIndividual(
                 snippet=s,
                 probability=self.test_pop_config.initial_prior,
-                creation_op="initial",
+                creation_op=Operations.INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )

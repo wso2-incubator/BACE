@@ -1,13 +1,64 @@
 # coevolution/core/interfaces.py
+"""
+Core interfaces for the coevolution framework.
+
+This module defines the protocol-based architecture for the coevolution system.
+It provides both fine-grained and grouped interfaces to support different
+implementation strategies.
+
+Interface Organization:
+
+    1. Data Structures (dataclasses):
+       - Configuration classes (BayesianConfig, OperatorRatesConfig, etc.)
+       - Data transfer objects (Test, Problem, LogEntry)
+       - Type aliases (Operations, ExecutionResults, etc.)
+
+    2. Base Classes (ABC):
+       - BaseIndividual: Abstract base for code/test individuals
+       - BasePopulation: Abstract base for populations
+
+    3. Fine-Grained Protocols:
+       These are single-responsibility interfaces that can be composed:
+       - IGeneticOperator: mutate, crossover, edit
+       - ICodeInitializer / ITestInitializer: create initial populations
+       - ISelectionStrategy: parent selection
+       - IProbabilityAssigner: offspring probability calculation
+       - IBeliefInitializer / IBeliefUpdater: Bayesian operations
+       - ICodeTestExecutor / IObservationMatrixBuilder: execution operations
+       - IDiscriminationCalculator: test discrimination
+       - IParetoFrontCalculator: multi-objective optimization
+       - ITestBlockBuilder: test class reconstruction
+       - IFeedbackGenerator: edit operation feedback
+       - IIndividualFactory: individual creation
+
+    4. Grouped Protocols
+       These combine related functionality typically implemented together:
+       - IBayesianSystem: Combines belief initialization + updating
+       - IExecutionSystem: Combines code execution + observation matrix building
+       - ISelectionSystem: Combines parent selection + probability assignment + Pareto front calculation
+       - ICodeOperator: Combines ICodeInitializer + IGeneticOperator
+       - ITestOperator: Combines ITestInitializer + IGeneticOperator
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Protocol, overload
+from typing import TYPE_CHECKING, Any, Iterator, Protocol, overload
 
 import numpy as np
 from loguru import logger
 
-type Operations = Literal["initial", "crossover", "edit", "reproduction", "mutation"]
+
+class Operations(Enum):
+    """Enumeration of genetic operations for creating individuals."""
+
+    INITIAL = "initial"
+    CROSSOVER = "crossover"
+    EDIT = "edit"
+    REPRODUCTION = "reproduction"
+    MUTATION = "mutation"
+
+
 type ParentProbabilities = list[float]
 type UnitTestResult = Any
 type ExecutionResults = list[UnitTestResult]
@@ -349,7 +400,7 @@ class BaseIndividual(ABC):
         self._probability = value
 
     @property
-    def creation_op(self) -> str:
+    def creation_op(self) -> Operations:
         """
         The name of the operation that created this individual (immutable).
         """
