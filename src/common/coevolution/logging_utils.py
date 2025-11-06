@@ -81,6 +81,12 @@ def setup_logging(
         "{name}:{function}:{line} - {message}"
     )
 
+    gen_log_format = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+        "[{extra[run_id]}:{extra[problem_id]}] | "
+        "{message}"
+    )
+
     # Define a filter to exclude generation logs from the main log
     def exclude_gen_logs(record: Any) -> bool:
         return "GEN_LOG" not in record["extra"]
@@ -114,7 +120,7 @@ def setup_logging(
             gen_log_file,
             level="INFO",
             filter=lambda record: "GEN_LOG" in record["extra"],
-            format="{message}",  # Only log the raw message
+            format=gen_log_format,
             enqueue=True,
             rotation="10 MB",
             compression="zip",
@@ -184,12 +190,12 @@ def log_generation_summary(
         "generation": gen_num,
         "code_pop_size": len(code_population),
         "test_pop_size": len(test_population),
-        "avg_code_prob": sum(code_probs) / len(code_probs) if code_probs else 0.0,
-        "avg_test_prob": sum(test_probs) / len(test_probs) if test_probs else 0.0,
-        "min_code_prob": min(code_probs) if code_probs else 0.0,
-        "max_code_prob": max(code_probs) if code_probs else 0.0,
-        "min_test_prob": min(test_probs) if test_probs else 0.0,
-        "max_test_prob": max(test_probs) if test_probs else 0.0,
+        "avg_code_prob": round(sum(code_probs) / len(code_probs), 4),
+        "avg_test_prob": round(sum(test_probs) / len(test_probs), 4),
+        "min_code_prob": round(min(code_probs), 4),
+        "max_code_prob": round(max(code_probs), 4),
+        "min_test_prob": round(min(test_probs), 4),
+        "max_test_prob": round(max(test_probs), 4),
         "new_code_count": len(new_code_ids),
         "new_test_count": len(new_test_ids),
         "new_code_ids": new_code_ids,
@@ -219,6 +225,9 @@ def log_individual_complete(
 
     # Get complete record from individual (includes all lifecycle events)
     record = individual.get_complete_record()
+
+    # Round probability to 4 decimal places for cleaner logs
+    record["probability"] = round(record["probability"], 4)
 
     # Add status to the record
     record["status"] = status
