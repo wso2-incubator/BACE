@@ -226,8 +226,10 @@ def log_individual_complete(
     # Get complete record from individual (includes all lifecycle events)
     record = individual.get_complete_record()
 
-    # Round probability to 4 decimal places for cleaner logs
-    record["probability"] = round(record["probability"], 4)
+    for key, value in record.items():
+        # Round float values to 4 decimal places for cleaner logs
+        if isinstance(value, float):
+            record[key] = round(value, 4)
 
     # Add status to the record
     record["status"] = status
