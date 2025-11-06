@@ -35,29 +35,11 @@ Usage Patterns:
 Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 """
 
-# Import submodules to make them available as attributes
-from . import (
-    bayesian,
-    config,
-    core,
-    evaluation,
-    feedback,
-    operators,
-    orchestrator,
-    population,
-    reproduction,
-    selection,
-)
+# Note: Most files have been moved to deprecated/
+# They will be replaced by new implementations based on core/ interfaces
+from . import core, deprecated
 
 __all__ = [
-    "config",
-    "bayesian",
-    "operators",
-    "population",
-    "selection",
-    "evaluation",
-    "feedback",
-    "reproduction",
-    "orchestrator",
     "core",
+    "deprecated",
 ]
