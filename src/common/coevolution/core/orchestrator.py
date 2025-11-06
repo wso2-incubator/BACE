@@ -40,16 +40,22 @@ from .population import CodePopulation, TestPopulation
 
 class Orchestrator:
     """
-    Mock Orchestrator for the co-evolutionary algorithm.
+    Orchestrator for the co-evolutionary algorithm.
 
     This class coordinates the entire coevolution process by "wiring up"
     all the necessary components (operators, selectors, updaters)
     which are injected as dependencies. It follows the plan of:
+
     1. Execute (Generated, Public, Private tests)
     2. Update Beliefs (from Generated, then Public)
     3. Select Elites (top-k for code, Pareto for tests)
     4. Generate Offspring (using breeders)
-    5. Set Next Generation
+    5. Set Next Generation (notify removed individuals of death)
+    6. Log Evolution Progress (generation summaries and individual lifecycles)
+
+    Logging Strategy:
+    - Generation summaries: Logged at each generation with aggregate statistics
+    - Individual lifecycles: Logged once when individual dies or survives to the end
     """
 
     def __init__(
@@ -80,6 +86,11 @@ class Orchestrator:
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
+
+        Also sets up:
+        - Concrete breeding strategies for code and test populations
+        - Generation logger for tracking evolution progress (via logging_utils)
+        - Random seed for reproducibility
         """
         logger.info("Initializing MockOrchestrator...")
 
@@ -126,7 +137,7 @@ class Orchestrator:
             initial_prior=self.test_pop_config.initial_prior,
         )
 
-        self.gen_logger = logger.bind(GEN_LOG=True)
+        self.gen_logger = logging_utils.get_generation_logger()
         self._set_random_seed(evo_config.random_seed)
         logger.info("MockOrchestrator initialized successfully.")
 
@@ -137,46 +148,6 @@ class Orchestrator:
         np.random.seed(seed)
         random.seed(seed)
         logger.info(f"Random seed set to {seed} for reproducibility.")
-
-    def _log_generation_state(
-        self,
-        code_population: CodePopulation,
-        test_population: TestPopulation,
-    ) -> None:
-        """
-        Logs the state of every individual in both populations to the generation log.
-        """
-        gen_num = (
-            code_population.generation
-        )  # Both populations should be at the same gen
-        logger.debug(
-            f"Logging state for Generation {gen_num} populations to generation log."
-        )
-        self.gen_logger.info(f"--- Generation {gen_num} Population State ---")
-
-        for code_ind in code_population:
-            # Format as a simple key=value string for easy parsing
-            log_msg = (
-                "-" * 20 + "\n"
-                f"GEN_BORN:{code_ind.generation_born}, TYPE:CODE, ID:{code_ind.id}, "
-                f"PROB:{code_ind.probability:.4f}, OP:{code_ind.creation_op}, "
-                f"PARENTS:{','.join(code_ind.parent_ids) or '[]'} "
-                f"SNIPPET:\n\n{code_ind.snippet}"
-                "\n\n"
-            )
-            self.gen_logger.info(log_msg)
-
-        for test_ind in test_population:
-            log_msg = (
-                "-" * 20 + "\n"
-                f"GEN_BORN:{test_ind.generation_born}, TYPE:TEST, ID:{test_ind.id}, "
-                f"PROB:{test_ind.probability:.4f}, "
-                f"OP:{test_ind.creation_op}, PARENTS:{','.join(test_ind.parent_ids) or '[]'} "
-                f"SNIPPET:\n\n{test_ind.snippet}"
-                "\n\n"
-            )
-            log_msg = "".join(log_msg)
-            self.gen_logger.info(log_msg)
 
     def _create_fixed_test_population(
         self, test_cases: list[Test], fixed_prior: float
@@ -395,8 +366,11 @@ class Orchestrator:
         next_gen_individuals: list[IndT],
     ) -> None:
         """
-        Helper to notify individuals that were removed from the population
-        (failed to survive to the next generation) about their death.
+        Helper to log and notify individuals that were removed from the population
+        (failed to survive to the next generation).
+
+        Logs the complete lifecycle record BEFORE notifying about death,
+        ensuring we capture the complete state before any modifications.
 
         Args:
             population: The current population before transition
@@ -408,10 +382,13 @@ class Orchestrator:
 
         if removed_ids:
             logger.debug(
-                f"Notifying {len(removed_ids)} removed individuals about death in gen {population.generation}"
+                f"Logging and notifying {len(removed_ids)} removed individuals about death in gen {population.generation}"
             )
             for ind in population:
                 if ind.id in removed_ids:
+                    # Log complete lifecycle record BEFORE notifying
+                    logging_utils.log_individual_complete(self.gen_logger, ind, "DIED")
+                    # Then notify the individual
                     ind.notify_died(generation=population.generation)
 
     def _breed_code(
@@ -476,6 +453,27 @@ class Orchestrator:
     def run(self) -> tuple[CodePopulation, TestPopulation]:
         """
         Runs the main co-evolutionary loop for the configured number of generations.
+
+        Evolution Process:
+        - Creates initial populations (code, test, public test, private test)
+        - Iterates through generations performing:
+          1. Execution & Observation (run tests, build observation matrices)
+          2. Belief Updates (Bayesian updates on probabilities)
+          3. Elite Selection (top-k code, Pareto front tests)
+          4. Offspring Generation (via breeding strategies)
+          5. Population Transition (set next generation, notify removed individuals)
+          6. Logging (generation summaries)
+
+        Logging Behavior:
+        - Each generation: Logs lightweight summary with aggregate statistics
+        - When individuals die: Logs complete lifecycle record (once per individual)
+        - After evolution: Logs all final survivors with complete lifecycle records
+
+        This logging strategy ensures each individual is logged exactly once,
+        eliminating redundancy from repeated logging across generations.
+
+        Returns:
+            Tuple of (final_code_population, final_test_population)
         """
         logging_utils.log_section_header("INFO", "STARTING MOCK CO-EVOLUTION RUN")
 
@@ -592,7 +590,14 @@ class Orchestrator:
                 f"Test Pop Size: {test_population.size}"
             )
 
-            self._log_generation_state(code_population, test_population)
+            logging_utils.log_generation_summary(
+                self.gen_logger, code_population, test_population
+            )
+
+        # After evolution loop completes, log all final survivors
+        logging_utils.log_final_survivors(
+            self.gen_logger, code_population, test_population
+        )
 
         logging_utils.log_section_header(
             "INFO",
