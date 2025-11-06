@@ -1041,7 +1041,7 @@ class TestParentNotification:
         mock_feedback_generator: MagicMock,
         default_operation_rates: dict[str, float],
     ) -> None:
-        """Test parent is notified with final operation (mutation if applied)."""
+        """Test parent is notified with base operation (not final operation after mutation)."""
         mock_random.side_effect = [0.1, 0.1]  # crossover, then mutation
 
         _ = breeding_strategy.generate_single_offspring(
@@ -1056,8 +1056,8 @@ class TestParentNotification:
         parent1 = sample_code_population[0]
         parent1_last_event = parent1.lifecycle_log[-1]
 
-        # Should be notified with 'mutation', not 'crossover'
-        assert parent1_last_event.details["operation"] == "mutation"
+        # Should be notified with base operation 'crossover', not 'mutation'
+        assert parent1_last_event.details["operation"] == "crossover"
 
 
 # ============================================================================
