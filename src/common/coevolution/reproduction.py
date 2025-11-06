@@ -122,7 +122,7 @@ class ReproductionStrategy:
             parent2_prob = float(population.probabilities[parent2_idx])
 
             child = self.operator.crossover(parent1, parent2)
-            child_prob = max(min(parent1_prob, parent2_prob), self.initial_prior)
+            child_prob = (parent1_prob + parent2_prob) / 2
             operation = "crossover"
 
         elif rand < crossover_rate + edit_rate:
@@ -135,7 +135,7 @@ class ReproductionStrategy:
                 observation_matrix, execution_results, other_population, parent_idx
             )
             child = self.operator.edit(parent, feedback)
-            child_prob = max(parent_prob, self.initial_prior)
+            child_prob = parent_prob
             operation = "edit"
 
         else:
