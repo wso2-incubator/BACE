@@ -11,7 +11,8 @@ import random
 import numpy as np
 from loguru import logger
 
-from common.coevolution.population import CodePopulation, TestPopulation
+# TODO: Update to use core.population after creating adapters
+from common.coevolution.deprecated.population import CodePopulation, TestPopulation
 from common.sandbox import TestExecutionResult, TestResult
 
 # --- Constants ---
