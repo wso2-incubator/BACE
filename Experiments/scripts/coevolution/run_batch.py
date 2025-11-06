@@ -33,7 +33,7 @@ def setup_logging(
     )
     # File logger (detailed) - Use default format, capture TRACE level
     logger.add(
-        "logs/experiment_run_{time:YYYYMMDD}.log",
+        "logs/experiment_batch_{time:YYYY-MM-DD}.log",
         level=file_log_level.upper(),  # Set to TRACE level
         rotation="100 MB",
         retention="10 days",
@@ -201,4 +201,4 @@ def main_batch(num_problems: int = 20) -> None:
 
 
 if __name__ == "__main__":
-    main_batch(num_problems=20)
+    main_batch(num_problems=10)

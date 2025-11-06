@@ -62,7 +62,7 @@ def main() -> None:
     # Step 1: Load a problem from LiveCodeBench
     logger.info("Loading problem from LiveCodeBench dataset...")
     dataset = code_generation.load_code_generation_dataset(
-        release_version="release_v6",
+        release_version="release_v5",
         start_date="2024-01-01",
         difficulty=code_generation.Difficulty.HARD,
     )
