@@ -248,6 +248,6 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         )
 
         # Step 6: Notify parents of their role in producing offspring
-        self._notify_parents(parents, final_operation, offspring.id, current_gen)
+        self._notify_parents(parents, base_operation, offspring.id, current_gen)
 
         return offspring
