@@ -4,7 +4,7 @@ import numpy as np
 from loguru import logger
 
 from .individual import CodeIndividual, TestIndividual
-from .interfaces import BasePopulation, IParetoFrontCalculator, ITestBlockBuilder
+from .interfaces import BasePopulation, IPareto, ITestBlockRebuilder
 
 
 class CodePopulation(BasePopulation[CodeIndividual]):
@@ -32,8 +32,8 @@ class TestPopulation(BasePopulation[TestIndividual]):
         self,
         individuals: list[TestIndividual],
         # injected dependencies
-        pareto_fn: IParetoFrontCalculator,
-        rebuild_test_block_fn: ITestBlockBuilder,
+        pareto: IPareto,
+        test_block_rebuilder: ITestBlockRebuilder,
         # default values
         test_class_block: str = "",
         generation: int = 0,
@@ -43,21 +43,15 @@ class TestPopulation(BasePopulation[TestIndividual]):
 
         super().__init__(individuals, generation)
         self._test_class_block = test_class_block
-        self._set_default_discriminations()
 
-        self._pareto_fn = pareto_fn
-        self._rebuild_test_block_fn = rebuild_test_block_fn
-
-    def _set_default_discriminations(self) -> None:
-        """Internal helper to initialize or reset discrimination scores."""
-        for ind in self._individuals:
-            ind.discrimination = None
+        self._pareto = pareto
+        self._test_block_rebuilder = test_block_rebuilder
 
     def _build_test_class_block(self) -> None:
         """Implementation of rebuilding the test class block."""
 
         logger.debug("Rebuilding test class block")
-        self._test_class_block = self._rebuild_test_block_fn(
+        self._test_class_block = self._test_block_rebuilder.rebuild_test_block(
             self._test_class_block,
             [ind.snippet for ind in self._individuals],
         )
@@ -65,45 +59,31 @@ class TestPopulation(BasePopulation[TestIndividual]):
     def _on_generation_advanced(self) -> None:
         """
         Hook called by set_next_generation.
-        Rebuilds test class block and resets discrimination scores.
+        Rebuilds test class block.
         """
         logger.debug(f"Rebuilding test class block for gen {self.generation}...")
         self._build_test_class_block()
-        self._set_default_discriminations()
 
     @property
     def test_class_block(self) -> str:
         """Get the full unittest class block."""
         return self._test_class_block
 
-    @property
-    def discriminations(self) -> np.ndarray:
-        """Returns a list of discrimination scores from the individuals."""
-        return np.array(
-            [
-                ind._discrimination if ind._discrimination is not None else np.nan
-                for ind in self._individuals
-            ],
-            dtype=float,
-        )
-
-    def set_discriminations(self, new_discriminations: np.ndarray) -> None:
-        """Sets the discrimination score for each TestIndividual."""
-        if len(new_discriminations) != self.size:
-            raise ValueError(
-                "Length of new_discriminations must match population size."
-            )
-
-        for ind, disc in zip(self._individuals, new_discriminations):
-            ind.discrimination = float(disc) if np.isfinite(disc) else None
-
-    def get_pareto_front(self) -> list[TestIndividual]:
+    def get_pareto_front(self, observation_matrix: np.ndarray) -> list[TestIndividual]:
         """
-        Computes and returns the Pareto front based on
-        probability and discrimination (maximize both).
+        Selects Pareto-optimal individuals based on probabilities and test execution results.
+
+        Args:
+            observation_matrix: Execution results from running this population's tests
+                              against code population (rows=code, cols=tests)
+
+        Returns:
+            List of TestIndividuals that are on the Pareto front.
         """
         logger.debug("Computing Pareto front for TestPopulation...")
-        indices: list[int] = self._pareto_fn(self.probabilities, self.discriminations)
+        indices: list[int] = self._pareto.get_pareto_indices(
+            self.probabilities, observation_matrix
+        )
         return [self._individuals[i] for i in indices]
 
     def __repr__(self) -> str:

@@ -85,9 +85,6 @@ class TestIndividual(BaseIndividual):
             parent_ids,
         )
 
-        # discrimination is only for test individuals
-        self._discrimination: float | None = None
-
         self._id = f"T{next(TestIndividual._core_test_counter)}"
 
         logger.debug(f"Created new {self!r}")  # Use __repr__ for log
@@ -99,28 +96,7 @@ class TestIndividual(BaseIndividual):
 
     # --- Concrete implementation of '__repr__' ---
     def __repr__(self) -> str:
-        # Check if discrimination is set before trying to print it
-        disc_str = (
-            f"{self._discrimination:.1f}"
-            if self._discrimination is not None
-            else "None"
-        )
         return (
             f"<TestIndividual id={self.id} gen={self.generation_born} "
-            f"prob={self.probability:.1f} disc={disc_str}>"
+            f"prob={self.probability:.1f}>"
         )
-
-    # --- Test-Specific Properties ---
-    @property
-    def discrimination(self) -> float | None:
-        if self._discrimination is None:
-            logger.warning(
-                f"{self.id}: Attempted to access .discrimination, but it is not set."
-            )
-        return self._discrimination
-
-    @discrimination.setter
-    def discrimination(self, value: float | None) -> None:  # Allow setting to None
-        log_val = f"{value:.4f}" if value is not None else "None"
-        logger.trace(f"{self.id} discrimination set to {log_val}")
-        self._discrimination = value

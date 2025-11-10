@@ -25,19 +25,17 @@ Interface Organization:
        - IProbabilityAssigner: offspring probability calculation
        - IBeliefInitializer / IBeliefUpdater: Bayesian operations
        - ICodeTestExecutor / IObservationMatrixBuilder: execution operations
-       - IDiscriminationCalculator: test discrimination
-       - IParetoFrontCalculator: multi-objective optimization
-       - ITestBlockBuilder: test class reconstruction
+       - ITestBlockRebuilder: test class block reconstruction
        - IFeedbackGenerator: edit operation feedback
        - IIndividualFactory: individual creation
 
-    4. Grouped Protocols
+    4. Grouped Protocols (Systems):
        These combine related functionality typically implemented together:
-       - IBayesianSystem: Combines belief initialization + updating
-       - IExecutionSystem: Combines code execution + observation matrix building
-       - ISelectionSystem: Combines parent selection + probability assignment + Pareto front calculation
-       - ICodeOperator: Combines ICodeInitializer + IGeneticOperator
-       - ITestOperator: Combines ITestInitializer + IGeneticOperator
+       - IBayesianSystem: Belief initialization + updating
+       - IExecutionSystem: Code execution + observation matrix building
+       - IPareto: Discrimination calculation + Pareto front selection
+       - ICodeOperator: Code initialization + genetic operations
+       - ITestOperator: Test initialization + genetic operations
 """
 
 from abc import ABC, abstractmethod
@@ -47,6 +45,11 @@ from typing import TYPE_CHECKING, Any, Iterator, Protocol, overload
 
 import numpy as np
 from loguru import logger
+
+if TYPE_CHECKING:
+    # We are only importing these for type-hinting, not for runtime logic.
+    # This assumes they are defined in .population and .individual
+    from .population import CodePopulation, TestPopulation
 
 
 class Operations(Enum):
@@ -59,17 +62,6 @@ class Operations(Enum):
     MUTATION = "mutation"
 
 
-type ParentProbabilities = list[float]
-type UnitTestResult = Any
-type ExecutionResults = list[UnitTestResult]
-type Sandbox = Any
-
-if TYPE_CHECKING:
-    # We are only importing these for type-hinting, not for runtime logic.
-    # This assumes they are defined in .population and .individual
-    from .population import CodePopulation, TestPopulation
-
-
 class LifecycleEvent(Enum):
     """Enumeration of lifecycle events for individuals."""
 
@@ -78,6 +70,12 @@ class LifecycleEvent(Enum):
     SELECTED_AS_ELITE = "selected_as_elite"
     DIED = "died"
     SURVIVED = "survived"
+
+
+type ParentProbabilities = list[float]
+type UnitTestResult = Any
+type ExecutionResults = list[UnitTestResult]
+type Sandbox = Any
 
 
 @dataclass(frozen=True)
@@ -730,24 +728,26 @@ class ITestInitializer(Protocol):
         ...
 
 
-class ICodeOperator(ICodeInitializer, IGeneticOperator):
+class ICodeOperator(ICodeInitializer, IGeneticOperator, Protocol):
     """
     Abstract interface (Protocol) for a Code genetic operator.
 
-    Combines the ICodeInitializer and IGeneticOperator protocols.
+    Combines code initialization and genetic operations.
+    Handles all aspects of code snippet creation and evolution.
     """
 
-    ...
+    pass
 
 
-class ITestOperator(ITestInitializer, IGeneticOperator):
+class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
     """
     Abstract interface (Protocol) for a Test genetic operator.
 
-    Combines the ITestInitializer and IGeneticOperator protocols.
+    Combines test initialization and genetic operations.
+    Handles all aspects of test snippet creation and evolution.
     """
 
-    ...
+    pass
 
 
 class ISelectionStrategy(Protocol):
@@ -793,12 +793,9 @@ class ISelectionStrategy(Protocol):
 class IProbabilityAssigner(Protocol):
     """
     Protocol defining the contract for a probability assignment policy.
-
-    This allows the implementation to be a simple function OR
-    a stateful class instance that implements __call__.
     """
 
-    def __call__(
+    def assign_probability(
         self,
         operation: Operations,
         parent_probs: ParentProbabilities,
@@ -818,17 +815,40 @@ class IProbabilityAssigner(Protocol):
         ...
 
 
-class IParetoFrontCalculator(Protocol):
+class IPareto(Protocol):
     """
-    Protocol defining the contract for a Pareto front calculation strategy.
-    Implementations should maximize both objectives.
+    Unified protocol for multi-objective optimization of test populations.
+
+    Combines discrimination calculation and Pareto front selection,
+    which are tightly coupled aspects of multi-objective optimization
+    for coevolutionary test generation.
+
+    Design:
+    - Internal methods (calculate_discrimination, calculate_pareto_front) are
+      independently testable helpers
+    - Public method (get_pareto_indices) provides clean API that orchestrates
+      the full Pareto selection process
+    - Discriminations are NOT stored as state - they're computed on-demand
     """
 
-    def __call__(
+    def calculate_discrimination(self, observation_matrix: np.ndarray) -> np.ndarray:
+        """
+        Internal helper: Calculates discrimination scores for each test.
+
+        Args:
+            observation_matrix: A 2D array where rows are code individuals
+                                and columns are tests.
+
+        Returns:
+            A 1D array of discrimination scores for each test.
+        """
+        ...
+
+    def calculate_pareto_front(
         self, probabilities: np.ndarray, discriminations: np.ndarray
     ) -> list[int]:
         """
-        Calculates the Pareto front.
+        Internal helper: Calculates the Pareto front based on two objectives.
 
         Args:
             probabilities: 1D array of probabilities (Objective 1, to maximize).
@@ -839,26 +859,23 @@ class IParetoFrontCalculator(Protocol):
         """
         ...
 
-
-class ITestBlockBuilder(Protocol):
-    """
-    Protocol defining the contract for a test class block rebuilder.
-    """
-
-    def __call__(self, original_class_str: str, new_method_snippets: list[str]) -> str:
+    def get_pareto_indices(
+        self, probabilities: np.ndarray, observation_matrix: np.ndarray
+    ) -> list[int]:
         """
-        Rebuilds a test class string using new test method snippets.
+        Public API: Returns indices of Pareto-optimal individuals.
+
+        Internally computes discriminations from observation_matrix,
+        then finds the Pareto front based on both objectives.
 
         Args:
-            original_class_str: The full string of the original unittest class.
-                                This is used as a template to preserve imports,
-                                class name, and helper methods.
-            new_method_snippets: A list of new test method snippets (e.g.,
-                                 ["def test_new_1(self): ...", ...]) to
-                                 replace the old ones.
+            probabilities: 1D array of probabilities (Objective 1, to maximize).
+            observation_matrix: 2D array where rows are code individuals and
+                              columns are tests. Used to calculate discrimination
+                              scores (Objective 2, to maximize).
 
         Returns:
-            A new full unittest class string.
+            A list of integer indices for the individuals on the Pareto front.
         """
         ...
 
@@ -898,7 +915,7 @@ class IFeedbackGenerator[T_Individual: BaseIndividual](Protocol):
     Protocol defining the contract for a feedback generator.
     """
 
-    def __call__(
+    def generate_feedback(
         self,
         observation_matrix: np.ndarray,
         execution_results: ExecutionResults,
@@ -926,7 +943,7 @@ class ICodeTestExecutor(Protocol):
     Protocol defining the contract for a code-test executor for the entire population.
     """
 
-    def __call__(
+    def execute_tests(
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
@@ -938,6 +955,7 @@ class ICodeTestExecutor(Protocol):
         Args:
             code_population: The population of code snippets to be tested.
             test_population: The population of test snippets to run against the code.
+            sandbox: The sandbox environment for execution.
 
         Returns:
             An ExecutionResults object containing the results of the execution.
@@ -950,7 +968,7 @@ class IObservationMatrixBuilder(Protocol):
     Protocol defining the contract for building an observation matrix.
     """
 
-    def __call__(
+    def build_observation_matrix(
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
@@ -970,14 +988,30 @@ class IObservationMatrixBuilder(Protocol):
         ...
 
 
-class IDiscriminationCalculator(Protocol):
+class ITestBlockRebuilder(Protocol):
     """
-    Protocol defining the contract for calculating test discrimination.
+    Protocol defining the contract for rebuilding test class blocks.
+
+    This interface allows for flexible implementations of test block reconstruction,
+    whether as a simple utility function or a more sophisticated strategy.
     """
 
-    def __call__(self, observation_matrix: np.ndarray) -> np.ndarray:
+    def rebuild_test_block(
+        self, original_class_str: str, new_method_snippets: list[str]
+    ) -> str:
         """
-        Calculates discrimination scores for each test.
+        Rebuilds a test class string using new test method snippets.
+
+        Args:
+            original_class_str: The full string of the original unittest class.
+                                This is used as a template to preserve imports,
+                                class name, and helper methods.
+            new_method_snippets: A list of new test method snippets (e.g.,
+                                 ["def test_new_1(self): ...", ...]) to
+                                 replace the old ones.
+
+        Returns:
+            A new full unittest class string.
         """
         ...
 
@@ -987,7 +1021,7 @@ class IBeliefInitializer(Protocol):
     Protocol defining the contract for a Bayesian belief initialization strategy.
     """
 
-    def __call__(
+    def initialize_beliefs(
         self,
         population_size: int,
         initial_probability: float,
@@ -1007,10 +1041,14 @@ class IBeliefInitializer(Protocol):
 
 class IBeliefUpdater(Protocol):
     """
-    Protocol defining the contract for a Bayesian belief update strategy.
+    Protocol defining the contract for Bayesian belief update strategies.
+
+    Provides separate methods for updating code and test beliefs, making it
+    explicit which population is being updated and avoiding confusion about
+    parameter ordering and matrix transformations.
     """
 
-    def __call__(
+    def update_code_beliefs(
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
@@ -1018,16 +1056,74 @@ class IBeliefUpdater(Protocol):
         config: BayesianConfig,
     ) -> np.ndarray:
         """
-        Performs a posterior update for the concerned population.
+        Update beliefs for the code population based on test results.
 
         Args:
             prior_code_probs: Prior probabilities for the code population.
             prior_test_probs: Prior probabilities for the test population.
-            observation_matrix: Matrix of interactions.
+            observation_matrix: Matrix of interactions (rows=code, cols=tests).
             config: A BayesianConfig object containing hyperparameters
                     (alpha, beta, gamma, learning_rate).
 
         Returns:
-            The updated posterior probabilities for the concerned population.
+            Updated posterior probabilities for the code population.
         """
         ...
+
+    def update_test_beliefs(
+        self,
+        prior_code_probs: np.ndarray,
+        prior_test_probs: np.ndarray,
+        observation_matrix: np.ndarray,
+        config: BayesianConfig,
+    ) -> np.ndarray:
+        """
+        Update beliefs for the test population based on code results.
+
+        Args:
+            prior_code_probs: Prior probabilities for the code population.
+            prior_test_probs: Prior probabilities for the test population.
+            observation_matrix: Matrix of interactions (rows=code, cols=tests).
+            config: A BayesianConfig object containing hyperparameters
+                    (alpha, beta, gamma, learning_rate).
+
+        Returns:
+            Updated posterior probabilities for the test population.
+        """
+        ...
+
+
+# ============================================
+# === GROUPED PROTOCOLS (SYSTEMS)
+# ============================================
+# These protocols combine related fine-grained protocols that are
+# typically implemented together as cohesive subsystems.
+
+
+class IBayesianSystem(IBeliefInitializer, IBeliefUpdater, Protocol):
+    """
+    Unified interface for Bayesian belief management.
+
+    Combines initialization and updating of beliefs into a single cohesive system.
+    Implementations handle both setting initial priors and performing posterior updates.
+
+    This system is used by the Orchestrator to manage probability updates for both
+    code and test populations based on execution results.
+    """
+
+    pass
+
+
+class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
+    """
+    Unified interface for test execution and observation.
+
+    Combines the execution of code against tests and the building of observation
+    matrices into a single cohesive system. Implementations handle both running
+    tests in a sandbox and converting results into matrices for belief updates.
+
+    This system is used by the Orchestrator to evaluate code populations against
+    test populations (generated, public, and private tests).
+    """
+
+    pass

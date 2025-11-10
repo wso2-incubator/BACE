@@ -18,16 +18,14 @@ from .interfaces import (
     CodePopulationConfig,
     EvolutionConfig,
     ExecutionResults,
-    IBeliefUpdater,
+    IBayesianSystem,
     ICodeOperator,
-    ICodeTestExecutor,
-    IDiscriminationCalculator,
+    IExecutionSystem,
     IFeedbackGenerator,
-    IObservationMatrixBuilder,
-    IParetoFrontCalculator,
+    IPareto,
     IProbabilityAssigner,
     ISelectionStrategy,
-    ITestBlockBuilder,
+    ITestBlockRebuilder,
     ITestOperator,
     Operations,
     OperatorRatesConfig,
@@ -75,13 +73,11 @@ class Orchestrator:
         test_operator: ITestOperator,
         selector: ISelectionStrategy,
         prob_assigner: IProbabilityAssigner,
-        executor: ICodeTestExecutor,
-        obs_builder: IObservationMatrixBuilder,
-        code_belief_updater: IBeliefUpdater,
-        test_belief_updater: IBeliefUpdater,
-        discrimination_calc: IDiscriminationCalculator,
-        pareto_calc: IParetoFrontCalculator,
-        test_block_builder: ITestBlockBuilder,
+        execution_system: IExecutionSystem,
+        code_bayesian_system: IBayesianSystem,
+        test_bayesian_system: IBayesianSystem,
+        pareto: IPareto,
+        test_block_rebuilder: ITestBlockRebuilder,
         code_feedback_gen: IFeedbackGenerator[TestIndividual],
         test_feedback_gen: IFeedbackGenerator[CodeIndividual],
     ) -> None:
@@ -112,13 +108,11 @@ class Orchestrator:
         self.test_operator = test_operator
         self.selector = selector
         self.prob_assigner = prob_assigner
-        self.executor = executor
-        self.obs_builder = obs_builder
-        self.code_belief_updater = code_belief_updater
-        self.test_belief_updater = test_belief_updater
-        self.discrimination_calc = discrimination_calc
-        self.pareto_calc = pareto_calc
-        self.test_block_builder = test_block_builder
+        self.execution_system = execution_system
+        self.code_bayesian_system = code_bayesian_system
+        self.test_bayesian_system = test_bayesian_system
+        self.pareto = pareto
+        self.test_block_rebuilder = test_block_rebuilder
         self.code_feedback_gen = code_feedback_gen
         self.test_feedback_gen = test_feedback_gen
 
@@ -185,8 +179,8 @@ class Orchestrator:
 
         return TestPopulation(
             individuals=individuals,
-            pareto_fn=self.pareto_calc,  # Injected, though unused
-            rebuild_test_block_fn=self.test_block_builder,  # Injected, though unused
+            pareto=self.pareto,
+            test_block_rebuilder=self.test_block_rebuilder,
             test_class_block=dummy_block,
             generation=0,
         )
@@ -234,8 +228,8 @@ class Orchestrator:
         ]
         test_population = TestPopulation(
             individuals=test_individuals,
-            pareto_fn=self.pareto_calc,
-            rebuild_test_block_fn=self.test_block_builder,
+            pareto=self.pareto,
+            test_block_rebuilder=self.test_block_rebuilder,
             test_class_block=test_block,
             generation=0,
         )
@@ -252,11 +246,14 @@ class Orchestrator:
         """
         Helper to execute code population against generated, public, and private tests.
         """
-        gen_exec_results = self.executor(code_population, test_population, self.sandbox)
-        pub_exec_results = self.executor(
+        # Execute all three test suites against the code population
+        gen_exec_results = self.execution_system.execute_tests(
+            code_population, test_population, self.sandbox
+        )
+        pub_exec_results = self.execution_system.execute_tests(
             code_population, public_test_population, self.sandbox
         )
-        priv_exec_results = self.executor(
+        priv_exec_results = self.execution_system.execute_tests(
             code_population, private_test_population, self.sandbox
         )
         return gen_exec_results, pub_exec_results, priv_exec_results
@@ -274,13 +271,13 @@ class Orchestrator:
         """
         Helper to generate observation matrices for generated, public, and private tests.
         """
-        gen_obs_matrix = self.obs_builder(
+        gen_obs_matrix = self.execution_system.build_observation_matrix(
             code_population, test_population, gen_exec_results
         )
-        pub_obs_matrix = self.obs_builder(
+        pub_obs_matrix = self.execution_system.build_observation_matrix(
             code_population, public_test_population, pub_exec_results
         )
-        priv_obs_matrix = self.obs_builder(
+        priv_obs_matrix = self.execution_system.build_observation_matrix(
             code_population, private_test_population, priv_exec_results
         )
 
@@ -307,7 +304,7 @@ class Orchestrator:
         """
 
         logger.debug("Updating code beliefs based on public tests...")
-        code_posterior_on_public = self.code_belief_updater(
+        code_posterior_on_public = self.code_bayesian_system.update_code_beliefs(
             prior_code_probs=code_probabilities,
             prior_test_probs=public_test_probabilities,
             observation_matrix=pub_obs_matrix,
@@ -315,7 +312,7 @@ class Orchestrator:
         )
 
         logger.debug("Updating generated test beliefs based on updated code...")
-        test_posterior = self.test_belief_updater(
+        test_posterior = self.test_bayesian_system.update_test_beliefs(
             prior_code_probs=code_posterior_on_public,
             prior_test_probs=gen_test_probabilities,
             observation_matrix=gen_obs_matrix,
@@ -323,7 +320,7 @@ class Orchestrator:
         )
 
         logger.debug("Updating code beliefs based on generated tests...")
-        code_posterior_on_generated = self.code_belief_updater(
+        code_posterior_on_generated = self.code_bayesian_system.update_code_beliefs(
             prior_code_probs=code_posterior_on_public,
             prior_test_probs=test_posterior,
             observation_matrix=gen_obs_matrix,
@@ -336,16 +333,20 @@ class Orchestrator:
         self,
         code_population: CodePopulation,
         test_population: TestPopulation,
+        observation_matrix: np.ndarray,
     ) -> tuple[list[CodeIndividual], list[TestIndividual]]:
         """
         Helper to select elite individuals from code and test populations.
+
+        Args:
+            observation_matrix: Execution results needed for Pareto front selection
         """
         # --- Code Elites ---
         num_code_elites = int(code_population.size * self.code_pop_config.elitism_rate)
         code_elites = code_population.get_top_k_individuals(num_code_elites)
 
         # --- Test Elites (Pareto Front) ---
-        test_elites = test_population.get_pareto_front()
+        test_elites = test_population.get_pareto_front(observation_matrix)
         logger.info(
             f"Selected {len(code_elites)} code elites and {len(test_elites)} test elites (Pareto)."
         )
@@ -534,14 +535,10 @@ class Orchestrator:
             code_population.update_probabilities(code_posterior)
             test_population.update_probabilities(test_posterior)
 
-            # 2b. Calculate Discrimination (only for generated tests)
-            discrim_scores = self.discrimination_calc(gen_obs_matrix)
-            test_population.set_discriminations(discrim_scores)
-
             # --- Step 3: Select Elites ---
             logger.debug("Step 3: Selecting elites...")
             code_elites, test_elites = self._select_elites(
-                code_population, test_population
+                code_population, test_population, gen_obs_matrix
             )
 
             self._notify_elites(code_elites, generation=code_population.generation)

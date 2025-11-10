@@ -97,7 +97,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         parent_idx = self.selector.select(population.probabilities)
         parent = population[parent_idx]
 
-        feedback = feedback_generator(
+        feedback = feedback_generator.generate_feedback(
             observation_matrix=observation_matrix,
             execution_results=execution_results,
             other_population=other_population,
@@ -232,7 +232,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
             final_snippet = new_snippet
 
         # Step 4: Calculate probability based on final operation
-        final_prob = self.probability_assigner(
+        final_prob = self.probability_assigner.assign_probability(
             operation=final_operation,
             parent_probs=parent_probs,
             initial_prior=self.initial_prior,

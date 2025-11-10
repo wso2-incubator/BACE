@@ -10,17 +10,14 @@ from .interfaces import (
     BaseIndividual,
     BasePopulation,
     BayesianConfig,
-    IBeliefInitializer,
-    IBeliefUpdater,
+    IBayesianSystem,
     ICodeOperator,
-    ICodeTestExecutor,
-    IDiscriminationCalculator,
+    IExecutionSystem,
     IFeedbackGenerator,
-    IObservationMatrixBuilder,
-    IParetoFrontCalculator,
+    IPareto,
     IProbabilityAssigner,
     ISelectionStrategy,
-    ITestBlockBuilder,
+    ITestBlockRebuilder,
     ITestOperator,
     Operations,
     ParentProbabilities,
@@ -174,7 +171,7 @@ class MockSelectionStrategy(ISelectionStrategy):
 class MockProbabilityAssigner(IProbabilityAssigner):
     """Mocks the assignment of probabilities to new offspring."""
 
-    def __call__(
+    def assign_probability(
         self,
         operation: Operations,
         parent_probs: ParentProbabilities,
@@ -188,18 +185,26 @@ class MockProbabilityAssigner(IProbabilityAssigner):
         return float(np.mean(parent_probs))
 
 
-class MockParetoFrontCalculator(IParetoFrontCalculator):
-    """Mocks Pareto front calculation.
+class MockPareto(IPareto):
+    """
+    Mocks multi-objective optimization for test population.
 
-    This mock implementation isn't a true Pareto front.
-    It just returns the indices of individuals with above-median
-    probability OR above-median discrimination.
+    This mock implementation calculates simple variance-based discrimination
+    and returns individuals with above-median probability OR discrimination.
     """
 
-    def __call__(
+    def calculate_discrimination(self, observation_matrix: np.ndarray) -> np.ndarray:
+        """Calculate variance across code individuals for each test."""
+        logger.trace("MockPareto: Calculating discrimination scores...")
+        # Each column is a test; variance shows how well it distinguishes code
+        discriminations: np.ndarray = np.var(observation_matrix, axis=0)
+        return discriminations
+
+    def calculate_pareto_front(
         self, probabilities: np.ndarray, discriminations: np.ndarray
     ) -> list[int]:
-        logger.trace("MockParetoFrontCalculator called")
+        """Find Pareto front (individuals with good prob OR good discrimination)."""
+        logger.trace("MockPareto: Calculating Pareto front...")
 
         # Handle NaNs in discrimination (e.g., first generation)
         if np.all(np.isnan(discriminations)):
@@ -222,12 +227,21 @@ class MockParetoFrontCalculator(IParetoFrontCalculator):
         logger.trace(f"Mock Pareto front size: {len(front_indices)}")
         return front_indices
 
+    def get_pareto_indices(
+        self, probabilities: np.ndarray, observation_matrix: np.ndarray
+    ) -> list[int]:
+        """Public API: Calculate discriminations and return Pareto front indices."""
+        discriminations = self.calculate_discrimination(observation_matrix)
+        return self.calculate_pareto_front(probabilities, discriminations)
 
-class MockTestBlockBuilder(ITestBlockBuilder):
+
+class MockTestBlockRebuilder(ITestBlockRebuilder):
     """Mocks rebuilding the test class from snippets."""
 
-    def __call__(self, original_class_str: str, new_method_snippets: list[str]) -> str:
-        logger.trace("MockTestBlockBuilder: Rebuilding test class...")
+    def rebuild_test_block(
+        self, original_class_str: str, new_method_snippets: list[str]
+    ) -> str:
+        logger.trace("MockTestBlockRebuilder: Rebuilding test class...")
         # Find the class header from the original
         header = original_class_str.split("def ")[0]
 
@@ -238,7 +252,7 @@ class MockTestBlockBuilder(ITestBlockBuilder):
 class MockFeedbackGenerator(IFeedbackGenerator[BaseIndividual]):
     """Mocks generating feedback for the 'edit' operator."""
 
-    def __call__(
+    def generate_feedback(
         self,
         observation_matrix: np.ndarray,
         execution_results: ExecutionResults,
@@ -256,19 +270,25 @@ class MockFeedbackGenerator(IFeedbackGenerator[BaseIndividual]):
 # --- Mock Execution & Belief Updaters ---
 
 
-class MockCodeTestExecutor(ICodeTestExecutor):
+# ============================================
+# === EXECUTION SYSTEM MOCK
+# ============================================
+
+
+class MockExecutionSystem(IExecutionSystem):
     """
-    Mocks the execution of all code against all tests (generated, public, private).
-    Returns a dictionary of observation matrices.
+    Mock implementation combining test execution and observation matrix building.
+    Implements both ICodeTestExecutor and IObservationMatrixBuilder protocols.
     """
 
-    def __call__(
+    def execute_tests(
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
         sandbox: Sandbox,
     ) -> ExecutionResults:
-        logger.debug("MockCodeTestExecutor: 'Running' all tests...")
+        """Execute all code against all tests."""
+        logger.debug("MockExecutionSystem: 'Running' all tests...")
 
         execution_results: ExecutionResults = []
         num_tests = len(test_population)
@@ -286,20 +306,14 @@ class MockCodeTestExecutor(ICodeTestExecutor):
 
         return execution_results
 
-
-class MockObservationMatrixBuilder(IObservationMatrixBuilder):
-    """
-    Mocks the building of the single observation matrix for belief updating.
-    As requested, it combines "generated" and "public" test results.
-    """
-
-    def __call__(
+    def build_observation_matrix(
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
         execution_results: ExecutionResults,
     ) -> np.ndarray:
-        logger.trace("MockObservationMatrixBuilder: Combining results...")
+        """Build observation matrix from execution results."""
+        logger.trace("MockExecutionSystem: Building observation matrix...")
         num_code = len(code_population)
         num_tests = len(test_population)
         combined_matrix = np.zeros((num_code, num_tests), dtype=int)
@@ -309,84 +323,185 @@ class MockObservationMatrixBuilder(IObservationMatrixBuilder):
         return combined_matrix
 
 
-class MockDiscriminationCalculator(IDiscriminationCalculator):
-    """Mocks the calculation of test discrimination scores."""
-
-    def __call__(self, observation_matrix: np.ndarray) -> np.ndarray:
-        logger.trace("MockDiscriminationCalculator: Calculating scores...")
-
-        # A simple mock: discrimination is the variance of outcomes for that test.
-        # High variance (mix of pass/fail) means it's discriminating.
-        # Low variance (all pass or all fail) is bad.
-        if observation_matrix.shape[0] == 0:  # No code individuals
-            return np.zeros(observation_matrix.shape[1])
-
-        # Calculate variance along the 'code' axis (axis 0)
-        scores = np.var(observation_matrix, axis=0)
-        return np.asarray(scores)
+# ============================================
+# === BAYESIAN SYSTEM MOCKS
+# ============================================
 
 
-class MockBeliefInitializer(IBeliefInitializer):
-    """Mocks the initialization of belief arrays."""
+def _generic_belief_update(
+    prior_probs_self: np.ndarray,
+    prior_probs_other: np.ndarray,
+    observation_matrix: np.ndarray,
+    config: BayesianConfig,
+    target_threshold: float,
+) -> np.ndarray:
+    """
+    Generic Bayesian belief update logic shared by both code and test systems.
 
-    def __call__(
+    Args:
+        prior_probs_self: Prior probabilities for the population being updated.
+        prior_probs_other: Prior probabilities for the opposing population.
+        observation_matrix: Observation matrix with rows=self, columns=other.
+        config: Bayesian configuration.
+        target_threshold: Threshold for determining if performance is "good".
+
+    Returns:
+        Updated posterior probabilities for the population being updated.
+    """
+    # If no opposing population, return priors unchanged
+    if observation_matrix.shape[1] == 0:
+        return prior_probs_self
+
+    # Calculate success rate for each individual in self population
+    success_rates = np.mean(observation_matrix, axis=1)
+
+    # Simple update rule: adjust based on how far from threshold
+    adjustment = (success_rates - target_threshold) * config.learning_rate
+    new_probs = prior_probs_self + adjustment
+
+    # Clip to ensure probabilities stay in [0.01, 0.99]
+    return np.asarray(np.clip(new_probs, 0.01, 0.99))
+
+
+class MockCodeBayesianSystem(IBayesianSystem):
+    """
+    Mock implementation of Bayesian system for code population.
+    Implements both IBeliefInitializer and IBeliefUpdater protocols.
+
+    For code updates: higher pass rates (passing more tests) → higher probability.
+    """
+
+    def initialize_beliefs(
         self,
         population_size: int,
         initial_probability: float,
     ) -> np.ndarray:
-        logger.trace("MockBeliefInitializer called")
+        """Initialize belief array with uniform probabilities."""
+        logger.trace("MockCodeBayesianSystem: Initializing beliefs")
         return np.full(population_size, initial_probability)
 
-
-class MockCodeBeliefUpdater(IBeliefUpdater):
-    """Mocks the Bayesian update for the Code Population."""
-
-    def __call__(
+    def update_code_beliefs(
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
-        logger.trace("MockCodeBeliefUpdater called")
+        """
+        Update code beliefs based on test results.
 
-        # Mock logic: if a code passes > 75% of tests,
-        # its probability increases, otherwise it decreases.
-        if observation_matrix.shape[1] == 0:  # No tests
-            return prior_code_probs
+        For code: observation_matrix has rows=code, cols=tests (no transformation needed).
+        Code that passes > 75% of tests gets higher probability.
+        """
+        logger.trace("MockCodeBayesianSystem: Updating code beliefs")
 
-        pass_rates = np.mean(observation_matrix, axis=1)
+        # Code is the "self" population, tests are "other"
+        # Matrix is already in correct orientation (rows=code, cols=tests)
+        return _generic_belief_update(
+            prior_probs_self=prior_code_probs,
+            prior_probs_other=prior_test_probs,
+            observation_matrix=observation_matrix,
+            config=config,
+            target_threshold=0.75,  # Code passes > 75% of tests is "good"
+        )
 
-        # Simple update rule
-        adjustment = (pass_rates - 0.75) * config.learning_rate
-        new_probs = prior_code_probs + adjustment
-
-        # Clip to ensure probabilities stay in [0.01, 0.99]
-        return np.asarray(np.clip(new_probs, 0.01, 0.99))
-
-
-class MockTestBeliefUpdater(IBeliefUpdater):
-    """Mocks the Bayesian update for the Test Population."""
-
-    def __call__(
+    def update_test_beliefs(
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
-        logger.trace("MockTestBeliefUpdater called")
+        """
+        Update test beliefs based on code results.
 
-        # Mock logic: if a test fails > 50% of code,
-        # its probability (of being correct) increases, otherwise decreases.
-        if observation_matrix.shape[0] == 0:  # No code
-            return prior_test_probs
+        This method is provided for protocol compliance but typically not used
+        by the code Bayesian system. Delegates to the generic implementation.
+        """
+        logger.trace("MockCodeBayesianSystem: Updating test beliefs (delegating)")
 
-        fail_rates = 1.0 - np.mean(observation_matrix, axis=0)
+        # Transpose and invert for test perspective
+        transposed_matrix = observation_matrix.T
+        failure_matrix = 1 - transposed_matrix
 
-        # Simple update rule
-        adjustment = (fail_rates - 0.5) * config.learning_rate
-        new_probs = prior_test_probs + adjustment
+        return _generic_belief_update(
+            prior_probs_self=prior_test_probs,
+            prior_probs_other=prior_code_probs,
+            observation_matrix=failure_matrix,
+            config=config,
+            target_threshold=0.50,
+        )
 
-        # Clip to ensure probabilities stay in [0.01, 0.99]
-        return np.asarray(np.clip(new_probs, 0.01, 0.99))
+
+class MockTestBayesianSystem(IBayesianSystem):
+    """
+    Mock implementation of Bayesian system for test population.
+    Implements both IBeliefInitializer and IBeliefUpdater protocols.
+
+    For test updates: higher failure rates (failing more code) → higher probability.
+    This requires transposing the observation matrix.
+    """
+
+    def initialize_beliefs(
+        self,
+        population_size: int,
+        initial_probability: float,
+    ) -> np.ndarray:
+        """Initialize belief array with uniform probabilities."""
+        logger.trace("MockTestBayesianSystem: Initializing beliefs")
+        return np.full(population_size, initial_probability)
+
+    def update_code_beliefs(
+        self,
+        prior_code_probs: np.ndarray,
+        prior_test_probs: np.ndarray,
+        observation_matrix: np.ndarray,
+        config: BayesianConfig,
+    ) -> np.ndarray:
+        """
+        Update code beliefs based on test results.
+
+        This method is provided for protocol compliance but typically not used
+        by the test Bayesian system. Delegates to the generic implementation.
+        """
+        logger.trace("MockTestBayesianSystem: Updating code beliefs (delegating)")
+
+        return _generic_belief_update(
+            prior_probs_self=prior_code_probs,
+            prior_probs_other=prior_test_probs,
+            observation_matrix=observation_matrix,
+            config=config,
+            target_threshold=0.75,
+        )
+
+    def update_test_beliefs(
+        self,
+        prior_code_probs: np.ndarray,
+        prior_test_probs: np.ndarray,
+        observation_matrix: np.ndarray,
+        config: BayesianConfig,
+    ) -> np.ndarray:
+        """
+        Update test beliefs based on code results.
+
+        For tests: we need to transpose the matrix so rows=tests, cols=code.
+        Tests that fail > 50% of code get higher probability.
+        """
+        logger.trace("MockTestBayesianSystem: Updating test beliefs")
+
+        # Tests are the "self" population, code are "other"
+        # Need to transpose: original matrix has rows=code, cols=tests
+        # After transpose: rows=tests, cols=code
+        transposed_matrix = observation_matrix.T
+
+        # For tests, we care about FAILURE rate, not pass rate
+        # So invert the matrix: 1 becomes 0, 0 becomes 1
+        failure_matrix = 1 - transposed_matrix
+
+        return _generic_belief_update(
+            prior_probs_self=prior_test_probs,
+            prior_probs_other=prior_code_probs,
+            observation_matrix=failure_matrix,
+            config=config,
+            target_threshold=0.50,  # Test fails > 50% of code is "good"
+        )
