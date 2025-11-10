@@ -38,8 +38,10 @@ Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 # Note: Most files have been moved to deprecated/
 # They will be replaced by new implementations based on core/ interfaces
 from . import core, deprecated
+from .bayesian_system import BayesianSystem
 
 __all__ = [
     "core",
     "deprecated",
+    "BayesianSystem",
 ]
