@@ -113,9 +113,11 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     code_operator = MockCodeOperator(problem)
     test_operator = MockTestOperator(problem)
 
-    # Create strategies
-    selector = MockSelectionStrategy()
-    prob_assigner = MockProbabilityAssigner()
+    # Create strategies (separate for code and test)
+    code_selector = MockSelectionStrategy()
+    test_selector = MockSelectionStrategy()
+    code_prob_assigner = MockProbabilityAssigner()
+    test_prob_assigner = MockProbabilityAssigner()
 
     # Create grouped systems
     execution_system = MockExecutionSystem()
@@ -136,8 +138,10 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     return {
         "code_operator": code_operator,
         "test_operator": test_operator,
-        "selector": selector,
-        "prob_assigner": prob_assigner,
+        "code_selector": code_selector,
+        "test_selector": test_selector,
+        "code_prob_assigner": code_prob_assigner,
+        "test_prob_assigner": test_prob_assigner,
         "execution_system": execution_system,
         "code_bayesian_system": code_bayesian_system,
         "test_bayesian_system": test_bayesian_system,
@@ -281,9 +285,11 @@ def test_orchestrator_full_run(
         # Operators
         code_operator=mock_components["code_operator"],
         test_operator=mock_components["test_operator"],
-        # Strategies
-        selector=mock_components["selector"],
-        prob_assigner=mock_components["prob_assigner"],
+        # Strategies (separate for code and test)
+        code_selector=mock_components["code_selector"],
+        test_selector=mock_components["test_selector"],
+        code_prob_assigner=mock_components["code_prob_assigner"],
+        test_prob_assigner=mock_components["test_prob_assigner"],
         # Grouped systems
         execution_system=mock_components["execution_system"],
         code_bayesian_system=mock_components["code_bayesian_system"],
@@ -395,9 +401,11 @@ def main() -> None:
         # Operators
         code_operator=components["code_operator"],
         test_operator=components["test_operator"],
-        # Strategies
-        selector=components["selector"],
-        prob_assigner=components["prob_assigner"],
+        # Strategies (separate for code and test)
+        code_selector=components["code_selector"],
+        test_selector=components["test_selector"],
+        code_prob_assigner=components["code_prob_assigner"],
+        test_prob_assigner=components["test_prob_assigner"],
         # Grouped systems
         execution_system=components["execution_system"],
         code_bayesian_system=components["code_bayesian_system"],

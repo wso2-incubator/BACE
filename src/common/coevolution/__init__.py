@@ -40,10 +40,13 @@ Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 from . import core, deprecated
 from .bayesian_system import BayesianSystem
 from .pareto_system import ParetoSystem
+from .selection_strategy import SelectionMethod, SelectionStrategy
 
 __all__ = [
     "core",
     "deprecated",
     "BayesianSystem",
     "ParetoSystem",
+    "SelectionMethod",
+    "SelectionStrategy",
 ]

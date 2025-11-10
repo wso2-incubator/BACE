@@ -71,8 +71,10 @@ class Orchestrator:
         sandbox: Sandbox,
         code_operator: ICodeOperator,
         test_operator: ITestOperator,
-        selector: ISelectionStrategy,
-        prob_assigner: IProbabilityAssigner,
+        code_selector: ISelectionStrategy,
+        test_selector: ISelectionStrategy,
+        code_prob_assigner: IProbabilityAssigner,
+        test_prob_assigner: IProbabilityAssigner,
         execution_system: IExecutionSystem,
         code_bayesian_system: IBayesianSystem,
         test_bayesian_system: IBayesianSystem,
@@ -85,9 +87,16 @@ class Orchestrator:
         Initializes the orchestrator by storing all injected dependencies.
 
         Also sets up:
-        - Concrete breeding strategies for code and test populations
+        - Concrete breeding strategies for code and test populations (each with its own selector)
         - Generation logger for tracking evolution progress (via logging_utils)
         - Random seed for reproducibility
+
+        Args:
+            code_selector: Selection strategy for code population
+            test_selector: Selection strategy for test population
+            code_prob_assigner: Probability assigner for code offspring
+            test_prob_assigner: Probability assigner for test offspring
+            ... (other args documented inline)
         """
         logger.info("Initializing MockOrchestrator...")
 
@@ -106,8 +115,10 @@ class Orchestrator:
         # --- Store Injected Components ---
         self.code_operator = code_operator
         self.test_operator = test_operator
-        self.selector = selector
-        self.prob_assigner = prob_assigner
+        self.code_selector = code_selector
+        self.test_selector = test_selector
+        self.code_prob_assigner = code_prob_assigner
+        self.test_prob_assigner = test_prob_assigner
         self.execution_system = execution_system
         self.code_bayesian_system = code_bayesian_system
         self.test_bayesian_system = test_bayesian_system
@@ -117,24 +128,30 @@ class Orchestrator:
         self.test_feedback_gen = test_feedback_gen
 
         # --- Create Concrete Breeding Strategies ---
+        # Each breeding strategy uses its own dedicated selector and probability assigner
         self.code_breeder = BreedingStrategy[CodeIndividual, TestIndividual](
-            selector=self.selector,
+            selector=self.code_selector,
             operator=self.code_operator,
             individual_factory=CodeIndividual,
-            probability_assigner=self.prob_assigner,
+            probability_assigner=self.code_prob_assigner,
             initial_prior=self.code_pop_config.initial_prior,
         )
         self.test_breeder = BreedingStrategy[TestIndividual, CodeIndividual](
-            selector=self.selector,
+            selector=self.test_selector,
             operator=self.test_operator,
             individual_factory=TestIndividual,
-            probability_assigner=self.prob_assigner,
+            probability_assigner=self.test_prob_assigner,
             initial_prior=self.test_pop_config.initial_prior,
         )
 
         self.gen_logger = logging_utils.get_generation_logger()
         self._set_random_seed(evo_config.random_seed)
-        logger.info("MockOrchestrator initialized successfully.")
+        logger.info(
+            f"Code selector: {code_selector.__class__.__name__}, "
+            f"Test selector: {test_selector.__class__.__name__}, "
+            f"Code prob assigner: {code_prob_assigner.__class__.__name__}, "
+            f"Test prob assigner: {test_prob_assigner.__class__.__name__}"
+        )
 
     def _set_random_seed(self, seed: int) -> None:
         """
