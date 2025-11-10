@@ -11,88 +11,6 @@ from loguru import logger
 from .exceptions import CodeParsingError, CodeTransformationError
 
 
-def compose_humaneval_test_script(programmer_code: str, tester_code: str) -> str:
-    """
-    Combine programmer and tester code into a single test script for HumanEval Style Problems.
-
-    Args:
-        programmer_code: Python code with function implementations
-        tester_code: Python code with test class
-
-    Returns:
-        Complete test script as string
-
-    Raises:
-        CodeParsingError: If either code has syntax errors
-
-    Example:
-        >>> prog = "def add(a, b):\\n    return a + b"
-        >>> test = "import unittest\\nclass TestAdd(unittest.TestCase):\\n    def test_add(self): pass"
-        >>> script = compose_humaneval_test_script(prog, test)
-        >>> "def add" in script and "class TestAdd" in script
-        True
-    """
-    try:
-        prog_tree = ast.parse(programmer_code)
-        test_tree = ast.parse(tester_code)
-    except SyntaxError as e:
-        logger.error(f"Syntax error parsing code: {e}")
-        raise CodeParsingError(f"Failed to parse code: {e}") from e
-
-    # Collect imports from both
-    imports = []
-    import_strs = set()
-
-    for node in prog_tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            imp_str = ast.unparse(node)
-            if imp_str not in import_strs:
-                import_strs.add(imp_str)
-                imports.append(node)
-
-    for node in test_tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            imp_str = ast.unparse(node)
-            if imp_str not in import_strs:
-                import_strs.add(imp_str)
-                imports.append(node)
-
-    # Collect programmer functions
-    prog_functions = [
-        node for node in prog_tree.body if isinstance(node, ast.FunctionDef)
-    ]
-
-    # Collect tester classes
-    test_classes = [node for node in test_tree.body if isinstance(node, ast.ClassDef)]
-
-    # Build the script using AST unparsing
-    script_parts = []
-
-    # Add imports
-    for imp in imports:
-        script_parts.append(ast.unparse(imp))
-    if imports:
-        script_parts.append("")
-
-    # Add programmer code
-    script_parts.append("# Programmer Code")
-    for func in prog_functions:
-        script_parts.append(ast.unparse(func))
-        script_parts.append("")
-
-    # Add tester code
-    script_parts.append("# Tester Code")
-    for cls in test_classes:
-        script_parts.append(ast.unparse(cls))
-        script_parts.append("")
-
-    # Add main block
-    script_parts.append('if __name__ == "__main__":')
-    script_parts.append("    unittest.main(verbosity=2)")
-
-    return "\n".join(script_parts)
-
-
 def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
     """
     Combine programmer and tester code into a single test script for LCB Style Problems.
@@ -265,9 +183,9 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
     return "\n".join(final_code_parts)
 
 
-def compose_unittest_with_methods(test_code: str, new_test_methods: List[str]) -> str:
+def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -> str:
     """
-    Compose a unittest class by replacing old test methods with new ones.
+    Rebuild a unittest class by replacing old test methods with new ones.
 
     This function preserves the class structure, imports, and non-test methods
     (like setUp, tearDown, etc.) while replacing all test methods (methods
@@ -286,7 +204,7 @@ def compose_unittest_with_methods(test_code: str, new_test_methods: List[str]) -
     Example:
         >>> original = "class TestFoo(unittest.TestCase):\\n    def test_old(self): pass"
         >>> new_methods = ["def test_new(self):\\n    self.assertTrue(True)"]
-        >>> rebuilt = compose_unittest_with_methods(original, new_methods)
+        >>> rebuilt = rebuild_unittest_with_methods(original, new_methods)
         >>> 'test_new' in rebuilt
         True
     """
@@ -462,13 +380,14 @@ def _convert_to_unittest_functional_tests(
 
 
 # -- public api for building unittest block for lcb problems -- #
-def compose_unittest_from_tests(
+def generate_unittest_from_lcb_tests(
     test_cases: List[Test], starter_code: str | None = None
 ) -> str:
     """
-    Compose a unittest test script from LCB problem test cases.
+    Generate a unittest test script from LCB problem test case objects.
 
-    Dispatches to the correct unittest generation function based on test type.
+    Dispatches to the correct unittest generation function based on test type
+    (STDIN vs FUNCTIONAL).
 
     Args:
         test_cases: List of Test objects from LCB problem
@@ -480,7 +399,7 @@ def compose_unittest_from_tests(
     Example:
         >>> # For STDIN tests
         >>> tests = [Test(input="1\\n2", output="3", testtype=TestType.STDIN)]
-        >>> script = compose_unittest_from_tests(tests)
+        >>> script = generate_unittest_from_lcb_tests(tests)
         >>> "class TestSolution" in script
         True
     """

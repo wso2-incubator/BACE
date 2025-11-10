@@ -245,6 +245,10 @@ def remove_if_main_block(code_string: str) -> str:
     """
     Remove the 'if __name__ == "__main__":' block from the code string.
 
+    Handles both standard and reversed comparisons:
+    - if __name__ == "__main__":
+    - if "__main__" == __name__:
+
     Args:
         code_string: Python source code
     Returns:
@@ -260,20 +264,33 @@ def remove_if_main_block(code_string: str) -> str:
     # Filter out the if __name__ == "__main__": block
     new_body = []
     for node in tree.body:
-        if isinstance(node, ast.If):
-            # Check if this is the main block
-            if (
-                isinstance(node.test, ast.Compare)
-                and isinstance(node.test.left, ast.Name)
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Compare):
+            # Check for: if __name__ == "__main__":
+            is_standard_main = (
+                isinstance(node.test.left, ast.Name)
                 and node.test.left.id == "__name__"
                 and len(node.test.ops) == 1
                 and isinstance(node.test.ops[0], ast.Eq)
                 and len(node.test.comparators) == 1
                 and isinstance(node.test.comparators[0], ast.Constant)
                 and node.test.comparators[0].value == "__main__"
-            ):
+            )
+
+            # Check for reversed: if "__main__" == __name__:
+            is_reversed_main = (
+                isinstance(node.test.left, ast.Constant)
+                and node.test.left.value == "__main__"
+                and len(node.test.ops) == 1
+                and isinstance(node.test.ops[0], ast.Eq)
+                and len(node.test.comparators) == 1
+                and isinstance(node.test.comparators[0], ast.Name)
+                and node.test.comparators[0].id == "__name__"
+            )
+
+            if is_standard_main or is_reversed_main:
                 logger.debug("Found and skipping if __name__ == '__main__' block")
                 continue  # Skip this block
+
         new_body.append(node)
 
     tree.body = new_body
