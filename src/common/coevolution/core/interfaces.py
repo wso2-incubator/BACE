@@ -910,6 +910,40 @@ class IIndividualFactory[T_Individual: BaseIndividual](Protocol):
         ...
 
 
+class IDatasetTestBlockBuilder(Protocol):
+    """
+    Protocol for building test class blocks from dataset test cases (public/private tests).
+
+    This interface is responsible for converting dataset-specific test cases into
+    executable unittest test class blocks. Different datasets may have different
+    test formats (e.g., STDIN vs FUNCTIONAL), and this interface abstracts that.
+
+    This is specifically for fixed test populations derived from the dataset,
+    NOT for general test block building (that's what ITestBlockRebuilder is for).
+    """
+
+    def build_test_class_block(self, test_cases: list[Test], starter_code: str) -> str:
+        """
+        Build a unittest test class block from dataset test cases.
+
+        Args:
+            test_cases: List of Test objects from the dataset (public or private)
+            starter_code: The starter code for the problem
+
+        Returns:
+            A complete unittest test class block as a string, ready to be executed.
+            This should include imports, class definition, and all test methods.
+
+        Example:
+            >>> builder = LCBDatasetTestBlockBuilder()
+            >>> tests = [Test(input="2 3", output="5", testtype=TestType.STDIN)]
+            >>> block = builder.build_test_class_block(tests, "def add(a, b): pass")
+            >>> "class" in block and "def test_" in block
+            True
+        """
+        ...
+
+
 class IFeedbackGenerator[T_Individual: BaseIndividual](Protocol):
     """
     Protocol defining the contract for a feedback generator.

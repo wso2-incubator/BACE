@@ -29,6 +29,7 @@ from common.coevolution.core.interfaces import (
 from common.coevolution.core.mock import (
     MockCodeBayesianSystem,
     MockCodeOperator,
+    MockDatasetTestBlockBuilder,
     MockExecutionSystem,
     MockFeedbackGenerator,
     MockPareto,
@@ -128,6 +129,9 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     pareto = MockPareto()
     test_block_rebuilder = MockTestBlockRebuilder()
 
+    # Create dataset test block builder
+    dataset_test_block_builder = MockDatasetTestBlockBuilder()
+
     # Create feedback generators
     code_feedback_gen = MockFeedbackGenerator()
     test_feedback_gen = MockFeedbackGenerator()
@@ -149,6 +153,7 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
         "test_block_rebuilder": test_block_rebuilder,
         "code_feedback_gen": code_feedback_gen,
         "test_feedback_gen": test_feedback_gen,
+        "dataset_test_block_builder": dataset_test_block_builder,
         "sandbox": sandbox,
     }
 
@@ -300,6 +305,8 @@ def test_orchestrator_full_run(
         # Feedback generators
         code_feedback_gen=mock_components["code_feedback_gen"],
         test_feedback_gen=mock_components["test_feedback_gen"],
+        # Dataset test block builder
+        dataset_test_block_builder=mock_components["dataset_test_block_builder"],
     )
 
     # Run coevolution
@@ -416,6 +423,8 @@ def main() -> None:
         # Feedback generators
         code_feedback_gen=components["code_feedback_gen"],
         test_feedback_gen=components["test_feedback_gen"],
+        # Dataset test block builder
+        dataset_test_block_builder=components["dataset_test_block_builder"],
     )
 
     # Step 5: Run coevolution

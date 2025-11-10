@@ -6,6 +6,7 @@ import numpy as np
 from loguru import logger
 
 import common.coevolution.logging_utils as logging_utils
+from common.code_preprocessing.transformation import extract_test_methods_code
 
 # Import concrete classes
 from .breeding_strategy import BreedingStrategy
@@ -20,6 +21,7 @@ from .interfaces import (
     ExecutionResults,
     IBayesianSystem,
     ICodeOperator,
+    IDatasetTestBlockBuilder,
     IExecutionSystem,
     IFeedbackGenerator,
     IPareto,
@@ -82,6 +84,7 @@ class Orchestrator:
         test_block_rebuilder: ITestBlockRebuilder,
         code_feedback_gen: IFeedbackGenerator[TestIndividual],
         test_feedback_gen: IFeedbackGenerator[CodeIndividual],
+        dataset_test_block_builder: IDatasetTestBlockBuilder,
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
@@ -126,6 +129,7 @@ class Orchestrator:
         self.test_block_rebuilder = test_block_rebuilder
         self.code_feedback_gen = code_feedback_gen
         self.test_feedback_gen = test_feedback_gen
+        self.dataset_test_block_builder = dataset_test_block_builder
 
         # --- Create Concrete Breeding Strategies ---
         # Each breeding strategy uses its own dedicated selector and probability assigner
@@ -146,12 +150,6 @@ class Orchestrator:
 
         self.gen_logger = logging_utils.get_generation_logger()
         self._set_random_seed(evo_config.random_seed)
-        logger.info(
-            f"Code selector: {code_selector.__class__.__name__}, "
-            f"Test selector: {test_selector.__class__.__name__}, "
-            f"Code prob assigner: {code_prob_assigner.__class__.__name__}, "
-            f"Test prob assigner: {test_prob_assigner.__class__.__name__}"
-        )
 
     def _set_random_seed(self, seed: int) -> None:
         """
@@ -160,47 +158,6 @@ class Orchestrator:
         np.random.seed(seed)
         random.seed(seed)
         logger.info(f"Random seed set to {seed} for reproducibility.")
-
-    def _create_fixed_test_population(
-        self, test_cases: list[Test], fixed_prior: float
-    ) -> TestPopulation:
-        """
-        Helper to create a fixed TestPopulation from the problem's test cases.
-        """
-        individuals: list[TestIndividual] = []
-        snippets: list[str] = []
-        for i, t in enumerate(test_cases):
-            # Create a mock snippet that matches the test case
-            snippet = f"def test_fixed_{i}(self):\n    assert sort_array({t.input}) == {t.output}"
-            snippets.append(snippet)
-            individuals.append(
-                TestIndividual(
-                    snippet=snippet,
-                    probability=fixed_prior,
-                    creation_op=Operations.INITIAL,
-                    generation_born=0,
-                    parent_ids=[],
-                )
-            )
-
-        # Create a dummy class block string for this fixed population
-        dummy_block = (
-            "import unittest\nfrom a_mock_solution import sort_array\n\n"
-            "class FixedTests(unittest.TestCase):\n"
-        )
-        dummy_block += "\n\n".join([f"    {s}" for s in snippets])
-
-        logger.info(
-            f"Created fixed test population with {len(individuals)} individuals."
-        )
-
-        return TestPopulation(
-            individuals=individuals,
-            pareto=self.pareto,
-            test_block_rebuilder=self.test_block_rebuilder,
-            test_class_block=dummy_block,
-            generation=0,
-        )
 
     def _create_initial_code_population(self) -> CodePopulation:
         """
@@ -251,6 +208,62 @@ class Orchestrator:
             generation=0,
         )
         logger.info(f"Created {test_population!r}")
+        return test_population
+
+    def _create_fixed_test_population_from_test_cases(
+        self, test_cases: list[Test], starter_code: str
+    ) -> TestPopulation:
+        """
+        Create a fixed test population from dataset test cases.
+
+        This method handles the complete flow:
+        1. Build test class block from dataset test cases
+        2. Extract individual test methods
+        3. Create TestPopulation with fixed probability (0.99)
+
+        Used for creating public and private test populations from the dataset.
+        These populations have fixed probability and are not evolved.
+
+        Args:
+            test_cases: List of Test objects from the dataset (public or private)
+            starter_code: The starter code for the problem
+
+        Returns:
+            TestPopulation with fixed test individuals
+        """
+        # Build the test class block from dataset test cases
+        test_class_block = self.dataset_test_block_builder.build_test_class_block(
+            test_cases, starter_code
+        )
+
+        # Extract individual test methods
+        test_methods = extract_test_methods_code(test_class_block)
+
+        # Create test individuals with fixed probability
+        FIXED_TEST_PROBABILITY = 0.99
+        test_individuals = [
+            TestIndividual(
+                snippet=method,
+                probability=FIXED_TEST_PROBABILITY,
+                creation_op=Operations.INITIAL,
+                generation_born=0,
+                parent_ids=[],
+            )
+            for method in test_methods
+        ]
+
+        # Create and return the test population
+        test_population = TestPopulation(
+            individuals=test_individuals,
+            pareto=self.pareto,
+            test_block_rebuilder=self.test_block_rebuilder,
+            test_class_block=test_class_block,
+            generation=0,
+        )
+        logger.debug(
+            f"Created fixed test population with {len(test_individuals)} tests "
+            f"(probability={FIXED_TEST_PROBABILITY})"
+        )
         return test_population
 
     def _exec_results(
@@ -499,11 +512,13 @@ class Orchestrator:
         # --- Create Initial Populations ---
         code_population = self._create_initial_code_population()
         test_population = self._create_initial_test_populations()
-        public_test_population = self._create_fixed_test_population(
-            self.problem.public_test_cases, fixed_prior=0.95
+
+        # Create fixed test populations from dataset test cases
+        public_test_population = self._create_fixed_test_population_from_test_cases(
+            self.problem.public_test_cases, self.problem.starter_code
         )
-        private_test_population = self._create_fixed_test_population(
-            self.problem.private_test_cases, fixed_prior=0.95
+        private_test_population = self._create_fixed_test_population_from_test_cases(
+            self.problem.private_test_cases, self.problem.starter_code
         )
 
         assert code_population is not None
