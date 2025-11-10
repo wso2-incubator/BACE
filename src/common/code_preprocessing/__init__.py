@@ -29,17 +29,17 @@ Usage Patterns:
 """
 
 # Import submodules to make them available as attributes
-from . import analyzers, builders, parsers, transformers
+from . import analysis, composition, extraction, transformation
 
 # Export exceptions for convenience - they're used across many modules
 from .exceptions import CodeParsingError, CodeProcessingError, CodeTransformationError
 
 __all__ = [
     # Submodules
-    "parsers",
-    "analyzers",
-    "transformers",
-    "builders",
+    "analysis",
+    "composition",
+    "extraction",
+    "transformation",
     # Exceptions
     "CodeProcessingError",
     "CodeParsingError",

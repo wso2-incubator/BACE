@@ -1,13 +1,11 @@
 """Analyze Python code structure using AST."""
 
 import ast
-import logging
 from typing import Dict, List, Tuple, TypedDict
 
-from .exceptions import CodeParsingError
+from loguru import logger
 
-# Setup logging
-log = logging.getLogger(__name__)
+from ..exceptions import CodeParsingError
 
 
 class CodeStructure(TypedDict):
@@ -48,7 +46,7 @@ def parse_code_structure(code_string: str) -> CodeStructure:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
-        log.error(f"Syntax error during parsing: {e}")
+        logger.error(f"Syntax error during parsing: {e}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     for node in tree.body:
@@ -91,7 +89,7 @@ def extract_test_case_names(test_code: str) -> List[str]:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing test code: {e}")
+        logger.error(f"Syntax error parsing test code: {e}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -134,14 +132,14 @@ def extract_test_methods_code(test_code: str) -> List[str]:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing test code: {e}")
+        logger.error(f"Syntax error parsing test code: {e}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             if node.name == "Solution":
-                log.debug("Skipping 'Solution' class in test code extraction")
+                logger.debug("Skipping 'Solution' class in test code extraction")
                 continue  # Skip Solution class if present
             # Iterate through class methods
             for method in node.body:
@@ -154,5 +152,7 @@ def extract_test_methods_code(test_code: str) -> List[str]:
 
             # Stop after first class
             break
+
+    return test_methods_code
 
     return test_methods_code

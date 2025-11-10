@@ -1,20 +1,17 @@
-"""Build complete test scripts by combining programmer and tester code."""
+"""Compose complete executable test scripts from programmer and tester code."""
 
 import ast
-import logging
 import re
 from typing import List, Optional
 
 from lcb_runner.benchmarks.code_generation import Test  # type: ignore
 from lcb_runner.benchmarks.code_generation import TestType
+from loguru import logger
 
 from .exceptions import CodeParsingError, CodeTransformationError
 
-# Setup logging
-log = logging.getLogger(__name__)
 
-
-def build_test_script_for_humaneval(programmer_code: str, tester_code: str) -> str:
+def compose_humaneval_test_script(programmer_code: str, tester_code: str) -> str:
     """
     Combine programmer and tester code into a single test script for HumanEval Style Problems.
 
@@ -31,7 +28,7 @@ def build_test_script_for_humaneval(programmer_code: str, tester_code: str) -> s
     Example:
         >>> prog = "def add(a, b):\\n    return a + b"
         >>> test = "import unittest\\nclass TestAdd(unittest.TestCase):\\n    def test_add(self): pass"
-        >>> script = build_test_script_for_humaneval(prog, test)
+        >>> script = compose_humaneval_test_script(prog, test)
         >>> "def add" in script and "class TestAdd" in script
         True
     """
@@ -39,7 +36,7 @@ def build_test_script_for_humaneval(programmer_code: str, tester_code: str) -> s
         prog_tree = ast.parse(programmer_code)
         test_tree = ast.parse(tester_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing code: {e}")
+        logger.error(f"Syntax error parsing code: {e}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # Collect imports from both
@@ -96,7 +93,7 @@ def build_test_script_for_humaneval(programmer_code: str, tester_code: str) -> s
     return "\n".join(script_parts)
 
 
-def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
+def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
     """
     Combine programmer and tester code into a single test script for LCB Style Problems.
 
@@ -114,7 +111,7 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
     Example:
         >>> prog = "class Solution:\\n    def solve(self): pass"
         >>> test = "import unittest\\nclass TestSolution(unittest.TestCase):\\n    def test_solve(self): pass"
-        >>> script = build_test_script_for_lcb(prog, test)
+        >>> script = compose_lcb_test_script(prog, test)
         >>> "class Solution" in script
         True
     """
@@ -122,7 +119,7 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
     try:
         prog_tree = ast.parse(programmer_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing programmer code: {e}")
+        logger.error(f"Syntax error parsing programmer code: {e}")
         raise CodeParsingError(f"Failed to parse programmer code: {e}") from e
 
     prog_imports = []
@@ -166,7 +163,7 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
         )
 
     if not solution_class_node:
-        log.error("No Solution class or functions found in programmer code")
+        logger.error("No Solution class or functions found in programmer code")
         raise CodeTransformationError(
             "No Solution class or functions found in programmer code"
         )
@@ -192,7 +189,7 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
         tester_tree = SolutionImportRemover().visit(tester_tree)
         ast.fix_missing_locations(tester_tree)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing tester code: {e}")
+        logger.error(f"Syntax error parsing tester code: {e}")
         raise CodeParsingError(f"Failed to parse tester code: {e}") from e
 
     tester_imports = []
@@ -268,11 +265,9 @@ def build_test_script_for_lcb(programmer_code: str, tester_code: str) -> str:
     return "\n".join(final_code_parts)
 
 
-def rebuild_unittest_with_new_methods(
-    test_code: str, new_test_methods: List[str]
-) -> str:
+def compose_unittest_with_methods(test_code: str, new_test_methods: List[str]) -> str:
     """
-    Rebuild a unittest class by replacing old test methods with new ones.
+    Compose a unittest class by replacing old test methods with new ones.
 
     This function preserves the class structure, imports, and non-test methods
     (like setUp, tearDown, etc.) while replacing all test methods (methods
@@ -291,14 +286,14 @@ def rebuild_unittest_with_new_methods(
     Example:
         >>> original = "class TestFoo(unittest.TestCase):\\n    def test_old(self): pass"
         >>> new_methods = ["def test_new(self):\\n    self.assertTrue(True)"]
-        >>> rebuilt = rebuild_unittest_with_new_methods(original, new_methods)
+        >>> rebuilt = compose_unittest_with_methods(original, new_methods)
         >>> 'test_new' in rebuilt
         True
     """
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        log.error(f"Syntax error parsing test code: {e}")
+        logger.error(f"Syntax error parsing test code: {e}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -337,7 +332,7 @@ def rebuild_unittest_with_new_methods(
                     new_method_nodes.append(node)
                     break
         except SyntaxError as e:
-            log.warning(f"Skipping invalid test method code: {e}")
+            logger.warning(f"Skipping invalid test method code: {e}")
             continue
 
     # Rebuild the class body with non-test members first, then new test methods
@@ -467,11 +462,27 @@ def _convert_to_unittest_functional_tests(
 
 
 # -- public api for building unittest block for lcb problems -- #
-def build_unittest_block_for_lcb_problem_from_given_tests(
+def compose_unittest_from_tests(
     test_cases: List[Test], starter_code: str | None = None
 ) -> str:
     """
+    Compose a unittest test script from LCB problem test cases.
+
     Dispatches to the correct unittest generation function based on test type.
+
+    Args:
+        test_cases: List of Test objects from LCB problem
+        starter_code: Optional starter code for FUNCTIONAL tests
+
+    Returns:
+        Complete unittest test script as string
+
+    Example:
+        >>> # For STDIN tests
+        >>> tests = [Test(input="1\\n2", output="3", testtype=TestType.STDIN)]
+        >>> script = compose_unittest_from_tests(tests)
+        >>> "class TestSolution" in script
+        True
     """
     if not test_cases:
         return "# No test cases provided."

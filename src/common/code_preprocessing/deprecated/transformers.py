@@ -5,7 +5,7 @@ from typing import List
 
 from loguru import logger
 
-from .exceptions import CodeParsingError, CodeTransformationError
+from ..exceptions import CodeParsingError, CodeTransformationError
 
 
 def extract_function_with_helpers(code_string: str, target_function_name: str) -> str:

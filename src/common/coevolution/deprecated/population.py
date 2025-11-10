@@ -17,13 +17,13 @@ import numpy as np
 from lcb_runner.benchmarks.code_generation import CodeGenerationProblem  # type: ignore
 from loguru import logger
 
-from common.code_preprocessing.analyzers import extract_test_methods_code
-from common.code_preprocessing.builders import (
+from common.code_preprocessing.deprecated.analyzers import extract_test_methods_code
+from common.code_preprocessing.deprecated.builders import (
     build_unittest_block_for_lcb_problem_from_given_tests,
     rebuild_unittest_with_new_methods,
 )
-from common.coevolution.bayesian import initialize_prior_beliefs
 
+from .bayesian import initialize_prior_beliefs
 from .selection import SelectionStrategy
 
 
