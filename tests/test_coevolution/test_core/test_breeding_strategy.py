@@ -20,6 +20,7 @@ import pytest
 
 from common.coevolution.core.breeding_strategy import BreedingStrategy
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
+from common.coevolution.core.interfaces import Operations
 from common.coevolution.core.population import CodePopulation, TestPopulation
 
 # ============================================================================
@@ -79,7 +80,7 @@ def sample_code_population() -> CodePopulation:
         CodeIndividual(
             snippet=f"def func_{i}(): return {i}",
             probability=0.1 * (i + 1),
-            creation_op="initial",
+            creation_op=Operations.INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -95,7 +96,7 @@ def sample_test_population() -> TestPopulation:
         TestIndividual(
             snippet=f"def test_{i}(self): assert True",
             probability=0.1 * (i + 1),
-            creation_op="initial",
+            creation_op=Operations.INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -506,7 +507,7 @@ class TestMutationOperation:
         """Test _apply_mutation calls operator.mutate."""
         original_snippet = "def original(): pass"
 
-        breeding_strategy._apply_mutation(original_snippet, "crossover")
+        breeding_strategy._apply_mutation(original_snippet, Operations.CROSSOVER)
 
         mock_operator.mutate.assert_called_once_with(original_snippet)
 
@@ -517,7 +518,9 @@ class TestMutationOperation:
         """Test _apply_mutation returns mutated snippet."""
         original_snippet = "def original(): pass"
 
-        result = breeding_strategy._apply_mutation(original_snippet, "reproduction")
+        result = breeding_strategy._apply_mutation(
+            original_snippet, Operations.REPRODUCTION
+        )
 
         assert result == "def mutated_result(): pass"
 
@@ -527,9 +530,11 @@ class TestMutationOperation:
         mock_operator: MagicMock,
     ) -> None:
         """Test mutation can be applied after any operation."""
-        from common.coevolution.core.interfaces import Operations
-
-        operations: list[Operations] = ["crossover", "edit", "reproduction"]
+        operations: list[Operations] = [
+            Operations.CROSSOVER,
+            Operations.EDIT,
+            Operations.REPRODUCTION,
+        ]
 
         for op in operations:
             mock_operator.mutate.reset_mock()
@@ -576,7 +581,7 @@ class TestOperationSelection:
 
         # Verify crossover was called
         mock_operator.crossover.assert_called_once()
-        assert offspring.creation_op == "crossover"
+        assert offspring.creation_op == Operations.CROSSOVER
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_edit_selected_when_rand_in_edit_range(
@@ -607,7 +612,7 @@ class TestOperationSelection:
 
         # Verify edit was called
         mock_operator.edit.assert_called_once()
-        assert offspring.creation_op == "edit"
+        assert offspring.creation_op == Operations.EDIT
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_reproduction_selected_when_rand_above_edit_range(
@@ -639,7 +644,7 @@ class TestOperationSelection:
         # Verify no genetic operations were called (reproduction returns original)
         mock_operator.crossover.assert_not_called()
         mock_operator.edit.assert_not_called()
-        assert offspring.creation_op == "reproduction"
+        assert offspring.creation_op == Operations.REPRODUCTION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_mutation_applied_when_rand_below_mutation_rate(
@@ -670,7 +675,7 @@ class TestOperationSelection:
 
         # Verify mutation was applied
         mock_operator.mutate.assert_called_once()
-        assert offspring.creation_op == "mutation"
+        assert offspring.creation_op == Operations.MUTATION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_mutation_not_applied_when_rand_above_mutation_rate(
@@ -701,7 +706,7 @@ class TestOperationSelection:
 
         # Verify mutation was not applied
         mock_operator.mutate.assert_not_called()
-        assert offspring.creation_op == "crossover"
+        assert offspring.creation_op == Operations.CROSSOVER
 
 
 # ============================================================================
@@ -739,7 +744,7 @@ class TestProbabilityAssignment:
 
         mock_probability_assigner.assert_called_once()
         call_kwargs = mock_probability_assigner.call_args[1]
-        assert call_kwargs["operation"] == "crossover"
+        assert call_kwargs["operation"] == Operations.CROSSOVER
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_probability_assigner_called_with_mutation(
@@ -768,7 +773,7 @@ class TestProbabilityAssignment:
 
         mock_probability_assigner.assert_called_once()
         call_kwargs = mock_probability_assigner.call_args[1]
-        assert call_kwargs["operation"] == "mutation"
+        assert call_kwargs["operation"] == Operations.MUTATION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_probability_assigner_receives_parent_probabilities(
@@ -947,7 +952,7 @@ class TestOffspringCreation:
         )
 
         # Should be 'mutation', not 'crossover'
-        assert offspring.creation_op == "mutation"
+        assert offspring.creation_op == Operations.MUTATION
 
 
 # ============================================================================
@@ -1057,7 +1062,7 @@ class TestParentNotification:
         parent1_last_event = parent1.lifecycle_log[-1]
 
         # Should be notified with base operation 'crossover', not 'mutation'
-        assert parent1_last_event.details["operation"] == "crossover"
+        assert parent1_last_event.details["operation"] == Operations.CROSSOVER.value
 
 
 # ============================================================================
@@ -1092,7 +1097,7 @@ class TestBreedingStrategyIntegration:
             MagicMock(**default_operation_rates),
         )
 
-        assert offspring.creation_op == "crossover"
+        assert offspring.creation_op == Operations.CROSSOVER
         assert offspring.snippet == "def crossover_result(): pass"
         assert len(offspring.parent_ids) == 2
         assert offspring.generation_born == 1
@@ -1122,7 +1127,7 @@ class TestBreedingStrategyIntegration:
             MagicMock(**default_operation_rates),
         )
 
-        assert offspring.creation_op == "mutation"
+        assert offspring.creation_op == Operations.MUTATION
         assert offspring.snippet == "def mutated_result(): pass"
         assert len(offspring.parent_ids) == 2
         assert offspring.generation_born == 1
@@ -1151,7 +1156,7 @@ class TestBreedingStrategyIntegration:
             MagicMock(**default_operation_rates),
         )
 
-        assert offspring.creation_op == "edit"
+        assert offspring.creation_op == Operations.EDIT
         assert offspring.snippet == "def edited_result(): pass"
         assert len(offspring.parent_ids) == 1
         assert offspring.generation_born == 1
@@ -1180,7 +1185,7 @@ class TestBreedingStrategyIntegration:
             MagicMock(**default_operation_rates),
         )
 
-        assert offspring.creation_op == "reproduction"
+        assert offspring.creation_op == Operations.REPRODUCTION
         assert "def func_0" in offspring.snippet  # Parent's snippet
         assert len(offspring.parent_ids) == 1
 
@@ -1234,9 +1239,10 @@ class TestBreedingStrategyIntegration:
             MagicMock(**default_operation_rates),
         )
 
-        assert offspring1.creation_op == "crossover"
-        assert offspring2.creation_op == "edit"
-        assert offspring3.creation_op == "mutation"
+        # Verify operations
+        assert offspring1.creation_op == Operations.CROSSOVER
+        assert offspring2.creation_op == Operations.EDIT
+        assert offspring3.creation_op == Operations.MUTATION
 
 
 # ============================================================================
@@ -1270,7 +1276,7 @@ class TestBreedingStrategyEdgeCases:
             MagicMock(crossover_rate=0.0, edit_rate=0.0, mutation_rate=0.0),
         )
 
-        assert offspring.creation_op == "reproduction"
+        assert offspring.creation_op == Operations.REPRODUCTION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_mutation_rate_at_one(
@@ -1300,7 +1306,7 @@ class TestBreedingStrategyEdgeCases:
             ),
         )
 
-        assert offspring.creation_op == "mutation"
+        assert offspring.creation_op == Operations.MUTATION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
     def test_operator_exception_propagates(

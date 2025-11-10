@@ -262,9 +262,17 @@ class BaseIndividual(ABC):
             event: The type of lifecycle event.
             **details: Additional event-specific information.
         """
-        entry = LogEntry(generation=generation, event=event, details=details)
+        # Convert Operations enum to string for JSON serialization
+        serializable_details = {
+            k: v.value if isinstance(v, Operations) else v for k, v in details.items()
+        }
+        entry = LogEntry(
+            generation=generation, event=event, details=serializable_details
+        )
         self.lifecycle_log.append(entry)
-        logger.trace(f"Lifecycle event: {event.value} at gen {generation} - {details}")
+        logger.trace(
+            f"Lifecycle event: {event.value} at gen {generation} - {serializable_details}"
+        )
 
     def notify_parent_of(
         self, offspring_id: str, operation: Operations, generation: int
@@ -336,7 +344,7 @@ class BaseIndividual(ABC):
             "id": self.id,
             "type": self.__class__.__name__,
             "snippet": self.snippet,
-            "creation_op": self.creation_op,
+            "creation_op": self.creation_op.value,  # Convert enum to string for JSON serialization
             "generation_born": self.generation_born,
             "probability": self.probability,
             "parent_ids": self.parent_ids,
