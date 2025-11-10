@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from common.coevolution.core.individual import CodeIndividual, TestIndividual
     from common.coevolution.core.population import CodePopulation, TestPopulation
 
@@ -270,4 +272,88 @@ def log_final_survivors(
 
     logger.info(
         f"Logged {len(code_population)} code and {len(test_population)} test survivors"
+    )
+
+
+def log_belief_update_start(
+    population_type: str, num_items: int, num_observations: int
+) -> None:
+    """
+    Log the start of a belief update operation.
+
+    Args:
+        population_type: Either "code" or "test"
+        num_items: Number of items in the population being updated
+        num_observations: Number of observations used for the update
+    """
+    logger.info(
+        f"Updating {population_type} beliefs: {num_items} {population_type}s x "
+        f"{num_observations} observations"
+    )
+
+
+def log_prior_statistics(population_type: str, probs: "np.ndarray") -> None:
+    """
+    Log statistics about prior beliefs.
+
+    Args:
+        population_type: Either "code" or "test"
+        probs: Array of prior probabilities
+    """
+    import numpy as np
+
+    mean_prob = np.mean(probs)
+    logger.debug(
+        f"Prior {population_type} beliefs: mean={mean_prob:.4f}, "
+        f"min={np.min(probs):.4f}, "
+        f"max={np.max(probs):.4f}"
+    )
+
+
+def log_posterior_statistics(
+    population_type: str, prior_probs: "np.ndarray", posterior_probs: "np.ndarray"
+) -> None:
+    """
+    Log statistics about posterior beliefs and the change from prior.
+
+    Args:
+        population_type: Either "code" or "test"
+        prior_probs: Array of prior probabilities
+        posterior_probs: Array of posterior probabilities
+    """
+    import numpy as np
+
+    prior_mean = np.mean(prior_probs)
+    posterior_mean = np.mean(posterior_probs)
+    delta = posterior_mean - prior_mean
+
+    logger.debug(
+        f"Posterior {population_type} beliefs: mean={posterior_mean:.4f}, "
+        f"min={np.min(posterior_probs):.4f}, "
+        f"max={np.max(posterior_probs):.4f}"
+    )
+    logger.info(
+        f"{population_type.capitalize()} belief update complete: avg Δ={delta:+.4f}"
+    )
+
+
+def log_belief_changes(
+    population_type: str, prior_probs: "np.ndarray", posterior_probs: "np.ndarray"
+) -> None:
+    """
+    Log detailed statistics about individual belief changes at trace level.
+
+    Args:
+        population_type: Either "code" or "test"
+        prior_probs: Array of prior probabilities
+        posterior_probs: Array of posterior probabilities
+    """
+    import numpy as np
+
+    deltas = posterior_probs - prior_probs
+    logger.trace(
+        f"{population_type.capitalize()} belief changes: mean={np.mean(deltas):+.4f}, "
+        f"std={np.std(deltas):.4f}, "
+        f"max_increase={np.max(deltas):+.4f}, "
+        f"max_decrease={np.min(deltas):+.4f}"
     )
