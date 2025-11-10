@@ -154,5 +154,3 @@ def extract_test_methods_code(test_code: str) -> List[str]:
             break
 
     return test_methods_code
-
-    return test_methods_code
