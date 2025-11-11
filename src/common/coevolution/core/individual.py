@@ -98,5 +98,5 @@ class TestIndividual(BaseIndividual):
     def __repr__(self) -> str:
         return (
             f"<TestIndividual id={self.id} gen={self.generation_born} "
-            f"prob={self.probability:.1f}>"
+            f"op={self.creation_op.value} prob={self.probability:.1f}>"
         )
