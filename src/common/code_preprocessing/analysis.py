@@ -69,17 +69,21 @@ def analyze_test_methods(test_code: str) -> List[str]:
     except SyntaxError as e:
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
-    # Find the first class definition
+    # Find the test class definition (skip Solution class if present)
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
+            # Skip non-test classes (e.g., Solution class)
+            if node.name == "Solution":
+                continue
             # Iterate through class methods
             for method in node.body:
                 if isinstance(method, ast.FunctionDef) and method.name.startswith(
                     "test_"
                 ):
                     test_cases.append(method.name)
-            # Stop after first class
-            break
+            # Stop after first test class found
+            if test_cases:
+                break
 
     return test_cases
 
