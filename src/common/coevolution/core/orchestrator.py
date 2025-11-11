@@ -526,7 +526,7 @@ class Orchestrator:
         Returns:
             Tuple of (final_code_population, final_test_population)
         """
-        logging_utils.log_section_header("INFO", "STARTING MOCK CO-EVOLUTION RUN")
+        logging_utils.log_section_header("INFO", "STARTING CO-EVOLUTION RUN")
 
         # --- Create Initial Populations ---
         code_population = self._create_initial_code_population()
