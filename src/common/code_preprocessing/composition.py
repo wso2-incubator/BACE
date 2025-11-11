@@ -260,4 +260,3 @@ def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -
     rebuilt_code = ast.unparse(tree)
 
     return rebuilt_code
-    return rebuilt_code

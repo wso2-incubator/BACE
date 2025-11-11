@@ -11,7 +11,14 @@ from typing import Any
 from datasets import load_dataset  # type: ignore[import-untyped]
 from loguru import logger
 
-from .core.interfaces import Problem, Test
+import common.code_preprocessing as cpp
+
+from .core.interfaces import (
+    IDatasetTestBlockBuilder,
+    ITestBlockRebuilder,
+    Problem,
+    Test,
+)
 
 
 class Platform(Enum):
@@ -145,7 +152,7 @@ def load_code_generation_dataset(
     return dataset_items
 
 
-class LCBDatasetTestBlockBuilder:
+class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
     """
     Implementation of IDatasetTestBlockBuilder for LiveCodeBench dataset.
 
@@ -263,7 +270,7 @@ class LCBDatasetTestBlockBuilder:
         return "\n".join(output_lines)
 
     @staticmethod
-    def build_test_class_block(test_cases: list[LCBTest], starter_code: str) -> str:
+    def build_test_class_block(test_cases: list[Test], starter_code: str) -> str:
         """
         Generate a unittest test script from LCB problem test case objects.
 
@@ -301,7 +308,21 @@ class LCBDatasetTestBlockBuilder:
             return f"# Error: Unknown test type '{first_test_type}'."
 
 
-if __name__ == "__main__":
-    # When run as a script, use the project's loguru logger configuration (if any).
-    logger.info("Loading code generation dataset (script entry)")
-    dataset = load_code_generation_dataset()
+class LCBTestBlockRebuilder(ITestBlockRebuilder):
+    """
+    Implementation of ITestBlockRebuilder for LiveCodeBench dataset.
+
+    Rebuilds LCB test cases from unittest test class blocks.
+    """
+
+    @staticmethod
+    def rebuild_test_cases_from_test_block(
+        original_class_str: str,
+        new_methods_snippets: list[str],
+    ) -> str:
+        # This method will reconstruct LCBTest objects from the original class string
+        # and the new method snippets provided.
+
+        return cpp.composition.rebuild_unittest_with_methods(
+            original_class_str, new_methods_snippets
+        )
