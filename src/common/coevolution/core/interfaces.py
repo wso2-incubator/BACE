@@ -69,6 +69,7 @@ class LifecycleEvent(Enum):
     CREATED = "created"
     BECAME_PARENT = "became_parent"
     SELECTED_AS_ELITE = "selected_as_elite"
+    PROBABILITY_UPDATED = "probability_updated"
     DIED = "died"
     SURVIVED = "survived"
 
@@ -326,6 +327,19 @@ class BaseIndividual(ABC):
         self._log_event(
             generation=generation,
             event=LifecycleEvent.SURVIVED,
+        )
+
+    def notify_probability_updated(self, generation: int) -> None:
+        """
+        Called when this individual's probability is updated.
+
+        Args:
+            generation: The generation number when this update occurred.
+        """
+        self._log_event(
+            generation=generation,
+            event=LifecycleEvent.PROBABILITY_UPDATED,
+            probability=self.probability,
         )
 
     def get_complete_record(self) -> dict[str, Any]:
@@ -612,6 +626,7 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
 
         for ind, new_prob in zip(self._individuals, new_probabilities, strict=False):
             ind.probability = float(new_prob)
+            ind.notify_probability_updated(generation=self._generation)
 
         new_avg = self.compute_average_probability()
         logger.info(
@@ -734,7 +749,6 @@ class ICodeOperator(ICodeInitializer, IGeneticOperator, Protocol):
     """
 
 
-
 class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
     """
     Abstract interface (Protocol) for a Test genetic operator.
@@ -742,7 +756,6 @@ class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
     Combines test initialization and genetic operations.
     Handles all aspects of test snippet creation and evolution.
     """
-
 
 
 class ISelectionStrategy(Protocol):
@@ -1144,7 +1157,6 @@ class IBayesianSystem(IBeliefInitializer, IBeliefUpdater, Protocol):
     """
 
 
-
 class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
     """
     Unified interface for test execution and observation.
@@ -1156,4 +1168,3 @@ class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
     This system is used by the Orchestrator to evaluate code populations against
     test populations (generated, public, and private tests).
     """
-
