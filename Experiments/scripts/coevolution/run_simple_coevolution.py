@@ -8,9 +8,6 @@ This script demonstrates how to use the new modular architecture with:
 - LCB dataset integration
 """
 
-import sys
-from pathlib import Path
-
 from loguru import logger
 
 import common.coevolution.logging_utils as logging_utils
