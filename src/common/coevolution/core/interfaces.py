@@ -39,9 +39,10 @@ Interface Organization:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterator, Protocol, overload
+from typing import TYPE_CHECKING, Any, Protocol, overload
 
 import numpy as np
 from loguru import logger
@@ -365,7 +366,6 @@ class BaseIndividual(ABC):
         The unique identifier (e.g., 'C1' or 'T1').
         This is abstract because the prefix is different.
         """
-        pass
 
     # -- helper for validation of probability --
     @staticmethod
@@ -430,7 +430,7 @@ class BaseIndividual(ABC):
     def __repr__(self) -> str:
         pass
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Individuals are considered equal if they are of the same
         base type and have the same unique ID.
@@ -469,12 +469,10 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
     @overload
     def __getitem__(self, index: int) -> T_Individual:
         """Gets a single individual by integer index."""
-        ...
 
     @overload
     def __getitem__(self, index: slice) -> list[T_Individual]:
         """Gets a list of individuals by slice."""
-        ...
 
     def __getitem__(self, index: int | slice) -> T_Individual | list[T_Individual]:
         """
@@ -612,7 +610,7 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
 
         old_avg = self.compute_average_probability()
 
-        for ind, new_prob in zip(self._individuals, new_probabilities):
+        for ind, new_prob in zip(self._individuals, new_probabilities, strict=False):
             ind.probability = float(new_prob)
 
         new_avg = self.compute_average_probability()
@@ -628,7 +626,6 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         Hook method called after the generation is advanced.
         Subclasses can override this to implement custom behavior.
         """
-        pass
 
     @abstractmethod
     def __repr__(self) -> str:
@@ -736,7 +733,6 @@ class ICodeOperator(ICodeInitializer, IGeneticOperator, Protocol):
     Handles all aspects of code snippet creation and evolution.
     """
 
-    pass
 
 
 class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
@@ -747,7 +743,6 @@ class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
     Handles all aspects of test snippet creation and evolution.
     """
 
-    pass
 
 
 class ISelectionStrategy(Protocol):
@@ -1148,7 +1143,6 @@ class IBayesianSystem(IBeliefInitializer, IBeliefUpdater, Protocol):
     code and test populations based on execution results.
     """
 
-    pass
 
 
 class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
@@ -1163,4 +1157,3 @@ class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
     test populations (generated, public, and private tests).
     """
 
-    pass

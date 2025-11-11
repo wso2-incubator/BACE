@@ -5,8 +5,8 @@ import random
 import numpy as np
 from loguru import logger
 
-import common.coevolution.logging_utils as logging_utils
 from common.code_preprocessing.transformation import extract_test_methods_code
+from common.coevolution import logging_utils
 
 # Import concrete classes
 from .breeding_strategy import BreedingStrategy

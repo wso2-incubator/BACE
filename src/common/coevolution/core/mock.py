@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from loguru import logger
 
-import common.coevolution.logging_utils as logging_utils
+from common.coevolution import logging_utils
 
 from .interfaces import (
     BaseIndividual,

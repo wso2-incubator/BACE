@@ -20,7 +20,6 @@ class CodePopulation(BasePopulation[CodeIndividual]):
 
     def _on_generation_advanced(self) -> None:
         """CodePopulation has no special actions on generation advance."""
-        pass
 
 
 class TestPopulation(BasePopulation[TestIndividual]):
