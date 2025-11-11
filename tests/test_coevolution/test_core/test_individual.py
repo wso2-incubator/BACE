@@ -340,6 +340,7 @@ class TestTestIndividual:
         ids = [ind.id for ind in individuals]
         assert len(ids) == len(set(ids))  # All IDs are unique
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_discrimination_initial_state(self) -> None:
         """Test discrimination is initially None."""
         individual = TestIndividual(
@@ -352,6 +353,7 @@ class TestTestIndividual:
 
         assert individual.discrimination is None
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     @patch("common.coevolution.core.individual.logger")
     def test_discrimination_getter_warns_when_unset(
         self, mock_logger: MagicMock
@@ -373,6 +375,7 @@ class TestTestIndividual:
         call_args = str(mock_logger.warning.call_args)
         assert "discrimination" in call_args.lower()
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_discrimination_setter(self) -> None:
         """Test discrimination setter with valid float values."""
         individual = TestIndividual(
@@ -395,6 +398,7 @@ class TestTestIndividual:
         individual.discrimination = 0.0
         assert individual.discrimination == 0.0
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_discrimination_can_be_set_to_none(self) -> None:
         """Test discrimination can be explicitly set to None."""
         individual = TestIndividual(
@@ -413,6 +417,7 @@ class TestTestIndividual:
         individual.discrimination = None
         assert individual.discrimination is None
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_repr_with_discrimination_unset(self) -> None:
         """Test __repr__ shows 'None' when discrimination is not set."""
         individual = TestIndividual(
@@ -431,6 +436,7 @@ class TestTestIndividual:
         assert "prob=0.6" in repr_str
         assert "disc=None" in repr_str
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_repr_with_discrimination_set(self) -> None:
         """Test __repr__ shows discrimination value when set."""
         individual = TestIndividual(
@@ -451,6 +457,7 @@ class TestTestIndividual:
         # Note: TestIndividual.__repr__ doesn't show creation_op
         assert "disc=0.8" in repr_str or "disc=0.9" in repr_str  # Rounded to 1 decimal
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     @patch("common.coevolution.core.individual.logger")
     def test_discrimination_setter_logs_trace(self, mock_logger: MagicMock) -> None:
         """Test discrimination setter logs trace message."""
@@ -1203,6 +1210,7 @@ class TestIndividualIntegration:
         assert mutated.parent_ids == [initial.id]
         assert offspring.parent_ids == [mutated.id, another.id]
 
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_test_evolution_with_discrimination(self) -> None:
         """Test test individual evolution with discrimination tracking."""
         # Initial test

@@ -10,6 +10,7 @@ from .interfaces import (
     BaseIndividual,
     BasePopulation,
     BayesianConfig,
+    ExecutionResults,
     IBayesianSystem,
     ICodeOperator,
     IExecutionSystem,
@@ -35,8 +36,6 @@ class MockUnitTestResult:
     is_passing: list[bool]
     error_messages: list[str]
 
-
-type ExecutionResults = list[MockUnitTestResult]
 
 # setup logging
 logging_utils.setup_logging(
@@ -290,10 +289,10 @@ class MockExecutionSystem(IExecutionSystem):
         """Execute all code against all tests."""
         logger.debug("MockExecutionSystem: 'Running' all tests...")
 
-        execution_results: ExecutionResults = []
+        execution_results: dict[int, MockUnitTestResult] = {}
         num_tests = len(test_population)
 
-        for code_ind in code_population:
+        for code_idx, code_ind in enumerate(code_population):
             logger.trace(f"Executing generated tests for Code ID {code_ind.id}")
             is_passing = np.random.rand(num_tests) < code_ind.probability
             error_messages = [
@@ -302,7 +301,7 @@ class MockExecutionSystem(IExecutionSystem):
             mock_result: MockUnitTestResult = MockUnitTestResult(
                 is_passing=is_passing.tolist(), error_messages=error_messages
             )
-            execution_results.append(mock_result)
+            execution_results[code_idx] = mock_result
 
         return execution_results
 
@@ -317,9 +316,9 @@ class MockExecutionSystem(IExecutionSystem):
         num_code = len(code_population)
         num_tests = len(test_population)
         combined_matrix = np.zeros((num_code, num_tests), dtype=int)
-        for i, result in enumerate(execution_results):
+        for code_idx, result in execution_results.items():
             for j in range(num_tests):
-                combined_matrix[i, j] = 1 if result.is_passing[j] else 0
+                combined_matrix[code_idx, j] = 1 if result.is_passing[j] else 0
         return combined_matrix
 
 

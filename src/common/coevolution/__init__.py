@@ -39,6 +39,7 @@ Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 # They will be replaced by new implementations based on core/ interfaces
 from . import core, deprecated
 from .bayesian_system import BayesianSystem
+from .execution import ExecutionSystem
 from .pareto_system import ParetoSystem
 from .selection_strategy import SelectionMethod, SelectionStrategy
 
@@ -46,6 +47,7 @@ __all__ = [
     "core",
     "deprecated",
     "BayesianSystem",
+    "ExecutionSystem",
     "ParetoSystem",
     "SelectionMethod",
     "SelectionStrategy",

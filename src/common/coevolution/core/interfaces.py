@@ -74,7 +74,7 @@ class LifecycleEvent(Enum):
 
 type ParentProbabilities = list[float]
 type UnitTestResult = Any
-type ExecutionResults = list[UnitTestResult]
+type ExecutionResults = dict[int, UnitTestResult]
 type Sandbox = Any
 
 
@@ -920,6 +920,9 @@ class IDatasetTestBlockBuilder(Protocol):
 
     This is specifically for fixed test populations derived from the dataset,
     NOT for general test block building (that's what ITestBlockRebuilder is for).
+
+    Note: Implementations can be stateless (using @staticmethod) if desired,
+    but the protocol defines an instance method for maximum flexibility.
     """
 
     def build_test_class_block(self, test_cases: list[Test], starter_code: str) -> str:

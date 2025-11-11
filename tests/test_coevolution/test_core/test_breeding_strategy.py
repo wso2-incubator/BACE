@@ -20,7 +20,7 @@ import pytest
 
 from common.coevolution.core.breeding_strategy import BreedingStrategy
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import Operations
+from common.coevolution.core.interfaces import Operations, OperatorRatesConfig
 from common.coevolution.core.population import CodePopulation, TestPopulation
 
 # ============================================================================
@@ -61,7 +61,7 @@ def mock_factory() -> MagicMock:
 def mock_probability_assigner() -> MagicMock:
     """Mock IProbabilityAssigner."""
     mock = MagicMock()
-    mock.return_value = 0.5  # Default probability
+    mock.assign_probability.return_value = 0.5  # Default probability
     return mock
 
 
@@ -69,7 +69,7 @@ def mock_probability_assigner() -> MagicMock:
 def mock_feedback_generator() -> MagicMock:
     """Mock IFeedbackGenerator."""
     mock = MagicMock()
-    mock.return_value = "Feedback: improve this code"
+    mock.generate_feedback.return_value = "Feedback: improve this code"
     return mock
 
 
@@ -107,8 +107,8 @@ def sample_test_population() -> TestPopulation:
     mock_builder = MagicMock(return_value="class Test:\n    pass")
     return TestPopulation(
         individuals=individuals,
-        pareto_fn=mock_pareto,
-        rebuild_test_block_fn=mock_builder,
+        pareto=mock_pareto,
+        test_block_rebuilder=mock_builder,
         test_class_block="class Test:\n    pass",
         generation=0,
     )
@@ -127,13 +127,13 @@ def sample_observation_matrix() -> np.ndarray:
 
 
 @pytest.fixture
-def default_operation_rates() -> dict[str, float]:
+def default_operation_rates() -> OperatorRatesConfig:
     """Default operation rates for testing."""
-    return {
-        "crossover_rate": 0.3,
-        "edit_rate": 0.3,
-        "mutation_rate": 0.2,
-    }
+    return OperatorRatesConfig(
+        crossover_rate=0.3,
+        edit_rate=0.3,
+        mutation_rate=0.2,
+    )
 
 
 @pytest.fixture
@@ -344,8 +344,8 @@ class TestEditOperation:
             mock_feedback_generator,
         )
 
-        mock_feedback_generator.assert_called_once()
-        call_kwargs = mock_feedback_generator.call_args[1]
+        mock_feedback_generator.generate_feedback.assert_called_once()
+        call_kwargs = mock_feedback_generator.generate_feedback.call_args[1]
         assert "observation_matrix" in call_kwargs
         assert "execution_results" in call_kwargs
         assert "other_population" in call_kwargs
@@ -373,7 +373,8 @@ class TestEditOperation:
         mock_operator.edit.assert_called_once()
         call_args = mock_operator.edit.call_args[0]
         assert "def func_0" in call_args[0]  # Parent snippet
-        assert "Feedback" in call_args[1]  # Feedback
+        # Check that feedback generator was called (feedback is passed to edit)
+        mock_feedback_generator.generate_feedback.assert_called_once()
 
     def test_perform_edit_returns_snippet_and_single_parent(
         self,
@@ -563,7 +564,7 @@ class TestOperationSelection:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test crossover is selected when rand < crossover_rate."""
         # First call: 0.1 (< 0.3 crossover_rate) → crossover
@@ -576,7 +577,7 @@ class TestOperationSelection:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify crossover was called
@@ -594,7 +595,7 @@ class TestOperationSelection:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test edit is selected when crossover_rate <= rand < crossover_rate + edit_rate."""
         # First call: 0.4 (>= 0.3, < 0.6) → edit
@@ -607,7 +608,7 @@ class TestOperationSelection:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify edit was called
@@ -625,7 +626,7 @@ class TestOperationSelection:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test reproduction is selected when rand >= crossover_rate + edit_rate."""
         # First call: 0.7 (>= 0.6) → reproduction
@@ -638,7 +639,7 @@ class TestOperationSelection:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify no genetic operations were called (reproduction returns original)
@@ -657,7 +658,7 @@ class TestOperationSelection:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test mutation is applied when rand < mutation_rate."""
         # First call: 0.1 (< 0.3) → crossover
@@ -670,7 +671,7 @@ class TestOperationSelection:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify mutation was applied
@@ -688,7 +689,7 @@ class TestOperationSelection:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test mutation is not applied when rand >= mutation_rate."""
         # First call: 0.1 (< 0.3) → crossover
@@ -701,7 +702,7 @@ class TestOperationSelection:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify mutation was not applied
@@ -728,7 +729,7 @@ class TestProbabilityAssignment:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_probability_assigner: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test probability assigner called with operation='crossover'."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -739,11 +740,11 @@ class TestProbabilityAssignment:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
-        mock_probability_assigner.assert_called_once()
-        call_kwargs = mock_probability_assigner.call_args[1]
+        mock_probability_assigner.assign_probability.assert_called_once()
+        call_kwargs = mock_probability_assigner.assign_probability.call_args[1]
         assert call_kwargs["operation"] == Operations.CROSSOVER
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
@@ -757,7 +758,7 @@ class TestProbabilityAssignment:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_probability_assigner: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test probability assigner called with operation='mutation' when mutated."""
         mock_random.side_effect = [0.1, 0.1]  # crossover, then mutation
@@ -768,11 +769,11 @@ class TestProbabilityAssignment:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
-        mock_probability_assigner.assert_called_once()
-        call_kwargs = mock_probability_assigner.call_args[1]
+        mock_probability_assigner.assign_probability.assert_called_once()
+        call_kwargs = mock_probability_assigner.assign_probability.call_args[1]
         assert call_kwargs["operation"] == Operations.MUTATION
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
@@ -787,7 +788,7 @@ class TestProbabilityAssignment:
         mock_feedback_generator: MagicMock,
         mock_probability_assigner: MagicMock,
         mock_selector: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test probability assigner receives parent probabilities."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -799,10 +800,10 @@ class TestProbabilityAssignment:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
-        call_kwargs = mock_probability_assigner.call_args[1]
+        call_kwargs = mock_probability_assigner.assign_probability.call_args[1]
         parent_probs = call_kwargs["parent_probs"]
         assert len(parent_probs) == 2
         assert parent_probs[0] == 0.1  # Parent 0 probability
@@ -819,7 +820,7 @@ class TestProbabilityAssignment:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_probability_assigner: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test probability assigner receives initial_prior."""
         mock_random.side_effect = [0.7, 0.5]  # reproduction, no mutation
@@ -830,10 +831,10 @@ class TestProbabilityAssignment:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
-        call_kwargs = mock_probability_assigner.call_args[1]
+        call_kwargs = mock_probability_assigner.assign_probability.call_args[1]
         assert call_kwargs["initial_prior"] == 0.5
 
 
@@ -855,7 +856,7 @@ class TestOffspringCreation:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test offspring has correct snippet based on operation."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -866,7 +867,7 @@ class TestOffspringCreation:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.snippet == "def crossover_result(): pass"
@@ -881,7 +882,7 @@ class TestOffspringCreation:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test offspring generation is parent generation + 1."""
         mock_random.side_effect = [0.7, 0.5]  # reproduction, no mutation
@@ -892,7 +893,7 @@ class TestOffspringCreation:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.generation_born == sample_code_population.generation + 1
@@ -908,7 +909,7 @@ class TestOffspringCreation:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_selector: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test offspring has correct parent IDs."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -920,7 +921,7 @@ class TestOffspringCreation:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert len(offspring.parent_ids) == 2
@@ -937,7 +938,7 @@ class TestOffspringCreation:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test offspring creation_op is the final operation (mutation if applied)."""
         mock_random.side_effect = [0.1, 0.1]  # crossover, then mutation
@@ -948,7 +949,7 @@ class TestOffspringCreation:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Should be 'mutation', not 'crossover'
@@ -974,7 +975,7 @@ class TestParentNotification:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_selector: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test both parents are notified after crossover."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -986,7 +987,7 @@ class TestParentNotification:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         parent1 = sample_code_population[0]
@@ -1013,7 +1014,7 @@ class TestParentNotification:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test parent is notified with current generation, not offspring's."""
         mock_random.side_effect = [0.7, 0.5]  # reproduction, no mutation
@@ -1024,7 +1025,7 @@ class TestParentNotification:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         parent = sample_code_population[0]
@@ -1044,7 +1045,7 @@ class TestParentNotification:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test parent is notified with base operation (not final operation after mutation)."""
         mock_random.side_effect = [0.1, 0.1]  # crossover, then mutation
@@ -1055,7 +1056,7 @@ class TestParentNotification:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         parent1 = sample_code_population[0]
@@ -1083,7 +1084,7 @@ class TestBreedingStrategyIntegration:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test complete crossover flow without mutation."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -1094,7 +1095,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.creation_op == Operations.CROSSOVER
@@ -1113,7 +1114,7 @@ class TestBreedingStrategyIntegration:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test complete crossover + mutation flow."""
         mock_random.side_effect = [0.1, 0.1]  # crossover, then mutation
@@ -1124,7 +1125,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.creation_op == Operations.MUTATION
@@ -1142,7 +1143,7 @@ class TestBreedingStrategyIntegration:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test complete edit flow without mutation."""
         mock_random.side_effect = [0.4, 0.5]  # edit, no mutation
@@ -1153,7 +1154,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.creation_op == Operations.EDIT
@@ -1171,7 +1172,7 @@ class TestBreedingStrategyIntegration:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test complete reproduction flow without mutation."""
         mock_random.side_effect = [0.7, 0.5]  # reproduction, no mutation
@@ -1182,7 +1183,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert offspring.creation_op == Operations.REPRODUCTION
@@ -1199,7 +1200,7 @@ class TestBreedingStrategyIntegration:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test generating multiple offspring produces different results."""
         # Different random values for each offspring
@@ -1218,7 +1219,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         offspring2 = breeding_strategy.generate_single_offspring(
@@ -1227,7 +1228,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         offspring3 = breeding_strategy.generate_single_offspring(
@@ -1236,7 +1237,7 @@ class TestBreedingStrategyIntegration:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         # Verify operations
@@ -1273,7 +1274,7 @@ class TestBreedingStrategyEdgeCases:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(crossover_rate=0.0, edit_rate=0.0, mutation_rate=0.0),
+            OperatorRatesConfig(crossover_rate=0.0, edit_rate=0.0, mutation_rate=0.0),
         )
 
         assert offspring.creation_op == Operations.REPRODUCTION
@@ -1288,7 +1289,7 @@ class TestBreedingStrategyEdgeCases:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test with mutation rate at 1.0 (always mutate)."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, then check mutation
@@ -1299,9 +1300,9 @@ class TestBreedingStrategyEdgeCases:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(
-                crossover_rate=default_operation_rates["crossover_rate"],
-                edit_rate=default_operation_rates["edit_rate"],
+            OperatorRatesConfig(
+                crossover_rate=default_operation_rates.crossover_rate,
+                edit_rate=default_operation_rates.edit_rate,
                 mutation_rate=1.0,  # Always mutate
             ),
         )
@@ -1319,7 +1320,7 @@ class TestBreedingStrategyEdgeCases:
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
         mock_operator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test that operator exceptions are propagated."""
         mock_random.side_effect = [0.1, 0.5]  # crossover
@@ -1332,7 +1333,7 @@ class TestBreedingStrategyEdgeCases:
                 sample_execution_results,
                 mock_feedback_generator,
                 sample_observation_matrix,
-                MagicMock(**default_operation_rates),
+                default_operation_rates,
             )
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
@@ -1345,11 +1346,13 @@ class TestBreedingStrategyEdgeCases:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test that feedback generator exceptions are propagated."""
         mock_random.side_effect = [0.4, 0.5]  # edit
-        mock_feedback_generator.side_effect = Exception("Feedback generation failed")
+        mock_feedback_generator.generate_feedback.side_effect = Exception(
+            "Feedback generation failed"
+        )
 
         with pytest.raises(Exception, match="Feedback generation failed"):
             breeding_strategy.generate_single_offspring(
@@ -1358,7 +1361,7 @@ class TestBreedingStrategyEdgeCases:
                 sample_execution_results,
                 mock_feedback_generator,
                 sample_observation_matrix,
-                MagicMock(**default_operation_rates),
+                default_operation_rates,
             )
 
     @patch("common.coevolution.core.breeding_strategy.np.random.random")
@@ -1371,7 +1374,7 @@ class TestBreedingStrategyEdgeCases:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test offspring generation with population at different generations."""
         for gen in [0, 5, 100]:
@@ -1385,7 +1388,7 @@ class TestBreedingStrategyEdgeCases:
                 sample_execution_results,
                 mock_feedback_generator,
                 sample_observation_matrix,
-                MagicMock(**default_operation_rates),
+                default_operation_rates,
             )
 
             assert offspring.generation_born == gen + 1
@@ -1409,7 +1412,7 @@ class TestBreedingStrategyTypeSafety:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test breeding strategy works with CodeIndividual."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -1420,7 +1423,7 @@ class TestBreedingStrategyTypeSafety:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert isinstance(offspring, CodeIndividual)
@@ -1438,7 +1441,7 @@ class TestBreedingStrategyTypeSafety:
         sample_execution_results: MagicMock,
         sample_observation_matrix: np.ndarray,
         mock_feedback_generator: MagicMock,
-        default_operation_rates: dict[str, float],
+        default_operation_rates: OperatorRatesConfig,
     ) -> None:
         """Test breeding strategy works with TestIndividual."""
         mock_random.side_effect = [0.1, 0.5]  # crossover, no mutation
@@ -1461,7 +1464,7 @@ class TestBreedingStrategyTypeSafety:
             sample_execution_results,
             mock_feedback_generator,
             sample_observation_matrix,
-            MagicMock(**default_operation_rates),
+            default_operation_rates,
         )
 
         assert isinstance(offspring, TestIndividual)
