@@ -98,8 +98,72 @@ def mock_sandbox() -> Mock:
 
 
 @pytest.fixture
-def mock_execution_results() -> list[TestExecutionResult]:
-    """Create mock execution results for testing observation matrix."""
+def mock_execution_results() -> dict[int, TestExecutionResult]:
+    """Create mock execution results for testing observation matrix (as dict)."""
+    return {
+        # Code 0: passes both tests
+        0: TestExecutionResult(
+            script_error=False,
+            tests_passed=2,
+            tests_failed=0,
+            tests_errors=0,
+            test_results=[
+                TestResult(
+                    name="test_positive", description="", status="passed", details=None
+                ),
+                TestResult(
+                    name="test_zero", description="", status="passed", details=None
+                ),
+            ],
+            summary="All tests passed",
+        ),
+        # Code 1: fails both tests
+        1: TestExecutionResult(
+            script_error=False,
+            tests_passed=0,
+            tests_failed=2,
+            tests_errors=0,
+            test_results=[
+                TestResult(
+                    name="test_positive",
+                    description="",
+                    status="failed",
+                    details="AssertionError",
+                ),
+                TestResult(
+                    name="test_zero",
+                    description="",
+                    status="failed",
+                    details="AssertionError",
+                ),
+            ],
+            summary="All tests failed",
+        ),
+        # Code 2: passes first test, fails second
+        2: TestExecutionResult(
+            script_error=False,
+            tests_passed=1,
+            tests_failed=1,
+            tests_errors=0,
+            test_results=[
+                TestResult(
+                    name="test_positive", description="", status="passed", details=None
+                ),
+                TestResult(
+                    name="test_zero",
+                    description="",
+                    status="failed",
+                    details="AssertionError",
+                ),
+            ],
+            summary="Mixed results",
+        ),
+    }
+
+
+@pytest.fixture
+def mock_execution_results_list() -> list[TestExecutionResult]:
+    """Create mock execution results as a list (for mock side_effect)."""
     return [
         # Code 0: passes both tests
         TestExecutionResult(
@@ -230,8 +294,8 @@ class TestObservationMatrixBuilding:
         system = ExecutionSystem()
 
         # All tests pass
-        execution_results = [
-            TestExecutionResult(
+        execution_results = {
+            i: TestExecutionResult(
                 script_error=False,
                 tests_passed=2,
                 tests_failed=0,
@@ -249,8 +313,8 @@ class TestObservationMatrixBuilding:
                 ],
                 summary="All passed",
             )
-            for _ in range(3)
-        ]
+            for i in range(3)
+        }
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, execution_results
@@ -269,8 +333,8 @@ class TestObservationMatrixBuilding:
         system = ExecutionSystem()
 
         # All tests fail
-        execution_results = [
-            TestExecutionResult(
+        execution_results = {
+            i: TestExecutionResult(
                 script_error=False,
                 tests_passed=0,
                 tests_failed=2,
@@ -291,8 +355,8 @@ class TestObservationMatrixBuilding:
                 ],
                 summary="All failed",
             )
-            for _ in range(3)
-        ]
+            for i in range(3)
+        }
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, execution_results
@@ -340,8 +404,8 @@ class TestObservationMatrixBuilding:
         """Test that error status is treated as failure (0)."""
         system = ExecutionSystem()
 
-        execution_results = [
-            TestExecutionResult(
+        execution_results = {
+            0: TestExecutionResult(
                 script_error=False,
                 tests_passed=1,
                 tests_failed=0,
@@ -359,7 +423,7 @@ class TestObservationMatrixBuilding:
                 ],
                 summary="Error",
             )
-        ]
+        }
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, execution_results
@@ -412,7 +476,7 @@ class TestExecuteTests:
         )
 
         assert len(results) == 3  # All 3 codes executed successfully
-        assert all(isinstance(r, TestExecutionResult) for r in results)
+        assert all(isinstance(r, TestExecutionResult) for r in results.values())
         assert mock_sandbox.execute_test_script.call_count == 3
 
     def test_execute_tests_handles_failures(
@@ -513,13 +577,13 @@ class TestIntegration:
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
         mock_sandbox: Mock,
-        mock_execution_results: list[TestExecutionResult],
+        mock_execution_results_list: list[TestExecutionResult],
     ) -> None:
         """Test the full pipeline from execution to observation matrix."""
         system = ExecutionSystem(enable_multiprocessing=False)
 
         # Mock sandbox to return our predefined results
-        mock_sandbox.execute_test_script.side_effect = mock_execution_results
+        mock_sandbox.execute_test_script.side_effect = mock_execution_results_list
 
         # Execute tests
         results = system.execute_tests(
@@ -696,7 +760,7 @@ if __name__ == '__main__':
         # All results should be TestExecutionResult objects
         from common.sandbox import TestExecutionResult
 
-        assert all(isinstance(r, TestExecutionResult) for r in results)
+        assert all(isinstance(r, TestExecutionResult) for r in results.values())
 
         # Build observation matrix
         matrix = system.build_observation_matrix(
@@ -796,7 +860,7 @@ class TestAdditionalEdgeCases:
             ],
             summary="All passed",
         )
-        execution_results = [result_row, result_row]
+        execution_results = {0: result_row}  # Only code 0 in population
 
         matrix = system.build_observation_matrix(
             code_population, simple_test_population, execution_results
@@ -807,18 +871,19 @@ class TestAdditionalEdgeCases:
         # Only first row filled; extras ignored
         assert np.array_equal(matrix[0], np.array([1, 1], dtype=int))
 
-    def test_build_matrix_skips_unknown_test_names(
+    def test_build_matrix_handles_mismatched_result_count(
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
     ) -> None:
-        """Test results containing unknown test names are skipped (no crash)."""
+        """Test that mismatched test result counts are logged as errors."""
         system = ExecutionSystem()
 
-        execution_results = [
-            TestExecutionResult(
+        # Execution results with wrong number of test results (3 instead of 2)
+        execution_results = {
+            0: TestExecutionResult(
                 script_error=False,
-                tests_passed=1,
+                tests_passed=2,
                 tests_failed=1,
                 tests_errors=0,
                 test_results=[
@@ -829,76 +894,79 @@ class TestAdditionalEdgeCases:
                         details=None,
                     ),
                     TestResult(
-                        name="test_does_not_exist",
+                        name="test_zero", description="", status="passed", details=None
+                    ),
+                    TestResult(
+                        name="test_extra",  # Extra test not in population
+                        description="",
+                        status="failed",
+                        details=None,
+                    ),
+                ],
+                summary="Contains extra test",
+            ),
+            1: TestExecutionResult(
+                script_error=False,
+                tests_passed=2,
+                tests_failed=0,
+                tests_errors=0,
+                test_results=[
+                    TestResult(
+                        name="test_positive",
                         description="",
                         status="passed",
                         details=None,
                     ),
+                    TestResult(
+                        name="test_zero", description="", status="passed", details=None
+                    ),
                 ],
-                summary="Contains unknown test",
+                summary="Correct count",
             ),
-            # Fill other rows with zeros by providing no matching passes
-            TestExecutionResult(
+            2: TestExecutionResult(
                 script_error=False,
-                tests_passed=0,
-                tests_failed=2,
+                tests_passed=2,
+                tests_failed=0,
                 tests_errors=0,
                 test_results=[
                     TestResult(
                         name="test_positive",
                         description="",
-                        status="failed",
-                        details="",
+                        status="passed",
+                        details=None,
                     ),
                     TestResult(
-                        name="test_zero", description="", status="failed", details=""
+                        name="test_zero", description="", status="passed", details=None
                     ),
                 ],
-                summary="All failed",
+                summary="Correct count",
             ),
-            TestExecutionResult(
-                script_error=False,
-                tests_passed=0,
-                tests_failed=2,
-                tests_errors=0,
-                test_results=[
-                    TestResult(
-                        name="test_positive",
-                        description="",
-                        status="failed",
-                        details="",
-                    ),
-                    TestResult(
-                        name="test_zero", description="", status="failed", details=""
-                    ),
-                ],
-                summary="All failed",
-            ),
-        ]
+        }
 
+        # Should still build matrix but log error for code 0
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, execution_results
         )
 
-        # Only the known test should be marked as pass in the first row
+        # Matrix should still be built (extra result ignored for code 0)
         expected = np.array(
             [
-                [1, 0],
-                [0, 0],
-                [0, 0],
+                [1, 1],  # Code 0: first 2 tests passed (extra ignored)
+                [1, 1],  # Code 1: both tests passed
+                [1, 1],  # Code 2: both tests passed
             ],
             dtype=int,
         )
         assert np.array_equal(matrix, expected)
 
-    def test_build_matrix_extract_method_name_failure_fallback(
+    def test_build_matrix_uses_direct_index_mapping(
         self,
         simple_code_population: CodePopulation,
     ) -> None:
-        """When method name extraction fails, fallback to snippet strings for mapping."""
+        """Test that observation matrix uses direct index mapping (not name-based)."""
         system = ExecutionSystem()
 
-        # Build a test population where snippets are bare names, and force extractor failure
+        # Build a test population with simple snippets
         individuals = [
             TestIndividual(
                 snippet="test_alpha",
@@ -928,9 +996,9 @@ class TestAdditionalEdgeCases:
             test_class_block="class TestDummy: pass",
         )
 
-        # Prepare results that refer to the fallback names (snippets)
-        execution_results = [
-            TestExecutionResult(
+        # Test results use direct index mapping (test_results[0] -> test_population[0])
+        execution_results = {
+            0: TestExecutionResult(
                 script_error=False,
                 tests_passed=2,
                 tests_failed=0,
@@ -945,7 +1013,7 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="All passed",
             ),
-            TestExecutionResult(
+            1: TestExecutionResult(
                 script_error=False,
                 tests_passed=0,
                 tests_failed=2,
@@ -960,7 +1028,7 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="All failed",
             ),
-            TestExecutionResult(
+            2: TestExecutionResult(
                 script_error=False,
                 tests_passed=1,
                 tests_failed=1,
@@ -975,24 +1043,18 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="Mixed",
             ),
-        ]
+        }
 
-        # Force extractor to fail so mapping uses snippet strings
-        from common.code_preprocessing.exceptions import CodeParsingError
+        matrix = system.build_observation_matrix(
+            simple_code_population, test_population, execution_results
+        )
 
-        with patch(
-            "common.coevolution.execution.cpp.analysis.extract_method_name",
-            side_effect=CodeParsingError("boom"),
-        ):
-            matrix = system.build_observation_matrix(
-                simple_code_population, test_population, execution_results
-            )
-
+        # Direct index mapping: test_results[i] -> matrix[:, i]
         expected = np.array(
             [
-                [1, 1],
-                [0, 0],
-                [1, 0],
+                [1, 1],  # Code 0: both passed
+                [0, 0],  # Code 1: both failed
+                [1, 0],  # Code 2: first passed, second failed
             ],
             dtype=int,
         )
@@ -1006,8 +1068,8 @@ class TestAdditionalEdgeCases:
         """Statuses other than 'passed' should be treated as 0 (failure)."""
         system = ExecutionSystem()
 
-        execution_results = [
-            TestExecutionResult(
+        execution_results = {
+            0: TestExecutionResult(
                 script_error=False,
                 tests_passed=1,
                 tests_failed=0,
@@ -1025,7 +1087,7 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="One skipped, one passed",
             ),
-            TestExecutionResult(
+            1: TestExecutionResult(
                 script_error=False,
                 tests_passed=0,
                 tests_failed=2,
@@ -1043,7 +1105,7 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="Unknown statuses",
             ),
-            TestExecutionResult(
+            1: TestExecutionResult(
                 script_error=False,
                 tests_passed=0,
                 tests_failed=2,
@@ -1061,7 +1123,7 @@ class TestAdditionalEdgeCases:
                 ],
                 summary="All failed",
             ),
-        ]
+        }
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, execution_results
