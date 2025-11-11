@@ -2,9 +2,47 @@
 
 import ast
 import re
+import textwrap
 from typing import List
 
 from .exceptions import CodeParsingError
+
+
+def extract_method_name(method_snippet: str) -> str:
+    """
+    Extract the method name from a method code snippet.
+
+    This function parses a Python method definition and returns its name.
+    It handles snippets with leading indentation by automatically dedenting.
+
+    Args:
+        method_snippet: Python method code (may have leading indentation)
+
+    Returns:
+        The method name
+
+    Raises:
+        CodeParsingError: If the snippet cannot be parsed or doesn't contain a function
+
+    Example:
+        >>> snippet = '''    def test_example(self):
+        ...     self.assertTrue(True)'''
+        >>> extract_method_name(snippet)
+        'test_example'
+    """
+    try:
+        # Remove leading indentation
+        dedented = textwrap.dedent(method_snippet)
+        tree = ast.parse(dedented)
+
+        # Find the first function definition
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                return node.name
+
+        raise CodeParsingError("No function definition found in snippet")
+    except SyntaxError as e:
+        raise CodeParsingError(f"Failed to parse method snippet: {e}") from e
 
 
 def analyze_test_methods(test_code: str) -> List[str]:
