@@ -1,166 +1,256 @@
 """
-Simple script to run the coevolution orchestrator on a sample problem.
+Modern script to run the coevolution orchestrator on LiveCodeBench problems.
 
-This script demonstrates how to use the CoevolutionOrchestrator to evolve
-both code solutions and test cases for a programming problem using Bayesian
-belief updating and LLM-based genetic operators.
+This script demonstrates how to use the new modular architecture with:
+- OrchestratorBuilder for clean dependency injection
+- All new core implementations (BayesianSystem, ExecutionSystem, etc.)
+- LLM-based genetic operators
+- LCB dataset integration
 """
 
 import sys
+from pathlib import Path
 
-from lcb_runner.benchmarks import code_generation  # type: ignore
 from loguru import logger
 
-from common.coevolution.config import CoevolutionConfig
-from common.coevolution.orchestrator import CoevolutionOrchestrator
+import common.coevolution.logging_utils as logging_utils
+from common.coevolution.bayesian_system import BayesianSystem
+from common.coevolution.execution import ExecutionSystem
+from common.coevolution.feedback import CodeFeedbackGenerator, TestFeedbackGenerator
+from common.coevolution.lcb_dataset import (
+    Difficulty,
+    LCBCodeGenerationProblem,
+    LCBDatasetTestBlockBuilder,
+    LCBTestBlockRebuilder,
+    load_code_generation_dataset,
+)
+from common.coevolution.llm_operators import CodeLLMOperator, TestLLMOperator
+from common.coevolution.orchestrator_builder import OrchestratorBuilder
+from common.coevolution.pareto_system import ParetoSystem
+from common.coevolution.probability_assigner import ProbabilityAssigner
+from common.coevolution.selection_strategy import SelectionStrategy
 from common.llm_client import create_llm_client
 from common.sandbox import create_safe_test_environment
 
 
-def main() -> None:
-    """Run a simple coevolution experiment."""
-    # Configure logging
-    logger.remove()  # Remove the default 'DEBUG' level handler
-
-    console_format = (
-        "<green>{time:HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>[{extra[problem_id]: <8}]</cyan> | "  # Use extra context
-        "<cyan>{name}:{function}:{line}</cyan> - "
-        "<level>{message}</level>"
-    )
-
-    file_format = (
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-        "{level: <8} | "
-        "[{extra[problem_id]: <8}] | "  # Use extra context
-        "{process}:{thread} | "
-        "{name}:{function}:{line} - {message}"
-    )
-
-    logger.configure(extra={"problem_id": "SETUP"})
-
-    logger.add(
-        sys.stderr,
-        level="DEBUG",
-        format=console_format,
-    )
-    logger.add(
-        "logs/experiment_{time:YYYY-MM-DD}.log",
-        level="TRACE",  # This captures ALL levels
-        rotation="100 MB",  # New file every 100 MB
-        retention="10 days",  # Keep logs for 10 days
-        compression="zip",  # Compress old logs
-        enqueue=True,  # Use a queue for thread safety
-        format=file_format,
-    )
-
-    logger.info("=" * 80)
-    logger.info("Starting Simple Coevolution Experiment")
-    logger.info("=" * 80)
-
-    # Step 1: Load a problem from LiveCodeBench
+def load_problem() -> LCBCodeGenerationProblem:
+    """Load a problem from LiveCodeBench dataset."""
     logger.info("Loading problem from LiveCodeBench dataset...")
-    dataset = code_generation.load_code_generation_dataset(
+
+    problems = load_code_generation_dataset(
         release_version="release_v5",
         start_date="2024-01-01",
-        difficulty=code_generation.Difficulty.HARD,
+        end_date="2024-12-31",
+        difficulty=Difficulty.HARD,
     )
-    problem = dataset[0]
+
+    if not problems:
+        raise ValueError("No problems found matching criteria")
+
+    problem = problems[0]
 
     logger.info(f"Loaded problem: {problem.question_title}")
     logger.info(f"Problem ID: {problem.question_id}")
-    logger.info(f"Difficulty: {problem.difficulty}")
+    logger.info(f"Platform: {problem.platform.value}")
+    logger.info(f"Difficulty: {problem.difficulty.value}")
+    logger.info(f"Public tests: {len(problem.public_test_cases)}")
+    logger.info(f"Private tests: {len(problem.private_test_cases)}")
+
+    return problem
+
+
+def main() -> None:
+    """Run a coevolution experiment on a LiveCodeBench problem."""
+    logging_utils.setup_logging()
+
+    logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
+
+    # ====================================
+    # Step 1: Load Problem
+    # ====================================
+    problem = load_problem()
 
     with logger.contextualize(problem_id=problem.question_id):
-        # Step 2: Create LLM client
-        logger.info("Creating LLM client...")
-        llm_model = "gpt-5-mini"  # Specify the LLM model to use
+        # ====================================
+        # Step 2: Create Infrastructure
+        # ====================================
+        logger.info("Creating LLM client and sandbox...")
+
+        llm_model = "gpt-4o-mini"
         llm_client = create_llm_client(provider="openai", model=llm_model)
         logger.info(f"Using model: {llm_client.model}")
 
-        # Step 3: Create sandbox environment
-        logger.info("Creating sandbox environment...")
         sandbox = create_safe_test_environment()
+        logger.info("Sandbox created")
 
-        # Step 4: Configure coevolution
-        logger.info("Configuring coevolution parameters...")
-        config = CoevolutionConfig(
-            # Population sizes
-            initial_code_population_size=10,
-            initial_test_population_size=20,
-            max_code_population_size=15,  # population grows over time to 15
-            # Bayesian parameters
-            initial_code_prior=0.5,
-            initial_test_prior=0.5,
-            alpha=0.01,
-            beta=0.2,
-            gamma=0.2,
-            learning_rate=0.1,
-            use_intermediate_updates=False,
-            # Evolution parameters
-            num_generations=3,  # Small number for quick testing
-            selection_strategy="roulette_wheel",
-            # Code genetic operators
-            code_crossover_rate=0.2,
-            code_mutation_rate=0.1,
-            code_edit_rate=0.8,
-            code_elite_proportion=0.5,
-            code_offspring_proportion=0.5,
-            # Test genetic operators
-            test_crossover_rate=0.5,
-            test_mutation_rate=0.3,
-            test_edit_rate=0.5,
-            # LLM configuration
-            llm_model=llm_model,
+        # ====================================
+        # Step 3: Instantiate Components
+        # ====================================
+        logger.info("Instantiating coevolution components...")
+
+        # LLM Operators
+        code_operator = CodeLLMOperator(llm=llm_client, problem=problem)
+        test_operator = TestLLMOperator(llm=llm_client, problem=problem)
+
+        # Selection Strategies
+        code_selector = SelectionStrategy("roulette_wheel")
+        test_selector = SelectionStrategy("roulette_wheel")
+
+        # Probability Assigners
+        code_prob_assigner = ProbabilityAssigner("mean")
+        test_prob_assigner = ProbabilityAssigner("mean")
+
+        # Execution System
+        execution_system = ExecutionSystem(enable_multiprocessing=True)
+
+        # Bayesian Systems (same implementation for code and test)
+        code_bayesian_system = BayesianSystem()
+        test_bayesian_system = BayesianSystem()
+
+        # Pareto System
+        pareto = ParetoSystem()
+
+        # Test Block Rebuilder
+        test_block_rebuilder = LCBTestBlockRebuilder()
+
+        # Feedback Generators
+        code_feedback_gen = CodeFeedbackGenerator()
+        test_feedback_gen = TestFeedbackGenerator()
+
+        # Dataset Test Block Builder
+        dataset_test_block_builder = LCBDatasetTestBlockBuilder()
+
+        logger.info("All components instantiated successfully")
+
+        # ====================================
+        # Step 4: Build Orchestrator
+        # ====================================
+        logger.info("Building orchestrator with configuration...")
+
+        orchestrator = (
+            OrchestratorBuilder()
+            # Evolution configuration
+            .with_evolution_config(
+                num_generations=2,  # Small number for quick testing
+                random_seed=42,
+            )
+            # Code population configuration
+            .with_code_population_config(
+                initial_prior=0.5,
+                initial_population_size=5,  # Small for quick testing
+                max_population_size=10,
+                elitism_rate=0.3,
+                offspring_rate=0.7,
+            )
+            # Test population configuration
+            .with_test_population_config(
+                initial_prior=0.5,
+                initial_population_size=5,  # Small for quick testing
+            )
+            # Code operator rates
+            .with_code_operator_rates(
+                crossover_rate=0.2,
+                mutation_rate=0.1,
+                edit_rate=0.7,
+            )
+            # Test operator rates
+            .with_test_operator_rates(
+                crossover_rate=0.3,
+                mutation_rate=0.2,
+                edit_rate=0.5,
+            )
+            # Bayesian configuration
+            .with_bayesian_config(
+                alpha=0.01,  # P(pass | code correct, test incorrect)
+                beta=0.2,  # P(pass | code incorrect, test correct)
+                gamma=0.2,  # P(pass | code incorrect, test incorrect)
+                learning_rate=0.1,
+            )
+            # Problem and sandbox
+            .with_problem(problem)
+            .with_sandbox(sandbox)
+            # Operators
+            .with_code_operator(code_operator)
+            .with_test_operator(test_operator)
+            # Selection strategies
+            .with_code_selector(code_selector)
+            .with_test_selector(test_selector)
+            # Probability assigners
+            .with_code_prob_assigner(code_prob_assigner)
+            .with_test_prob_assigner(test_prob_assigner)
+            # Systems
+            .with_execution_system(execution_system)
+            .with_code_bayesian_system(code_bayesian_system)
+            .with_test_bayesian_system(test_bayesian_system)
+            .with_pareto(pareto)
+            # Feedback and rebuilders
+            .with_test_block_rebuilder(test_block_rebuilder)
+            .with_code_feedback_gen(code_feedback_gen)
+            .with_test_feedback_gen(test_feedback_gen)
+            .with_dataset_test_block_builder(dataset_test_block_builder)
+            .build()
         )
 
-        logger.info(
-            f"Configuration: {config.num_generations} generations, "
-            f"{config.initial_code_population_size} code solutions, "
-            f"{config.initial_test_population_size} test cases"
-        )
+        logger.info("Orchestrator built successfully")
 
-        logger.trace(f"Full configuration: {config}")
-
-        # Step 5: Create and run orchestrator
-        logger.info("Initializing orchestrator...")
-        orchestrator = CoevolutionOrchestrator(
-            config=config, problem=problem, llm_client=llm_client, sandbox=sandbox
-        )
-
-        logger.info("Starting coevolution...")
+        # ====================================
+        # Step 5: Run Coevolution
+        # ====================================
+        logger.info("Starting coevolution run...")
         code_population, test_population = orchestrator.run()
 
-        best_code_individual, best_code_prob = code_population.get_best_individual()
-        best_test_individual, best_test_prob = test_population.get_best_individual()
-
-        # Step 6: Display results
+        # ====================================
+        # Step 6: Display Results
+        # ====================================
         logger.info("=" * 80)
         logger.info("COEVOLUTION RESULTS")
         logger.info("=" * 80)
-        logger.info(f"Best code probability: {best_code_prob:.4f}")
-        logger.info(f"Best test probability: {best_test_prob:.4f}")
 
+        best_code = code_population.get_best_individual()
+        best_test = test_population.get_best_individual()
+
+        if best_code:
+            logger.info(f"Best code probability: {best_code.probability:.4f}")
+            logger.info(f"Best code ID: {best_code.id}")
+
+        if best_test:
+            logger.info(f"Best test probability: {best_test.probability:.4f}")
+            logger.info(f"Best test ID: {best_test.id}")
+
+        logger.info(f"Final code population size: {code_population.size}")
+        logger.info(f"Final test population size: {test_population.size}")
+        logger.info(
+            f"Code population avg probability: {code_population.compute_average_probability():.4f}"
+        )
+        logger.info(
+            f"Test population avg probability: {test_population.compute_average_probability():.4f}"
+        )
+
+        # Print best solutions
         print("\n" + "=" * 80)
         print("BEST CODE SOLUTION:")
         print("=" * 80)
-        print(best_code_individual)
+        if best_code:
+            print(best_code.snippet)
+        else:
+            print("No code solution found")
 
         print("\n" + "=" * 80)
         print("BEST TEST CASE:")
         print("=" * 80)
-        print(best_test_individual)
+        if best_test:
+            print(best_test.snippet)
+        else:
+            print("No test case found")
 
-        logger.trace("Final code population:")
-        for i, (individual, prob) in enumerate(code_population):
-            logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
+        print("\n" + "=" * 80)
+        print("FULL TEST CLASS BLOCK:")
+        print("=" * 80)
+        print(test_population.test_class_block)
 
-        logger.trace("Final test population:")
-        for i, (individual, prob) in enumerate(test_population):
-            logger.trace(f"Individual {i}:\n{individual}\nProbability: {prob:.4f}")
-
-        logger.info("Experiment completed successfully!")
+        logger.info("=" * 80)
+        logger.info("EXPERIMENT COMPLETED SUCCESSFULLY!")
+        logger.info("=" * 80)
 
 
 if __name__ == "__main__":
