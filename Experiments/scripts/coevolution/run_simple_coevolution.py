@@ -130,6 +130,7 @@ def main() -> None:
             .with_evolution_config(
                 num_generations=2,  # Small number for quick testing
                 random_seed=42,
+                max_workers=10,
             )
             # Code population configuration
             .with_code_population_config(
