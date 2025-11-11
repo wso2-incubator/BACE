@@ -587,10 +587,9 @@ class Orchestrator:
 
         # --- Main Evolution Loop ---
         for gen in range(self.evo_config.num_generations):
-            current_gen_num = gen + 1
             logging_utils.log_subsection_header(
                 "INFO",
-                f"GENERATION {current_gen_num} / {self.evo_config.num_generations}",
+                f"GENERATION {gen} / {self.evo_config.num_generations}",
             )
 
             # --- Step 1: Execute & Observe ---
@@ -672,12 +671,6 @@ class Orchestrator:
             # Notify removed individuals before transitioning
             self._notify_removed_individuals(test_population, new_test_gen)
             test_population.set_next_generation(new_test_gen)
-
-            logger.info(
-                f"Advanced to Gen {code_population.generation}. "
-                f"Code Pop Size: {code_population.size}, "
-                f"Test Pop Size: {test_population.size}"
-            )
 
             logging_utils.log_generation_summary(
                 self.gen_logger, code_population, test_population
