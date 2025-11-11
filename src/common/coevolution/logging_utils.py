@@ -357,3 +357,202 @@ def log_belief_changes(
         f"max_increase={np.max(deltas):+.4f}, "
         f"max_decrease={np.min(deltas):+.4f}"
     )
+
+
+def _compute_pass_rates(matrix: "np.ndarray") -> "np.ndarray":
+    """
+    Compute the pass rate for each row in the matrix.
+
+    Args:
+        matrix: Binary numpy array, 1 if passed, else 0
+
+    Returns:
+        1D numpy array of pass rates for each row (fraction of columns that are 1)
+    """
+    import numpy as np
+
+    num_rows, num_cols = matrix.shape
+
+    if num_cols == 0:
+        logger.warning(
+            f"Matrix has 0 columns. Returning zero pass rates for {num_rows} rows."
+        )
+        return np.zeros(num_rows, dtype=float)
+
+    pass_rates = np.sum(matrix, axis=1) / float(num_cols)
+    return np.asarray(pass_rates)
+
+
+def _compute_test_discriminations(observation_matrix: "np.ndarray") -> "np.ndarray":
+    """
+    Compute discrimination for each test (column) in the observation matrix.
+
+    Discrimination measures how well a test separates good from bad code using entropy.
+    Uses the entropy of the test pass rate:
+    - High entropy (near 1.0): test clearly distinguishes correct from incorrect code (pass rate near 0.5)
+    - Low entropy (near 0.0): test doesn't discriminate (all pass or all fail, pass rate near 0 or 1)
+
+    Formula: entropy = -p*log2(p) - (1-p)*log2(1-p) where p is the test pass rate
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+
+    Returns:
+        1D numpy array of discrimination values for each test (entropy of pass rate)
+    """
+    import numpy as np
+
+    num_codes, num_tests = observation_matrix.shape
+
+    if num_codes == 0 or num_tests == 0:
+        logger.warning(
+            f"Cannot compute discrimination for empty matrix ({num_codes}, {num_tests})"
+        )
+        return np.zeros(num_tests, dtype=float)
+
+    # Compute pass rate for each test (fraction of codes that pass)
+    test_pass_rates = _compute_pass_rates(observation_matrix.T)
+
+    # Compute binary entropy: H(p) = -p*log2(p) - (1-p)*log2(1-p)
+    # Handle edge cases where p=0 or p=1 (entropy should be 0)
+    eps = 1e-10  # Small epsilon to avoid log(0)
+    p = np.clip(test_pass_rates, eps, 1 - eps)
+
+    entropy = -(p * np.log2(p) + (1 - p) * np.log2(1 - p))
+
+    return np.asarray(entropy)
+
+
+def log_code_pass_rates(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about code pass rates.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+    import numpy as np
+
+    code_pass_rates = _compute_pass_rates(observation_matrix)
+
+    if len(code_pass_rates) == 0:
+        logger.warning("No codes to compute pass rates for")
+        return
+
+    logger.trace(f"Code pass rates: {code_pass_rates}")
+    logger.info(
+        f"Code pass rates: mean={np.mean(code_pass_rates):.3f}, "
+        f"min={np.min(code_pass_rates):.3f}, "
+        f"max={np.max(code_pass_rates):.3f}, "
+        f"std={np.std(code_pass_rates):.3f}"
+    )
+
+    # Log distribution
+    num_perfect = np.sum(code_pass_rates == 1.0)
+    num_zero = np.sum(code_pass_rates == 0.0)
+    logger.debug(
+        f"Code distribution: {num_perfect} perfect (100%), {num_zero} failed all (0%)"
+    )
+
+
+def log_test_pass_rates(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about test pass rates.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+    import numpy as np
+
+    # Transpose to compute pass rates for tests (columns become rows)
+    test_pass_rates = _compute_pass_rates(observation_matrix.T)
+
+    if len(test_pass_rates) == 0:
+        logger.warning("No tests to compute pass rates for")
+        return
+    logger.trace(f"Test pass rates: {test_pass_rates}")
+    logger.info(
+        f"Test pass rates: mean={np.mean(test_pass_rates):.3f}, "
+        f"min={np.min(test_pass_rates):.3f}, "
+        f"max={np.max(test_pass_rates):.3f}, "
+        f"std={np.std(test_pass_rates):.3f}"
+    )
+
+    # Log distribution
+    num_all_pass = np.sum(test_pass_rates == 1.0)
+    num_all_fail = np.sum(test_pass_rates == 0.0)
+    logger.debug(
+        f"Test distribution: {num_all_pass} all codes pass, "
+        f"{num_all_fail} all codes fail"
+    )
+
+
+def log_test_discriminations(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about test discrimination values.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+    import numpy as np
+
+    test_discriminations = _compute_test_discriminations(observation_matrix)
+
+    if len(test_discriminations) == 0:
+        logger.warning("No tests to compute discriminations for")
+        return
+
+    logger.trace(f"Test discriminations: {test_discriminations}")
+    logger.info(
+        f"Test discriminations: mean={np.mean(test_discriminations):.3f}, "
+        f"min={np.min(test_discriminations):.3f}, "
+        f"max={np.max(test_discriminations):.3f}"
+    )
+
+    # Identify highly discriminating tests
+    high_disc_threshold = 0.4  # Tests with std > 0.4 are good discriminators
+    num_good_tests = np.sum(test_discriminations > high_disc_threshold)
+    num_tests = len(test_discriminations)
+    logger.debug(
+        f"Highly discriminating tests (disc > {high_disc_threshold}): "
+        f"{num_good_tests}/{num_tests} ({100 * num_good_tests / num_tests:.1f}%)"
+    )
+
+
+def log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None:
+    """
+    Log comprehensive statistics about the observation matrix.
+
+    This includes:
+    - Matrix dimensions and sparsity
+    - Code pass rates (how many tests each code passes)
+    - Test pass rates (how many codes pass each test)
+    - Test discriminations (how well each test separates codes)
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+    import numpy as np
+
+    num_codes, num_tests = observation_matrix.shape
+    total_cells = num_codes * num_tests
+
+    if total_cells == 0:
+        logger.warning("Observation matrix is empty")
+        return
+
+    num_passes = np.sum(observation_matrix)
+    sparsity = 1.0 - (num_passes / total_cells)
+
+    logger.info(
+        f"Observation Matrix: {num_codes} codes × {num_tests} tests "
+        f"= {total_cells} evaluations"
+    )
+    logger.info(
+        f"Total passes: {num_passes}/{total_cells} ({100 * num_passes / total_cells:.1f}%), "
+        f"sparsity: {sparsity:.3f}"
+    )
+
+    # Use individual logging functions
+    log_code_pass_rates(observation_matrix)
+    log_test_pass_rates(observation_matrix)
+    log_test_discriminations(observation_matrix)
