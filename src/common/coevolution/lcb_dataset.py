@@ -1,6 +1,7 @@
 import base64
 import json
 import pickle
+import re
 import zlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,8 +11,7 @@ from typing import Any
 from datasets import load_dataset  # type: ignore[import-untyped]
 from loguru import logger
 
-from .core.interfaces import Problem as BaseProblem
-from .core.interfaces import Test as BaseTest
+from .core.interfaces import Problem, Test
 
 
 class Platform(Enum):
@@ -32,7 +32,7 @@ class TestType(Enum):
 
 
 @dataclass
-class Test(BaseTest):
+class LCBTest(Test):
     testtype: TestType
 
     def __post_init__(self) -> None:
@@ -43,7 +43,7 @@ class Test(BaseTest):
 
 
 @dataclass
-class CodeGenerationProblem(BaseProblem):
+class LCBCodeGenerationProblem(Problem):
     platform: Platform
     contest_id: str
     contest_date: datetime
@@ -60,7 +60,6 @@ class Solution:
     def __post_init__(self) -> None:
         self.platform = Platform(self.platform)
         self.difficulty = Difficulty(self.difficulty)
-        # contest_date is already a string, convert it
         if isinstance(self.contest_date, str):
             self.contest_date = datetime.fromisoformat(self.contest_date)
 
@@ -72,16 +71,17 @@ class Solution:
             )
             self.starter_code = self.DEFAULT_STARTER_CODE
 
-        # public_test_cases is a JSON string, parse it
+        # Parse public_test_cases
         if isinstance(self.public_test_cases, str):
             self.public_test_cases = json.loads(self.public_test_cases)
-        self.public_test_cases = [Test(**t) for t in self.public_test_cases]  # type: ignore[arg-type]
+        self.public_test_cases = [LCBTest(**t) for t in self.public_test_cases]  # type: ignore[arg-type]
 
-        # private_test_cases might be compressed
+        # Parse private_test_cases (might be JSON or encoded)
         if isinstance(self.private_test_cases, str):
             try:
                 self.private_test_cases = json.loads(self.private_test_cases)
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
+                # Encoded format: base64 -> zlib -> pickle -> JSON
                 self.private_test_cases = json.loads(
                     pickle.loads(
                         zlib.decompress(
@@ -89,58 +89,14 @@ class Solution:
                         )
                     )
                 )
-        self.private_test_cases = [Test(**t) for t in self.private_test_cases]  # type: ignore[arg-type]
+        self.private_test_cases = [LCBTest(**t) for t in self.private_test_cases]  # type: ignore[arg-type]
 
-        # metadata is a JSON string, parse it
+        # Parse metadata
         if isinstance(self.metadata, str):
-            self.metadata = json.loads(self.metadata)
-
-    def insert_output(
-        self, output_list: list[str], code_list: list[str]
-    ) -> dict[str, Any]:
-        return {
-            "question_title": self.question_title,
-            "question_content": self.question_content,
-            "platform": self.platform.value,
-            "question_id": self.question_id,
-            "contest_id": self.contest_id,
-            "contest_date": self.contest_date.isoformat(),
-            "starter_code": self.starter_code,
-            "difficulty": self.difficulty.value,
-            "output_list": output_list,
-            "code_list": code_list,
-        }
-
-    def insert_output_evaluation(
-        self,
-        output_list: list[str],
-        code_list: list[str],
-        graded_list: list[bool],
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        output = self.insert_output(output_list, code_list)
-        output["graded_list"] = graded_list
-        output["pass@1"] = graded_list.count(True) / len(graded_list)
-        for k, v in kwargs.items():
-            output[k] = v
-        return output
-
-    def get_evaluation_sample(self) -> dict[str, str]:
-        return {
-            "input_output": json.dumps(
-                {
-                    "inputs": [
-                        t.input
-                        for t in self.public_test_cases + self.private_test_cases
-                    ],
-                    "outputs": [
-                        t.output
-                        for t in self.public_test_cases + self.private_test_cases
-                    ],
-                    "fn_name": self.metadata.get("func_name", None),
-                }
-            ),
-        }
+            if self.metadata.strip():
+                self.metadata = json.loads(self.metadata)
+            else:
+                self.metadata = {}
 
 
 def load_code_generation_dataset(
@@ -148,7 +104,7 @@ def load_code_generation_dataset(
     start_date: str | None = None,
     end_date: str | None = None,
     difficulty: Difficulty | None = None,
-) -> list[CodeGenerationProblem]:
+) -> list[LCBCodeGenerationProblem]:
     dataset = load_dataset(
         "livecodebench/code_generation_lite",
         version_tag=release_version,
@@ -168,8 +124,8 @@ def load_code_generation_dataset(
             logger.info("Using the first available split of the dataset.")
             dataset = dataset[list(dataset.keys())[0]]
 
-    dataset_items: list[CodeGenerationProblem] = [
-        CodeGenerationProblem(**p) for p in dataset
+    dataset_items: list[LCBCodeGenerationProblem] = [
+        LCBCodeGenerationProblem(**p) for p in dataset
     ]
 
     # Filter only problems with difficulty hard. TODO: Make this configurable.
@@ -187,6 +143,162 @@ def load_code_generation_dataset(
 
     logger.info(f"Loaded {len(dataset_items)} problems")
     return dataset_items
+
+
+class LCBDatasetTestBlockBuilder:
+    """
+    Implementation of IDatasetTestBlockBuilder for LiveCodeBench dataset.
+
+    Builds unittest test class blocks from LCB test cases, handling both
+    STDIN and FUNCTIONAL test types.
+    """
+
+    @staticmethod
+    def _convert_to_unittest_from_stdin_tests(test_cases: list[LCBTest]) -> str:
+        """
+        Converts a list of STDIN LCBTest objects into a Python unittest class string.
+        This is for the actual test cases defined in LCB Problems.
+        """
+        if not test_cases:
+            return "# No test cases provided."
+
+        # Start building the output file string
+        output_lines = [
+            "import unittest",
+            "",
+            "class TestSolution(unittest.TestCase):",
+            "    def setUp(self):",
+            "        self.solution = Solution()",
+            "",
+        ]
+
+        # Loop through each test object and create a method
+        for i, test_obj in enumerate(test_cases, 1):
+            method_name = f"test_case_{i}"
+
+            # Get input/output directly from the object attributes
+            # Use repr() to create a valid, escaped Python string literal
+            input_literal = repr(test_obj.input)
+            output_literal = repr(test_obj.output)
+
+            test_method = [
+                f"    def {method_name}(self):",
+                f"        input_str = {input_literal}",
+                f"        expected_output = {output_literal}",
+                "        self.assertEqual(self.solution.sol(input_str), expected_output)",
+                "",
+            ]
+            output_lines.extend(test_method)
+
+        # Add the main block to run the tests
+        output_lines.extend(
+            [
+                "if __name__ == '__main__':",
+                "    unittest.main(verbosity=2)",
+            ]
+        )
+
+        # Join all lines into a single string
+        return "\n".join(output_lines)
+
+    @staticmethod
+    def _convert_to_unittest_functional_tests(
+        test_cases: list[LCBTest], starter_code: str
+    ) -> str:
+        """
+        Converts a list of FUNCTIONAL LCBTest objects into a Python unittest class string.
+        """
+        # 1. Parse the starter code to find class and method names
+        class_match = re.search(r"class\s+(\w+):", starter_code)
+        # Regex to find the first method defined with 'self'
+        method_match = re.search(r"def\s+(\w+)\s*\(\s*self\s*[,)]", starter_code)
+
+        if not class_match or not method_match:
+            return "# Error: Could not parse class and method name from starter code."
+
+        class_name = class_match.group(1)
+        method_name = method_match.group(1)
+
+        # 2. Build the output file string
+        output_lines = [
+            "import unittest",
+            "from typing import * # Import common types for function signatures",
+            "",
+            f"class Test{class_name}(unittest.TestCase):",
+            "    def setUp(self):",
+            f"        self.solution = {class_name}()",
+            "",
+        ]
+
+        # 3. Loop through each test object and create a method
+        for i, test_obj in enumerate(test_cases, 1):
+            method_name_test = f"test_case_{i}"
+
+            # Get the list of string-based arguments
+            input_args_list = test_obj.input.split("\n")
+
+            # Create repr() strings for the generated code
+            input_lines_repr = repr(input_args_list)
+            expected_output_repr = repr(test_obj.output)
+
+            test_method = [
+                f"    def {method_name_test}(self):",
+                f"        # Original Input: {repr(test_obj.input)}",
+                f"        input_lines = {input_lines_repr}",
+                "        args = [eval(line) for line in input_lines]",
+                f"        expected_output = eval({expected_output_repr})",
+                f"        self.assertEqual(self.solution.{method_name}(*args), expected_output)",
+                "",
+            ]
+            output_lines.extend(test_method)
+
+        # Add the main block
+        output_lines.extend(
+            [
+                "if __name__ == '__main__':",
+                "    unittest.main(verbosity=2)",
+            ]
+        )
+
+        return "\n".join(output_lines)
+
+    @staticmethod
+    def build_test_class_block(test_cases: list[LCBTest], starter_code: str) -> str:
+        """
+        Generate a unittest test script from LCB problem test case objects.
+
+        Args:
+            test_cases: List of Test objects from LCB problem (will be cast to LCBTest)
+            starter_code: Starter code for FUNCTIONAL tests
+
+        Returns:
+            Complete unittest test script as string
+        """
+        # Cast Test objects to LCBTest for type checking
+        lcb_test_cases = [LCBTest(**t.__dict__) for t in test_cases]
+
+        if not lcb_test_cases:
+            return "# No test cases provided."
+
+        # Check the type of the first test case
+        first_test_type = lcb_test_cases[0].testtype
+
+        if first_test_type == TestType.FUNCTIONAL:
+            if not starter_code:
+                return "# Error: Functional test cases require starter_code."
+            # Call the functional test generator
+            return LCBDatasetTestBlockBuilder._convert_to_unittest_functional_tests(
+                lcb_test_cases, starter_code
+            )
+
+        elif first_test_type == TestType.STDIN:
+            # Call the STDIN test generator (starter_code is ignored)
+            return LCBDatasetTestBlockBuilder._convert_to_unittest_from_stdin_tests(
+                lcb_test_cases
+            )
+
+        else:
+            return f"# Error: Unknown test type '{first_test_type}'."
 
 
 if __name__ == "__main__":
