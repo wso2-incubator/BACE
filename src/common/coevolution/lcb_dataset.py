@@ -73,7 +73,7 @@ class Solution:
         # Ensure starter_code is never empty
         # LCB problems without starter code (STDIN problems) get a default
         if not self.starter_code or not self.starter_code.strip():
-            logger.debug(
+            logger.trace(
                 f"Problem '{self.question_title}' has no starter_code, using default"
             )
             self.starter_code = self.DEFAULT_STARTER_CODE
