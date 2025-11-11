@@ -311,13 +311,18 @@ class Orchestrator:
             code_population, private_test_population, priv_exec_results
         )
 
-        logger.info(f"Generated tests pass rate: {gen_obs_matrix.mean():.2%}")
-        logger.info(f"Public tests pass rate: {pub_obs_matrix.mean():.2%}")
-        logger.info(f"Private tests pass rate: {priv_obs_matrix.mean():.2%}")
-
         logger.debug(f"Generated Observation Matrix:\n{gen_obs_matrix}")
+        logging_utils.log_observation_matrix_statistics(
+            observation_matrix=gen_obs_matrix
+        )
         logger.debug(f"Public Observation Matrix:\n{pub_obs_matrix}")
+        logging_utils.log_observation_matrix_statistics(
+            observation_matrix=pub_obs_matrix
+        )
         logger.debug(f"Private Observation Matrix:\n{priv_obs_matrix}")
+        logging_utils.log_observation_matrix_statistics(
+            observation_matrix=priv_obs_matrix
+        )
 
         return gen_obs_matrix, pub_obs_matrix, priv_obs_matrix
 
@@ -525,6 +530,10 @@ class Orchestrator:
         assert test_population is not None
         assert public_test_population is not None
         assert private_test_population is not None
+
+        logging_utils.log_generation_summary(
+            self.gen_logger, code_population, test_population
+        )
 
         # --- Main Evolution Loop ---
         for gen in range(self.evo_config.num_generations):

@@ -58,7 +58,7 @@ def load_problem() -> LCBCodeGenerationProblem:
 
 def main() -> None:
     """Run a coevolution experiment on a LiveCodeBench problem."""
-    logging_utils.setup_logging()
+    logging_utils.setup_logging(console_level="DEBUG", file_level="INFO")
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
 
