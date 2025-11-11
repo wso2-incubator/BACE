@@ -352,22 +352,48 @@ class TestResultAnalyzer:
         while i < len(lines):
             line = lines[i].strip()
 
-            # Look for test execution lines
+            # Try two-line format first (verbose unittest with docstrings):
+            # Line i: test_name (module.path)
+            # Line i+1: description ... status
+            name_match = re.match(r"(\w+) \(([^)]+)\)$", line)
+            if name_match and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                status_match = re.match(r"(.+?) \.\.\. (ok|FAIL|ERROR)$", next_line)
+                if status_match:
+                    test_name = name_match.group(1)
+                    description = status_match.group(1)
+                    status = status_match.group(2)
+
+                    logger.trace(f"Found two-line test: {test_name} -> {status}")
+
+                    test_result = TestResult(
+                        name=test_name,
+                        description=description,
+                        status="passed"
+                        if status == "ok"
+                        else "failed"
+                        if status == "FAIL"
+                        else "error",
+                        details=None,
+                    )
+
+                    test_results.append(test_result)
+                    logger.trace(
+                        f"Appended TestResult: {test_name} status={test_result.status}"
+                    )
+
+                    # Skip the next line since we've processed it
+                    i += 2
+                    continue
+
+            # Fall back to single-line format (verbose unittest without docstrings):
             # Pattern: test_name (module.TestClass) ... ok/FAIL/ERROR
             test_match = re.match(r"(\w+) \([^)]+\) \.\.\. (ok|FAIL|ERROR)", line)
             if test_match:
                 test_name, status = test_match.groups()
-                logger.trace(f"Found individual test line: {test_name} -> {status}")
+                logger.trace(f"Found single-line test: {test_name} -> {status}")
 
-                # Look for description on previous line (if it's not a test line)
                 description = f"Test method: {test_name}"  # Default
-                if i > 0:
-                    prev_line = lines[i - 1].strip()
-                    # Check if previous line looks like a description (not a test result line)
-                    if prev_line and not re.match(
-                        r"\w+ \([^)]+\) \.\.\. (ok|FAIL|ERROR)", prev_line
-                    ):
-                        description = prev_line
 
                 # Create TestResult with basic info
                 test_result = TestResult(
