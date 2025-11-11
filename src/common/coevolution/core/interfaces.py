@@ -187,10 +187,13 @@ class EvolutionConfig:
 
     num_generations: int
     random_seed: int
+    max_workers: int = 1  # Number of parallel workers for breeding (1 = sequential)
 
     def __post_init__(self) -> None:
         if self.num_generations <= 0:
             raise ValueError("num_generations must be positive.")
+        if self.max_workers < 1:
+            raise ValueError("max_workers must be at least 1.")
 
 
 @dataclass

@@ -58,6 +58,7 @@ def create_configurations() -> tuple[
     evo_config = EvolutionConfig(
         num_generations=5,  # Run for 5 generations
         random_seed=42,
+        max_workers=1,  # Sequential execution for deterministic testing
     )
 
     # Code population configuration

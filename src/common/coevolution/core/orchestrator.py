@@ -1,6 +1,7 @@
 # src/common/coevolution/orchestrator.py
 
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from loguru import logger
@@ -110,6 +111,10 @@ class Orchestrator:
         self.code_op_rates_config = code_op_rates_config
         self.test_op_rates_config = test_op_rates_config
         self.bayesian_config = bayesian_config
+
+        # --- Store max_workers for parallel breeding ---
+        self.max_workers = evo_config.max_workers
+        logger.info(f"Parallel breeding configured with max_workers={self.max_workers}")
 
         # --- Store Problem & Sandbox ---
         self.problem = problem
@@ -438,6 +443,9 @@ class Orchestrator:
     ) -> list[CodeIndividual]:
         """
         Helper to breed code offspring using the code breeder.
+
+        Uses ThreadPoolExecutor for parallel breeding when max_workers > 1.
+        With max_workers=1, falls back to sequential execution automatically.
         """
         num_code_offspring = min(
             int(
@@ -447,10 +455,9 @@ class Orchestrator:
             self.code_pop_config.max_population_size - num_elites,
         )
 
-        code_offspring: list[CodeIndividual] = []
-        for _ in range(num_code_offspring):
-            # Feedback for code edits comes from generated tests
-            code_child = self.code_breeder.generate_single_offspring(
+        def breed_single_offspring() -> CodeIndividual:
+            """Helper function to breed a single offspring."""
+            return self.code_breeder.generate_single_offspring(
                 population=code_population,
                 other_population=test_population,
                 execution_results=gen_exec_results,
@@ -458,7 +465,27 @@ class Orchestrator:
                 observation_matrix=gen_observation_matrix,
                 operation_rates=self.code_op_rates_config,
             )
-            code_offspring.append(code_child)
+
+        code_offspring: list[CodeIndividual] = []
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all breeding tasks
+            futures = [
+                executor.submit(breed_single_offspring)
+                for _ in range(num_code_offspring)
+            ]
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                try:
+                    offspring = future.result()
+                    code_offspring.append(offspring)
+                except Exception as e:
+                    logger.error(f"Failed to breed code offspring: {e}")
+                    # Re-raise to let the orchestrator handle it
+                    raise
+
+        logger.debug(f"Successfully bred {len(code_offspring)} code offspring")
         return code_offspring
 
     def _breed_tests(
@@ -471,12 +498,15 @@ class Orchestrator:
     ) -> list[TestIndividual]:
         """
         Helper to breed test offspring using the test breeder.
+
+        Uses ThreadPoolExecutor for parallel breeding when max_workers > 1.
+        With max_workers=1, falls back to sequential execution automatically.
         """
         num_test_offspring = self.test_pop_config.initial_population_size - num_elites
-        test_offsprings: list[TestIndividual] = []
-        for _ in range(num_test_offspring):
-            # Feedback for test edits comes from code population
-            test_child = self.test_breeder.generate_single_offspring(
+
+        def breed_single_offspring() -> TestIndividual:
+            """Helper function to breed a single offspring."""
+            return self.test_breeder.generate_single_offspring(
                 population=test_population,
                 other_population=code_population,
                 execution_results=gen_exec_results,
@@ -484,7 +514,27 @@ class Orchestrator:
                 observation_matrix=gen_observation_matrix.T,
                 operation_rates=self.test_op_rates_config,
             )
-            test_offsprings.append(test_child)
+
+        test_offsprings: list[TestIndividual] = []
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all breeding tasks
+            futures = [
+                executor.submit(breed_single_offspring)
+                for _ in range(num_test_offspring)
+            ]
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                try:
+                    offspring = future.result()
+                    test_offsprings.append(offspring)
+                except Exception as e:
+                    logger.error(f"Failed to breed test offspring: {e}")
+                    # Re-raise to let the orchestrator handle it
+                    raise
+
+        logger.debug(f"Successfully bred {len(test_offsprings)} test offspring")
         return test_offsprings
 
     def run(self) -> tuple[CodePopulation, TestPopulation]:

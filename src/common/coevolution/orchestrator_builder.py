@@ -110,20 +110,23 @@ class OrchestratorBuilder:
 
     # Configuration methods
     def with_evolution_config(
-        self, num_generations: int, random_seed: int
+        self, num_generations: int, random_seed: int, max_workers: int = 1
     ) -> "OrchestratorBuilder":
         """
         Set the evolution configuration.
 
         Args:
-            num_generations: Number of generations to evolve
+            num_generations: Number of generations to run
             random_seed: Random seed for reproducibility
+            max_workers: Number of parallel workers for breeding (default: 1 = sequential)
 
         Returns:
             Self for method chaining
         """
         self._evo_config = EvolutionConfig(
-            num_generations=num_generations, random_seed=random_seed
+            num_generations=num_generations,
+            random_seed=random_seed,
+            max_workers=max_workers,
         )
         logger.debug(f"Set evolution config: {self._evo_config}")
         return self
