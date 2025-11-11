@@ -227,6 +227,11 @@ class ExecutionSystem:
         Transforms detailed test execution results into a binary matrix where
         entry [i,j] is 1 if code i passed test j, else 0.
 
+        IMPORTANT: This method relies on TestExecutionResult.test_results being
+        in the same order as test methods in the test script (guaranteed by
+        SafeCodeSandbox.execute_test_script). This ensures direct index mapping:
+        test_results[j] corresponds to test_population[j].
+
         Args:
             code_population: Population of code snippets (determines #rows)
             test_population: Population of test cases (determines #columns)
@@ -243,7 +248,6 @@ class ExecutionSystem:
             >>> matrix[0, 3]  # 1 if code 0 passed test 3, else 0
 
         Note:
-            This uses the dict keys (code_idx) to correctly place results in the matrix.
             If some codes failed to execute, their rows will remain all zeros.
         """
         num_codes = code_population.size
@@ -254,24 +258,8 @@ class ExecutionSystem:
             f"Generating observation matrix: {num_codes} code x {num_tests} tests"
         )
 
-        # Create a mapping from test names to test indices in the population
-        test_name_to_idx = {}
-        for test_idx, test_individual in enumerate(test_population.individuals):
-            # Extract the test method name from the snippet
-            try:
-                test_name = cpp.analysis.extract_method_name(test_individual.snippet)
-            except cpp.exceptions.CodeParsingError as e:
-                logger.error(
-                    f"Failed to extract method name from test snippet at index {test_idx}: {e}",
-                    exc_info=True,
-                )
-                test_name = test_individual.snippet.strip()
-
-            test_name_to_idx[test_name] = test_idx
-            logger.trace(f"Mapped test '{test_name}' to index {test_idx}")
-
         # Fill in the observation matrix based on execution results
-        # Iterate over the dict using code_idx as the key
+        # Direct index mapping: test_results[j] corresponds to test_population[j]
         for code_idx, execution_result in execution_results.items():
             if code_idx >= num_codes:
                 logger.warning(
@@ -279,18 +267,22 @@ class ExecutionSystem:
                 )
                 continue
 
-            # Map test results by name to the correct position in the matrix
-            for test_result in execution_result.test_results:
-                test_name = test_result.name
+            # Validate that we have the expected number of test results
+            if len(execution_result.test_results) != num_tests:
+                logger.error(
+                    f"Code {code_idx}: Expected {num_tests} test results, "
+                    f"got {len(execution_result.test_results)}. This indicates a problem "
+                    f"with test execution or result ordering."
+                )
+                # Continue processing but log the issue
 
-                # Find the corresponding index in the test population
-                if test_name not in test_name_to_idx:
+            # Direct index mapping: test_results[test_idx] -> matrix[code_idx, test_idx]
+            for test_idx, test_result in enumerate(execution_result.test_results):
+                if test_idx >= num_tests:
                     logger.warning(
-                        f"Test '{test_name}' not found in test population, skipping"
+                        f"Test index {test_idx} exceeds population size {num_tests}, skipping"
                     )
                     continue
-
-                test_idx = test_name_to_idx[test_name]
 
                 if test_result.status == "passed":
                     observation_matrix[code_idx, test_idx] = 1
