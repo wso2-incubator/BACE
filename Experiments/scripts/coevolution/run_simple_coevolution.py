@@ -73,7 +73,7 @@ def main() -> None:
         # ====================================
         logger.info("Creating LLM client and sandbox...")
 
-        llm_model = "gpt-4o-mini"
+        llm_model = "gpt-5"
         llm_client = create_llm_client(provider="openai", model=llm_model)
         logger.info(f"Using model: {llm_client.model}")
 
