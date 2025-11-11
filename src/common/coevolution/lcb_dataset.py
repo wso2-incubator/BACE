@@ -316,7 +316,7 @@ class LCBTestBlockRebuilder(ITestBlockRebuilder):
     """
 
     @staticmethod
-    def rebuild_test_cases_from_test_block(
+    def rebuild_test_block(
         original_class_str: str,
         new_methods_snippets: list[str],
     ) -> str:
