@@ -25,7 +25,11 @@ class CodePopulation(BasePopulation[CodeIndividual]):
 
 class TestPopulation(BasePopulation[TestIndividual]):
     """
-    Concrete population class for TestIndividuals.
+    Multi-objective population with Pareto-based selection.
+
+    Unlike CodePopulation, tests are selected based on TWO objectives:
+    1. Probability (belief in correctness)
+    2. Discrimination (ability to distinguish correct/incorrect code)
     """
 
     def __init__(
