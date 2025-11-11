@@ -67,7 +67,7 @@ def main() -> None:
     # ====================================
     problem = load_problem()
 
-    with logger.contextualize(problem_id=problem.question_id):
+    with logger.contextualize(problem_id=problem.question_id, run_id="test_001"):
         # ====================================
         # Step 2: Create Infrastructure
         # ====================================

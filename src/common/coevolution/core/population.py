@@ -59,6 +59,8 @@ class TestPopulation(BasePopulation[TestIndividual]):
             [ind.snippet for ind in self._individuals],
         )
 
+        logger.trace(f"New test class block:\n{self._test_class_block}")
+
     def _on_generation_advanced(self) -> None:
         """
         Hook called by set_next_generation.

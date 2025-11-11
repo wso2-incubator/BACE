@@ -130,7 +130,9 @@ class BaseLLMOperator(ABC):
         Returns:
             Extracted Python code block or original response if not found
         """
-        return extraction.extract_code_block_from_response(response)
+        extracted_code: str = extraction.extract_code_block_from_response(response)
+        logger.trace(f"Extracted code preview: {extracted_code[:100]}...")
+        return extracted_code
 
 
 class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
@@ -397,6 +399,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
                 f"Generated {len(test_methods)} test methods, expected {population_size}."
             )
         logger.info(f"Successfully generated {population_size} initial test snippets")
+        logger.trace(f"Generated test block preview:\n{test_block[:100]}...")
         return test_methods, test_block
 
     @retry(
