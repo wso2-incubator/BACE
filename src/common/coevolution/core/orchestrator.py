@@ -246,7 +246,7 @@ class Orchestrator:
         test_methods = extract_test_methods_code(test_class_block)
 
         # Create test individuals with fixed probability
-        FIXED_TEST_PROBABILITY = 0.99
+        FIXED_TEST_PROBABILITY = 0.95
         test_individuals = [
             TestIndividual(
                 snippet=method,
