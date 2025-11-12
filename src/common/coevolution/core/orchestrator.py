@@ -452,7 +452,7 @@ class Orchestrator:
                 other_population=code_population,
                 execution_results=gen_exec_results,
                 feedback_generator=self.test_feedback_gen,
-                observation_matrix=gen_observation_matrix.T,
+                observation_matrix=gen_observation_matrix,
                 operation_rates=self.test_op_rates_config,
             )
 
