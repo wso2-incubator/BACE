@@ -69,7 +69,7 @@ def main(
     ),
 ) -> None:
     """Run a coevolution experiment on a LiveCodeBench problem."""
-    logging_utils.setup_logging(console_level="DEBUG", file_level="INFO")
+    logging_utils.setup_logging(console_level="DEBUG", file_level="TRACE")
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
 
@@ -170,8 +170,8 @@ def main(
             # Test operator rates
             .with_test_operator_rates(
                 crossover_rate=0.3,
-                mutation_rate=0.2,
-                edit_rate=0.5,
+                mutation_rate=0.1,
+                edit_rate=0.7,
             )
             # Bayesian configuration
             .with_bayesian_config(
