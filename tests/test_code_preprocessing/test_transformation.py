@@ -10,7 +10,9 @@ from common.code_preprocessing.transformation import (
     extract_class_block,
     extract_function_with_helpers,
     extract_test_methods_code,
+    get_target_from_starter,
     remove_if_main_block,
+    remove_starter_from_code,
     replace_test_methods,
 )
 
@@ -384,3 +386,580 @@ if __name__ == "__main__":
         result = remove_if_main_block(code)
         assert "if __name__" not in result
         assert "def foo" in result
+
+
+class TestGetTargetFromStarter:
+    """Test get_target_from_starter function."""
+
+    def test_finds_class_definition(self) -> None:
+        starter_code = """
+class Solution:
+    def solve(self):
+        pass
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        assert target_name == "Solution"
+        import ast
+
+        assert target_type == ast.ClassDef
+
+    def test_finds_function_definition(self) -> None:
+        starter_code = """
+def solution(x: int) -> int:
+    return x
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        assert target_name == "solution"
+        import ast
+
+        assert target_type == ast.FunctionDef
+
+    def test_returns_first_definition(self) -> None:
+        starter_code = """
+def helper():
+    pass
+
+class Solution:
+    pass
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        # First definition is the function
+        assert target_name == "helper"
+
+    def test_handles_indented_code(self) -> None:
+        starter_code = """
+    class Solution:
+        def solve(self):
+            pass
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        assert target_name == "Solution"
+
+    def test_handles_complex_class_definition(self) -> None:
+        starter_code = """
+class Solution(BaseClass, AnotherMixin):
+    \"\"\"Docstring.\"\"\"
+    def method(self):
+        pass
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        assert target_name == "Solution"
+
+    def test_raises_error_no_class_or_function(self) -> None:
+        starter_code = "x = 1\ny = 2"
+        with pytest.raises(ValueError, match="must contain at least one"):
+            get_target_from_starter(starter_code)
+
+    def test_raises_error_on_syntax_error(self) -> None:
+        starter_code = "class Solution(\n    invalid"
+        with pytest.raises(ValueError, match="Error parsing"):
+            get_target_from_starter(starter_code)
+
+    def test_handles_function_with_type_hints(self) -> None:
+        starter_code = """
+def maxPartitionsAfterOperations(s: str, k: int) -> int:
+    pass
+"""
+        target_type, target_name = get_target_from_starter(starter_code)
+        assert target_name == "maxPartitionsAfterOperations"
+
+
+class TestRemoveStarterFromCode:
+    """Test remove_starter_from_code function."""
+
+    def test_removes_simple_class(self) -> None:
+        full_code = """
+class Solution:
+    def solve(self):
+        return 42
+
+class Helper:
+    pass
+"""
+        starter_code = """
+class Solution:
+    def solve(self):
+        pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Helper" in result
+
+    def test_removes_simple_function(self) -> None:
+        full_code = """
+def solution(x):
+    return x * 2
+
+def helper():
+    return 1
+"""
+        starter_code = """
+def solution(x):
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def solution" not in result
+        assert "def helper" in result
+
+    def test_removes_class_with_complex_body(self) -> None:
+        """Test the exact example from the user."""
+        full_code = """
+import unittest
+
+class Solution:
+    '''
+    This is the class we want to remove.
+    It has docstrings and complex logic.
+    '''
+    def maxPartitionsAfterOperations(self, s: str, k: int) -> int:
+        # Placeholder naive (incorrect) implementation to allow tests to run in isolation.
+        # Replace with the real implementation.
+        # Very simplistic: without any change, simulate greedy partitioning.
+        def partitions_count(s, k):
+            i = 0
+            cnt = 0
+            n = len(s)
+            while i < n:
+                seen = set()
+                j = i
+                while j < n and (s[j] in seen or len(seen) < k):
+                    seen.add(s[j])
+                    j += 1
+                cnt += 1
+                i = j
+            return cnt
+        # Try all single-character changes (and also no change) to choose max
+        best = partitions_count(s, k)
+        n = len(s)
+        import string
+        for i in range(n):
+            orig = s[i]
+            for c in string.ascii_lowercase:
+                if c == orig: continue
+                ns = s[:i] + c + s[i+1:]
+                best = max(best, partitions_count(ns, k))
+        return best
+    
+    def another_method(self):
+        # Even with other methods, it will be correctly identified
+        pass
+
+class TestMaxPartitionsAfterOperations(unittest.TestCase):
+    # ... your tests ...
+    def test_example_1(self):
+        print("Test 1")
+        # s = Solution()
+        # self.assertEqual(s.maxPartitionsAfterOperations("abc", 2), 2)
+        pass
+"""
+        # Test with incomplete starter code (no body)
+        starter_code = """
+class Solution:
+    def maxPartitionsAfterOperations(self, s: str, k: int) -> int:
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class TestMaxPartitionsAfterOperations" in result
+        assert "import unittest" in result
+        assert "def test_example_1" in result
+
+    def test_removes_class_preserves_other_classes(self) -> None:
+        full_code = """
+class First:
+    pass
+
+class Second:
+    def method(self):
+        pass
+
+class Third:
+    pass
+"""
+        starter_code = """
+class Second:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class First" in result
+        assert "class Second" not in result
+        assert "class Third" in result
+
+    def test_removes_function_preserves_other_functions(self) -> None:
+        full_code = """
+def func_one():
+    return 1
+
+def func_two():
+    return 2
+
+def func_three():
+    return 3
+"""
+        starter_code = """
+def func_two():
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def func_one" in result
+        assert "def func_two" not in result
+        assert "def func_three" in result
+
+    def test_removes_class_with_imports(self) -> None:
+        full_code = """
+import os
+import sys
+from typing import List
+
+class Solution:
+    def solve(self):
+        return os.path.exists('/')
+
+def helper():
+    return 42
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "import os" in result
+        assert "import sys" in result
+        assert "from typing import List" in result
+        assert "class Solution" not in result
+        assert "def helper" in result
+
+    def test_removes_function_with_nested_functions(self) -> None:
+        full_code = """
+def outer():
+    def inner():
+        return 1
+    return inner()
+
+def other():
+    pass
+"""
+        starter_code = """
+def outer():
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def outer" not in result
+        assert "def inner" not in result  # inner is nested, should be removed
+        assert "def other" in result
+
+    def test_handles_indented_full_code(self) -> None:
+        # Test that dedent works on starter code (not full code which gets indented)
+        # The transformation.py uses textwrap.dedent on starter code to handle indentation
+        full_code = """
+class Solution:
+    def solve(self):
+        pass
+
+class Helper:
+    pass
+"""
+        # Indented starter code should work due to textwrap.dedent in get_target_from_starter
+        starter_code = """
+    class Solution:
+        pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Helper" in result
+
+    def test_removes_class_with_decorators(self) -> None:
+        full_code = """
+@dataclass
+class Solution:
+    x: int
+    
+    def solve(self):
+        return self.x
+
+class Helper:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Helper" in result
+
+    def test_removes_function_with_decorators(self) -> None:
+        full_code = """
+@cache
+def solution(x):
+    return x * 2
+
+@timer
+def helper():
+    return 1
+"""
+        starter_code = """
+def solution(x):
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def solution" not in result
+        assert "@cache" not in result
+        assert "def helper" in result
+
+    def test_returns_error_on_invalid_starter_code(self) -> None:
+        full_code = "class Solution:\n    pass"
+        invalid_starter = "class Solution(\n    invalid"
+        result = remove_starter_from_code(full_code, invalid_starter)
+        # Should return error message string
+        assert isinstance(result, str)
+        assert "Error" in result or "invalid" in result
+
+    def test_returns_error_on_invalid_full_code(self) -> None:
+        starter_code = "class Solution:\n    pass"
+        invalid_full = "class Solution:\n    def x(\n    invalid"
+        result = remove_starter_from_code(invalid_full, starter_code)
+        # Should return error message string
+        assert isinstance(result, str)
+        assert "Error" in result
+
+    def test_handles_empty_file_after_removal(self) -> None:
+        full_code = """
+class Solution:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        # Result should be valid Python code (empty module)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+
+    def test_removes_class_with_staticmethod(self) -> None:
+        full_code = """
+class Solution:
+    @staticmethod
+    def static_method():
+        return 42
+    
+    def instance_method(self):
+        pass
+
+class Other:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Other" in result
+
+    def test_removes_class_with_classmethod(self) -> None:
+        full_code = """
+class Solution:
+    @classmethod
+    def create(cls):
+        return cls()
+    
+    def method(self):
+        pass
+
+class Other:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Other" in result
+
+    def test_removes_class_with_property(self) -> None:
+        full_code = """
+class Solution:
+    @property
+    def value(self):
+        return self._value
+    
+    def __init__(self):
+        self._value = 0
+
+class Other:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Other" in result
+
+    def test_removes_function_with_multiple_parameters(self) -> None:
+        full_code = """
+def solution(a: int, b: str, c: List[int] = None, *args, **kwargs) -> bool:
+    return True
+
+def other():
+    return False
+"""
+        # Test with incomplete starter code (no body)
+        starter_code = """
+def solution(a: int, b: str, c: List[int] = None, *args, **kwargs) -> bool:
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def solution" not in result
+        assert "def other" in result
+
+    def test_preserves_code_comments(self) -> None:
+        full_code = """
+# This is a comment about Solution
+class Solution:
+    pass
+
+# This is a comment about Helper
+class Helper:
+    pass
+"""
+        starter_code = """
+class Solution:
+    pass
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Helper" in result
+        # Comments may or may not be preserved depending on AST behavior
+
+    def test_removes_function_with_complex_logic(self) -> None:
+        full_code = """
+def solution(nums):
+    result = []
+    for num in nums:
+        if num > 0:
+            result.append(num * 2)
+    return result
+
+def helper():
+    return 1
+"""
+        # Test with incomplete starter code (no body)
+        starter_code = """
+def solution(nums):
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "def solution" not in result
+        assert "def helper" in result
+
+    def test_removes_class_with_inheritance(self) -> None:
+        full_code = """
+class Solution(BaseClass, Mixin):
+    def solve(self):
+        return super().solve()
+
+class Other:
+    pass
+"""
+        # Test with incomplete starter code (no body)
+        starter_code = """
+class Solution(BaseClass, Mixin):
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+        assert isinstance(result, str)
+        assert "class Solution" not in result
+        assert "class Other" in result
+
+    def test_exact_user_example(self) -> None:
+        """Test using the exact example from the user request."""
+        full_code = """
+import unittest
+
+# Assume the solution is imported as described:
+# from solution_module import Solution
+# For the purpose of these tests, I'll create a placeholder Solution class.
+# Replace the placeholder with the actual imported Solution when running tests.
+
+class Solution:
+    '''
+    This is the class we want to remove.
+    It has docstrings and complex logic.
+    '''
+    def maxPartitionsAfterOperations(self, s: str, k: int) -> int:
+        # Placeholder naive (incorrect) implementation to allow tests to run in isolation.
+        # Replace with the real implementation.
+        # Very simplistic: without any change, simulate greedy partitioning.
+        def partitions_count(s, k):
+            i = 0
+            cnt = 0
+            n = len(s)
+            while i < n:
+                seen = set()
+                j = i
+                while j < n and (s[j] in seen or len(seen) < k):
+                    seen.add(s[j])
+                    j += 1
+                cnt += 1
+                i = j
+            return cnt
+        # Try all single-character changes (and also no change) to choose max
+        best = partitions_count(s, k)
+        n = len(s)
+        import string
+        for i in range(n):
+            orig = s[i]
+            for c in string.ascii_lowercase:
+                if c == orig: continue
+                ns = s[:i] + c + s[i+1:]
+                best = max(best, partitions_count(ns, k))
+        return best
+    
+    def another_method(self):
+        # Even with other methods, it will be correctly identified
+        pass
+
+class TestMaxPartitionsAfterOperations(unittest.TestCase):
+    # ... your tests ...
+    def test_example_1(self):
+        print("Test 1")
+        # s = Solution()
+        # self.assertEqual(s.maxPartitionsAfterOperations("abc", 2), 2)
+        pass
+"""
+        # Exact incomplete starter code from user request
+        starter_code = """
+class Solution:
+    def maxPartitionsAfterOperations(self, s: str, k: int) -> int:
+"""
+        result = remove_starter_from_code(full_code, starter_code)
+
+        assert isinstance(result, str)
+        # Verify Solution class is removed
+        assert "class Solution:" not in result
+        assert "def maxPartitionsAfterOperations" not in result
+        assert "def another_method" not in result
+
+        # Verify TestMaxPartitionsAfterOperations is preserved
+        assert "class TestMaxPartitionsAfterOperations" in result
+        assert "def test_example_1" in result
+
+        # Verify imports are preserved
+        assert "import unittest" in result

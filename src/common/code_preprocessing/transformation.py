@@ -1,11 +1,166 @@
 """Transform existing code into different code structures."""
 
 import ast
+import textwrap
 from typing import List
 
 from loguru import logger
 
 from .exceptions import CodeParsingError, CodeTransformationError
+
+
+class NodeRemover(ast.NodeTransformer):
+    """
+    This transformer will visit every ClassDef and FunctionDef node.
+    It removes the node that matches the provided target_type and target_name.
+    """
+
+    def __init__(self, target_type_to_remove: type, target_name_to_remove: str) -> None:
+        self.target_type = target_type_to_remove
+        self.target_name = target_name_to_remove
+        print(
+            f"NodeRemover initialized to remove: {self.target_type.__name__} named '{self.target_name}'"
+        )
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST | None:
+        # Check if we are looking for a Class and the name matches
+        if isinstance(node, self.target_type) and node.name == self.target_name:
+            # It's the target class. Return None to remove it.
+            print(f"Found and removing Class: {node.name}")
+            return None
+
+        # It's not the target class, so keep it and visit its children
+        return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST | None:
+        # Check if we are looking for a Function and the name matches
+        # This will match top-level functions AND methods inside classes.
+        # Our get_target_from_starter only finds top-level ones,
+        # so this will correctly remove top-level functions.
+        if isinstance(node, self.target_type) and node.name == self.target_name:
+            # It's the target function. Return None to remove it.
+            print(f"Found and removing Function: {node.name}")
+            return None
+
+        # It's not the target function, so keep it and visit its children
+        return self.generic_visit(node)
+
+
+def get_target_from_starter(starter_code: str) -> tuple[type, str]:
+    """
+    Parses the starter code to find the name and type (ClassDef or FunctionDef)
+    of the first top-level class or function.
+
+    Handles incomplete starter code (e.g., without method bodies) by appending
+    'pass' statements to make it syntactically valid.
+
+    Example:
+        >>> starter = "class Solution:\\n    def solve(self):"
+        >>> target_type, name = get_target_from_starter(starter)
+        >>> name
+        'Solution'
+    """
+    try:
+        # Dedent the code string to avoid IndentationErrors
+        dedented_code = textwrap.dedent(starter_code)
+
+        # Try to parse as-is first
+        try:
+            tree = ast.parse(dedented_code)
+        except SyntaxError:
+            # If parsing fails, it might be incomplete code (e.g., class/function
+            # signature without a body). Try adding 'pass' statements.
+            lines = dedented_code.rstrip().split("\n")
+
+            # Find the indentation of the last line to determine where to add pass
+            last_line = lines[-1]
+            indent_count = len(last_line) - len(last_line.lstrip())
+
+            # Add pass with appropriate indentation for the incomplete definition
+            # If the line ends with ':', it needs a body, so add pass indented further
+            if last_line.rstrip().endswith(":"):
+                # Add one more level of indentation
+                pass_line = " " * (indent_count + 4) + "pass"
+            else:
+                # Otherwise use the same indentation
+                pass_line = " " * indent_count + "pass"
+
+            lines.append(pass_line)
+            dedented_code = "\n".join(lines)
+
+            try:
+                tree = ast.parse(dedented_code)
+            except SyntaxError as e:
+                raise ValueError(f"Error parsing starter code: {e}") from e
+
+        # Find the first top-level class or function definition
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                return type(node), node.name
+
+        raise ValueError(
+            "Starter code must contain at least one top-level class or function definition."
+        )
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Error parsing starter code: {e}")
+
+
+def remove_starter_from_code(full_code: str, starter_code: str) -> str | None:
+    """
+    Removes a class OR function from the full_code string, identified
+    by the first class/function in the starter_code string.
+
+    This version operates directly on the tree body for safety.
+    """
+    # 1. Get identifiers from the starter code
+    try:
+        target_type, target_name = get_target_from_starter(starter_code)
+        print(
+            f"Targeting top-level {target_type.__name__} named '{target_name}' for removal."
+        )
+    except ValueError as e:
+        return str(e)
+
+    # 2. Parse the full code into an AST
+    try:
+        full_tree = ast.parse(full_code)
+    except Exception as e:
+        return f"Error parsing full code: {e}"
+
+    # 3. Filter the tree's body directly
+    # This avoids using a NodeTransformer and ensures we only
+    # remove top-level nodes.
+
+    new_body = []
+    found = False
+    for node in full_tree.body:
+        # Check if the node is the one we want to remove
+        if (
+            isinstance(node, target_type)
+            and hasattr(node, "name")
+            and node.name == target_name
+        ):
+            print(f"Found and removing {target_type.__name__}: {node.name}")
+            found = True
+            continue  # Skip adding this node to the new body
+
+        # Keep all other nodes
+        new_body.append(node)
+
+    if not found:
+        print(
+            f"Warning: Did not find top-level {target_type.__name__} '{target_name}' to remove."
+        )
+
+    # Assign the new, filtered list back to the tree's body
+    full_tree.body = new_body
+
+    # 4. Convert the modified AST back to a string
+    # We don't need fix_missing_locations because we didn't
+    # add/nest new nodes, just removed top-level ones.
+    return ast.unparse(full_tree)
 
 
 def extract_test_methods_code(test_code: str) -> List[str]:
