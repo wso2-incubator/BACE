@@ -16,6 +16,7 @@ Functions:
 import sys
 from typing import TYPE_CHECKING, Any, Literal
 
+import pandas as pd
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -566,29 +567,24 @@ def log_observation_matrix(
     test_population: "TestPopulation",
     test_type: Literal["generated", "public", "private"] = "generated",
 ) -> None:
-    """
-    Log the full observation matrix in a structured format.
-    Headers include code IDs and test IDs for clarity.
-    Args:
-        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
-        code_population: The current code population
-        test_population: The current test population
-    """
-
     code_ids = [ind.id for ind in code_population]
     test_ids = [ind.id for ind in test_population]
 
-    logger.info(
-        f"Logging {test_type.upper()} observation matrix ({observation_matrix.shape})"
-    )
-    header = "Code/Test," + ",".join(test_ids)
-    logger.debug(header)
+    # --- New Pandas Method ---
 
-    for code_idx, code_id in enumerate(code_ids):
-        row = observation_matrix[code_idx, :]
-        row_str = ",".join(str(int(val)) for val in row)
-        logger.debug(f"{code_id},{row_str}")
+    # 1. Create the DataFrame
+    df = pd.DataFrame(observation_matrix, index=code_ids, columns=test_ids)
+
+    # 2. Give the index column a name for a cleaner header
+    df.index.name = "Code\\Test"
+
+    logger.info(f"Logging {test_type.upper()} observation matrix ({df.shape})")
+
+    # 3. Log the entire pre-formatted string.
+    #    Add a newline to ensure it starts on its own line.
+    logger.debug(f"\n{df.to_string()}")
+
+    # --- End New Method ---
 
     _log_observation_matrix_statistics(observation_matrix)
-
     return
