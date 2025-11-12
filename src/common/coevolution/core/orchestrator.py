@@ -542,6 +542,10 @@ class Orchestrator:
             code_population, private_test_population
         )
 
+        logging_utils.log_observation_matrix(
+            priv_obs_matrix, code_population, private_test_population, "private"
+        )
+
         logging_utils.log_generation_summary(
             self.gen_logger, code_population, test_population
         )
