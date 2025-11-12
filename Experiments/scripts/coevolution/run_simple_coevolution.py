@@ -144,22 +144,22 @@ def main(
             OrchestratorBuilder()
             # Evolution configuration
             .with_evolution_config(
-                num_generations=2,  # Small number for quick testing
+                num_generations=5,  # Small number for quick testing
                 random_seed=42,
                 max_workers=10,
             )
             # Code population configuration
             .with_code_population_config(
                 initial_prior=0.5,
-                initial_population_size=5,  # Small for quick testing
-                max_population_size=10,
-                elitism_rate=0.3,
-                offspring_rate=0.7,
+                initial_population_size=10,  # Small for quick testing
+                max_population_size=15,
+                elitism_rate=0.5,
+                offspring_rate=0.5,
             )
             # Test population configuration
             .with_test_population_config(
-                initial_prior=0.5,
-                initial_population_size=5,  # Small for quick testing
+                initial_prior=0.3,
+                initial_population_size=20,  # Small for quick testing
             )
             # Code operator rates
             .with_code_operator_rates(
