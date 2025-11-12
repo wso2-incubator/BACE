@@ -1054,7 +1054,7 @@ def create_safe_test_environment() -> SafeCodeSandbox:
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=180,  # 180 seconds max
+        timeout=30,
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
         allowed_imports=[
