@@ -650,12 +650,6 @@ class Orchestrator:
             self.gen_logger, code_population, test_population
         )
 
-        logging_utils.log_section_header(
-            "INFO",
-            "CO-EVOLUTION RUN FINISHED."
-            f"Final Code Population: {code_population!r}"
-            f"Final Test Population: {test_population!r}"
-            f"Final Private Test Pass Rate: {priv_obs_matrix.mean():.2%}",
-        )
+        logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
 
         return code_population, test_population
