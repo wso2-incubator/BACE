@@ -31,6 +31,10 @@ def _execute_single_code(
 
     This function is designed to run in a separate process via multiprocessing.
 
+    IMPORTANT: This function runs in a child process and needs to reconfigure logging
+    because multiprocessing child processes don't inherit logger handlers from the parent.
+    Without this, TRACE level logs from sandbox.execute_test_script() won't be recorded.
+
     Args:
         code_idx: Index of the code snippet in the population
         code_snippet: Code string to test
@@ -41,6 +45,14 @@ def _execute_single_code(
         Tuple of (code_idx, TestExecutionResult or None)
     """
     try:
+        # CRITICAL: Reconfigure logging in child process with proper context
+        # Child processes from multiprocessing.Pool don't inherit logger handlers
+        # from the parent process, so we need to set up logging again here.
+        # This ensures TRACE level logs from sandbox are captured with proper context.
+        from common.coevolution.logging_utils import setup_logging
+
+        setup_logging(console_level="DEBUG", file_level="TRACE")
+
         # Compose the complete test script
         script = cpp.composition.compose_lcb_test_script(code_snippet, test_class_block)
 
