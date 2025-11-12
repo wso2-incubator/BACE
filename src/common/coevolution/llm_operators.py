@@ -363,23 +363,23 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         """
         return transformation.extract_test_methods_code(test_block)
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
-        reraise=True,
-    )
-    def _remove_starter_code(self, code: str) -> str:
+    def _extract_unittest_block(self, code: str) -> str:
         """
-        Remove the problem's starter code from the given code snippet.
+        Extract the unittest code block from the given code snippet.
 
         Args:
             code: Code snippet potentially containing starter code
         Returns:
             Code snippet with starter code removed
         """
-        return transformation.remove_starter_from_code(code, self.problem.starter_code)
+        return transformation.extract_unittest_code(code)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(ValueError),
+        reraise=True,
+    )
     def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
         """
         Create initial test code snippets for a population of test cases.
@@ -404,7 +404,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
 
         response: str = self._generate(prompt)
         extracted_code_block: str = self._extract_code_block(response)
-        test_block: str = self._remove_starter_code(extracted_code_block)
+        test_block: str = self._extract_unittest_block(extracted_code_block)
         test_methods: list[str] = self._extract_test_methods(test_block)
 
         if len(test_methods) != population_size:
