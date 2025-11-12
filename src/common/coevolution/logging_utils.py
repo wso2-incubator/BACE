@@ -42,7 +42,7 @@ def setup_logging(
     console_level: str = "INFO",
     file_level: str = "TRACE",
     log_file_base_name: str = "coevolution_run",
-    setup_gen_log: bool = False,
+    setup_gen_log: bool = True,
 ) -> None:
     """
     Configures Loguru handlers for console and file logging.
