@@ -8,6 +8,10 @@ This script demonstrates how to use the new modular architecture with:
 - LCB dataset integration
 """
 
+from datetime import datetime
+from typing import Optional
+
+import typer
 from loguru import logger
 
 import common.coevolution.logging_utils as logging_utils
@@ -56,7 +60,14 @@ def load_problem() -> LCBCodeGenerationProblem:
     return problem
 
 
-def main() -> None:
+def main(
+    run_id: Optional[str] = typer.Option(
+        None,
+        "--run-id",
+        "-r",
+        help="Unique identifier for this run. If not provided, one will be auto-generated with timestamp.",
+    ),
+) -> None:
     """Run a coevolution experiment on a LiveCodeBench problem."""
     logging_utils.setup_logging(console_level="DEBUG", file_level="INFO")
 
@@ -67,7 +78,12 @@ def main() -> None:
     # ====================================
     problem = load_problem()
 
-    with logger.contextualize(problem_id=problem.question_id, run_id="test_001"):
+    # Generate run_id if not provided
+    if run_id is None:
+        run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    logger.info(f"Run ID: {run_id}")
+
+    with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
         # ====================================
         # Step 2: Create Infrastructure
         # ====================================
@@ -252,4 +268,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
