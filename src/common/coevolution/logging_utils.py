@@ -115,9 +115,11 @@ def setup_logging(
         filter=exclude_gen_logs,
     )
 
+    # Configure the extra context BEFORE any logging that uses it
+    logger.configure(extra=default_context)
+
     if setup_gen_log:
         gen_log_file = f"logs/generations/{log_file_base_name}_{{time:YYYYMMDD}}.log"
-        logger.info(f"Adding generation log sink: {gen_log_file}")
         logger.add(
             gen_log_file,
             level="INFO",
@@ -127,8 +129,8 @@ def setup_logging(
             rotation="10 MB",
             compression="zip",
         )
+        logger.info(f"Added generation log sink: {gen_log_file}")
 
-    logger.configure(extra=default_context)
     logger.info(
         f"Logging configured. Console level: {console_level}, File level: {file_level}."
     )
