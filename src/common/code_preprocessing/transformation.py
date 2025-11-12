@@ -18,7 +18,7 @@ class NodeRemover(ast.NodeTransformer):
     def __init__(self, target_type_to_remove: type, target_name_to_remove: str) -> None:
         self.target_type = target_type_to_remove
         self.target_name = target_name_to_remove
-        print(
+        logger.trace(
             f"NodeRemover initialized to remove: {self.target_type.__name__} named '{self.target_name}'"
         )
 
@@ -26,7 +26,7 @@ class NodeRemover(ast.NodeTransformer):
         # Check if we are looking for a Class and the name matches
         if isinstance(node, self.target_type) and node.name == self.target_name:
             # It's the target class. Return None to remove it.
-            print(f"Found and removing Class: {node.name}")
+            logger.trace(f"Found and removing Class: {node.name}")
             return None
 
         # It's not the target class, so keep it and visit its children
@@ -39,7 +39,7 @@ class NodeRemover(ast.NodeTransformer):
         # so this will correctly remove top-level functions.
         if isinstance(node, self.target_type) and node.name == self.target_name:
             # It's the target function. Return None to remove it.
-            print(f"Found and removing Function: {node.name}")
+            logger.trace(f"Found and removing Function: {node.name}")
             return None
 
         # It's not the target function, so keep it and visit its children
@@ -107,7 +107,7 @@ def get_target_from_starter(starter_code: str) -> tuple[type, str]:
         raise ValueError(f"Error parsing starter code: {e}")
 
 
-def remove_starter_from_code(full_code: str, starter_code: str) -> str | None:
+def remove_starter_from_code(full_code: str, starter_code: str) -> str:
     """
     Removes a class OR function from the full_code string, identified
     by the first class/function in the starter_code string.
@@ -117,7 +117,7 @@ def remove_starter_from_code(full_code: str, starter_code: str) -> str | None:
     # 1. Get identifiers from the starter code
     try:
         target_type, target_name = get_target_from_starter(starter_code)
-        print(
+        logger.trace(
             f"Targeting top-level {target_type.__name__} named '{target_name}' for removal."
         )
     except ValueError as e:
@@ -142,7 +142,9 @@ def remove_starter_from_code(full_code: str, starter_code: str) -> str | None:
             and hasattr(node, "name")
             and node.name == target_name
         ):
-            print(f"Found and removing {target_type.__name__}: {node.name}")
+            logger.debug(
+                f"Found and removing starter code - {target_type.__name__}: {node.name}"
+            )
             found = True
             continue  # Skip adding this node to the new body
 
@@ -150,9 +152,7 @@ def remove_starter_from_code(full_code: str, starter_code: str) -> str | None:
         new_body.append(node)
 
     if not found:
-        print(
-            f"Warning: Did not find top-level {target_type.__name__} '{target_name}' to remove."
-        )
+        logger.trace(f"Starter code '{target_name}' not found in full code.")
 
     # Assign the new, filtered list back to the tree's body
     full_tree.body = new_body
