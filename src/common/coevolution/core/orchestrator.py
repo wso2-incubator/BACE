@@ -2,7 +2,6 @@
 
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Literal
 
 import numpy as np
 from loguru import logger
