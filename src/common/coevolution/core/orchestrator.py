@@ -482,7 +482,6 @@ class Orchestrator:
         self,
         code_population: CodePopulation,
         test_population: TestPopulation,
-        test_type: Literal["private", "generated", "public"],
     ) -> tuple[ExecutionResults, np.ndarray]:
         """
         Helper to execute tests and build observation matrix.
@@ -493,11 +492,6 @@ class Orchestrator:
         obs_matrix = self.execution_system.build_observation_matrix(
             code_population, test_population, exec_results
         )
-
-        logger.debug(
-            f"Observation Matrix ({test_type.capitalize()} Tests):\n{obs_matrix}"
-        )
-        logging_utils.log_observation_matrix_statistics(obs_matrix)
 
         return exec_results, obs_matrix
 
@@ -546,7 +540,7 @@ class Orchestrator:
         assert private_test_population is not None
 
         priv_exec_results, priv_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, private_test_population, test_type="private"
+            code_population, private_test_population
         )
 
         logging_utils.log_generation_summary(
@@ -563,10 +557,17 @@ class Orchestrator:
             # --- Step 1: Execute & Observe ---
             logger.debug("Step 1: Executing gen and public test sets...")
             gen_exec_results, gen_obs_matrix = self._get_exec_results_and_obs_matrix(
-                code_population, test_population, test_type="generated"
+                code_population, test_population
             )
-            pub_exec_results, pub_obs_matrix = self._get_exec_results_and_obs_matrix(
-                code_population, public_test_population, test_type="public"
+            _, pub_obs_matrix = self._get_exec_results_and_obs_matrix(
+                code_population, public_test_population
+            )
+
+            logging_utils.log_observation_matrix(
+                gen_obs_matrix, code_population, test_population, "generated"
+            )
+            logging_utils.log_observation_matrix(
+                pub_obs_matrix, code_population, public_test_population, "public"
             )
 
             # --- Step 2: Update Beliefs ---
@@ -634,15 +635,25 @@ class Orchestrator:
             )
 
         gen_exec_results, gen_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, test_population, test_type="generated"
+            code_population, test_population
         )
 
         pub_exec_results, pub_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, public_test_population, test_type="public"
+            code_population, public_test_population
         )
 
         priv_exec_results, priv_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, private_test_population, test_type="private"
+            code_population, private_test_population
+        )
+
+        logging_utils.log_observation_matrix(
+            gen_obs_matrix, code_population, test_population, "generated"
+        )
+        logging_utils.log_observation_matrix(
+            pub_obs_matrix, code_population, public_test_population, "public"
+        )
+        logging_utils.log_observation_matrix(
+            priv_obs_matrix, code_population, private_test_population, "private"
         )
 
         # After evolution loop completes, log all final survivors

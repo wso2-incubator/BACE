@@ -14,7 +14,7 @@ Functions:
 """
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
 
@@ -520,7 +520,7 @@ def log_test_discriminations(observation_matrix: "np.ndarray") -> None:
     )
 
 
-def log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None:
+def _log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None:
     """
     Log comprehensive statistics about the observation matrix.
 
@@ -558,3 +558,37 @@ def log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None:
     log_code_pass_rates(observation_matrix)
     log_test_pass_rates(observation_matrix)
     log_test_discriminations(observation_matrix)
+
+
+def log_observation_matrix(
+    observation_matrix: "np.ndarray",
+    code_population: "CodePopulation",
+    test_population: "TestPopulation",
+    test_type: Literal["generated", "public", "private"] = "generated",
+) -> None:
+    """
+    Log the full observation matrix in a structured format.
+    Headers include code IDs and test IDs for clarity.
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+        code_population: The current code population
+        test_population: The current test population
+    """
+
+    code_ids = [ind.id for ind in code_population]
+    test_ids = [ind.id for ind in test_population]
+
+    logger.info(
+        f"Logging {test_type.upper()} observation matrix ({observation_matrix.shape})"
+    )
+    header = "Code/Test," + ",".join(test_ids)
+    logger.debug(header)
+
+    for code_idx, code_id in enumerate(code_ids):
+        row = observation_matrix[code_idx, :]
+        row_str = ",".join(str(int(val)) for val in row)
+        logger.debug(f"{code_id},{row_str}")
+
+    _log_observation_matrix_statistics(observation_matrix)
+
+    return
