@@ -50,6 +50,9 @@ class TestPopulation(BasePopulation[TestIndividual]):
         self._pareto = pareto
         self._test_block_rebuilder = test_block_rebuilder
 
+        logger.trace(f"Initialized TestPopulation with {self.size} individuals")
+        logger.trace(f"test class block:\n{self._test_class_block}")
+
     def _build_test_class_block(self) -> None:
         """Implementation of rebuilding the test class block."""
 
