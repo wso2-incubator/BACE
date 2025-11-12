@@ -213,6 +213,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             )
 
         logger.info(f"Successfully generated {population_size} initial code snippets")
+        logger.trace(f"Generated initial code snippets:\n{'\n\n'.join(code_blocks)}")
         return code_blocks
 
     @retry(
@@ -264,6 +265,7 @@ Return the new combined code in a python code block."""
             raise ValueError(
                 "Crossover result does not contain starter code structure."
             )
+        logger.trace(f"Generated child code snippet (Crossover):\n{child_code}")
         return child_code
 
     @retry(
@@ -303,6 +305,7 @@ Return the modified code in a python code block."""
             logger.error("Mutation result does not contain starter code structure.")
             raise ValueError("Mutation result does not contain starter code structure.")
         logger.info("Mutation produced a new code snippet")
+        logger.trace(f"Generated mutated code snippet:\n{mutated_code}")
         return mutated_code
 
     @retry(
@@ -342,6 +345,7 @@ Return the fixed code in a python code block."""
             logger.error("Edit result does not contain starter code structure.")
             raise ValueError("Edit result does not contain starter code structure.")
         logger.info("Edit produced a new code snippet")
+        logger.trace(f"Generated edited code snippet:\n{edited_code}")
         return edited_code
 
 
@@ -399,7 +403,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
                 f"Generated {len(test_methods)} test methods, expected {population_size}."
             )
         logger.info(f"Successfully generated {population_size} initial test snippets")
-        logger.trace(f"Generated test block preview:\n{test_block[:100]}...")
+        logger.trace(f"Generated test block:\n{test_block}")
         return test_methods, test_block
 
     @retry(
@@ -444,6 +448,7 @@ Return only the new test method code in a python code block."""
         response = self._generate(prompt)
         child_test = self._extract_code_block(response)
         logger.info("Crossover produced a new child test snippet")
+        logger.trace(f"Generated child test snippet (Crossover):\n{child_test}")
         return child_test
 
     @retry(
@@ -481,6 +486,7 @@ Return only the test method code in a python code block."""
         response = self._generate(prompt)
         mutated_test = self._extract_code_block(response)
         logger.info("Mutation produced a new test snippet")
+        logger.trace(f"Generated mutated test snippet:\n{mutated_test}")
         return mutated_test
 
     @retry(
@@ -520,4 +526,5 @@ Only return the new test code in a python code block"""
         response = self._generate(prompt)
         edited_test = self._extract_code_block(response)
         logger.info("Edit produced a new test snippet")
+        logger.trace(f"Generated edited test snippet:\n{edited_test}")
         return edited_test
