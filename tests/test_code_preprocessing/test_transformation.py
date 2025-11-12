@@ -1,5 +1,7 @@
 """Tests for code_preprocessing.transformation module."""
 
+import ast
+
 import pytest
 
 from common.code_preprocessing.exceptions import (
@@ -10,7 +12,9 @@ from common.code_preprocessing.transformation import (
     extract_class_block,
     extract_function_with_helpers,
     extract_test_methods_code,
+    extract_unittest_code,
     get_target_from_starter,
+    is_unittest_class,
     remove_if_main_block,
     remove_starter_from_code,
     replace_test_methods,
@@ -963,3 +967,325 @@ class Solution:
 
         # Verify imports are preserved
         assert "import unittest" in result
+
+
+class TestIsUnittestClass:
+    """Test is_unittest_class function."""
+
+    def test_detects_unittest_testcase(self) -> None:
+        code = "class TestFoo(unittest.TestCase): pass"
+        tree = ast.parse(code)
+        assert is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_detects_direct_testcase(self) -> None:
+        code = "class TestFoo(TestCase): pass"
+        tree = ast.parse(code)
+        assert is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_rejects_non_testcase_class(self) -> None:
+        code = "class Solution: pass"
+        tree = ast.parse(code)
+        assert not is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_rejects_custom_base_class(self) -> None:
+        code = "class MyClass(BaseClass): pass"
+        tree = ast.parse(code)
+        assert not is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_handles_multiple_inheritance(self) -> None:
+        code = "class TestFoo(Mixin, unittest.TestCase): pass"
+        tree = ast.parse(code)
+        assert is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_handles_multiple_inheritance_first_testcase(self) -> None:
+        code = "class TestFoo(unittest.TestCase, Mixin): pass"
+        tree = ast.parse(code)
+        assert is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_testcase_attribute_variant(self) -> None:
+        code = "class TestFoo(test.TestCase): pass"
+        tree = ast.parse(code)
+        assert is_unittest_class(tree.body[0])  # type: ignore
+
+    def test_rejects_testable_name(self) -> None:
+        code = "class MyTest(object): pass"
+        tree = ast.parse(code)
+        # Should not detect as TestCase just because class name has "Test"
+        assert not is_unittest_class(tree.body[0])  # type: ignore
+
+
+class TestExtractUnittestCode:
+    """Test extract_unittest_code function."""
+
+    def test_keeps_imports_and_unittest_class(self) -> None:
+        full_code = """
+import unittest
+
+class Solution:
+    def solve(self):
+        return 42
+
+class TestSolution(unittest.TestCase):
+    def test_foo(self):
+        self.assertTrue(True)
+"""
+        result = extract_unittest_code(full_code)
+        assert "import unittest" in result
+        assert "class TestSolution" in result
+        assert "def test_foo" in result
+        assert "class Solution" not in result
+
+    def test_removes_top_level_functions(self) -> None:
+        full_code = """
+def helper():
+    return 1
+
+def another_helper():
+    return 2
+
+class TestFoo(unittest.TestCase):
+    def test_it(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestFoo" in result
+        assert "def test_it" in result
+        assert "def helper" not in result
+        assert "def another_helper" not in result
+
+    def test_removes_non_unittest_classes(self) -> None:
+        full_code = """
+class Solution:
+    def solve(self):
+        return 42
+
+class Helper:
+    def help(self):
+        return 1
+
+class TestSolution(unittest.TestCase):
+    def test_solve(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestSolution" in result
+        assert "class Solution" not in result
+        assert "class Helper" not in result
+        assert "def test_solve" in result
+
+    def test_keeps_multiple_imports(self) -> None:
+        full_code = """
+import unittest
+import sys
+from typing import List
+from collections import defaultdict
+
+class TestFoo(unittest.TestCase):
+    def test_bar(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "import unittest" in result
+        assert "import sys" in result
+        assert "from typing import List" in result
+        assert "from collections import defaultdict" in result
+        assert "class TestFoo" in result
+
+    def test_keeps_multiple_unittest_classes(self) -> None:
+        full_code = """
+import unittest
+
+class TestFoo(unittest.TestCase):
+    def test_one(self):
+        pass
+
+class TestBar(unittest.TestCase):
+    def test_two(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestFoo" in result
+        assert "class TestBar" in result
+        assert "def test_one" in result
+        assert "def test_two" in result
+
+    def test_preserves_unittest_class_with_methods(self) -> None:
+        full_code = """
+import unittest
+
+class TestSolution(unittest.TestCase):
+    def setUp(self):
+        self.x = 1
+    
+    def test_example(self):
+        self.assertEqual(self.x, 1)
+    
+    def tearDown(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestSolution" in result
+        assert "def setUp" in result
+        assert "def test_example" in result
+        assert "def tearDown" in result
+
+    def test_removes_module_level_statements(self) -> None:
+        full_code = """
+import unittest
+
+DEBUG = True
+CONFIG = {"key": "value"}
+
+class TestFoo(unittest.TestCase):
+    def test_it(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestFoo" in result
+        assert "import unittest" in result
+        # Variable assignments should be removed
+        assert "DEBUG" not in result
+        assert "CONFIG" not in result
+
+    def test_handles_testcase_without_module_prefix(self) -> None:
+        full_code = """
+from unittest import TestCase
+
+class MyTest(TestCase):
+    def test_something(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "from unittest import TestCase" in result
+        assert "class MyTest" in result
+        assert "def test_something" in result
+
+    def test_handles_custom_testcase_base(self) -> None:
+        full_code = """
+from unittest import TestCase
+
+class BaseTestCase(TestCase):
+    pass
+
+class MyTest(BaseTestCase):
+    def test_it(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        # BaseTestCase should be kept as it inherits from TestCase
+        assert "class BaseTestCase" in result
+        assert "class MyTest" in result
+
+    def test_empty_code_with_no_unittest_classes(self) -> None:
+        full_code = """
+import unittest
+
+def helper():
+    return 1
+
+class Solution:
+    pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "import unittest" in result
+        assert "def helper" not in result
+        assert "class Solution" not in result
+        # Result should just be the import statement
+        assert result.strip() == "import unittest"
+
+    def test_code_with_only_unittest_class(self) -> None:
+        full_code = """
+class TestFoo(unittest.TestCase):
+    def test_bar(self):
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "class TestFoo" in result
+        assert "def test_bar" in result
+
+    def test_removes_comments_and_docstrings(self) -> None:
+        """Note: ast.unparse doesn't preserve comments, only docstrings in classes/functions."""
+        full_code = """
+# This is a comment
+import unittest
+
+def helper():  # Helper function
+    \"\"\"Docstring.\"\"\"
+    return 1
+
+class TestFoo(unittest.TestCase):
+    \"\"\"Test class.\"\"\"
+    def test_it(self):
+        \"\"\"Test method.\"\"\"
+        pass
+"""
+        result = extract_unittest_code(full_code)
+        # Comments are lost in AST, but docstrings inside functions/classes are preserved
+        assert "class TestFoo" in result
+        assert "def test_it" in result
+        # Top-level helper function should be removed
+        assert "def helper" not in result
+
+    def test_raises_error_on_syntax_error(self) -> None:
+        invalid_code = "class Foo(\n    invalid syntax"
+        with pytest.raises(CodeParsingError):
+            extract_unittest_code(invalid_code)
+
+    def test_complex_real_world_example(self) -> None:
+        full_code = """
+import unittest
+from typing import List
+import numpy as np
+
+def preprocess_data(data: List[int]) -> List[int]:
+    return sorted(data)
+
+class Solution:
+    def solve(self, nums: List[int]) -> int:
+        return sum(nums)
+
+class DataProcessor:
+    def process(self):
+        return 1
+
+class TestSolution(unittest.TestCase):
+    def setUp(self):
+        self.solution = Solution()
+    
+    def test_example_1(self):
+        result = self.solution.solve([1, 2, 3])
+        self.assertEqual(result, 6)
+    
+    def test_example_2(self):
+        result = self.solution.solve([])
+        self.assertEqual(result, 0)
+
+class TestSolutionAdvanced(unittest.TestCase):
+    def test_large_input(self):
+        large_nums = list(range(1000))
+        result = Solution().solve(large_nums)
+        self.assertEqual(result, sum(large_nums))
+"""
+        result = extract_unittest_code(full_code)
+
+        # Verify imports are kept
+        assert "import unittest" in result
+        assert "from typing import List" in result
+        assert "import numpy as np" in result
+
+        # Verify unittest classes are kept
+        assert "class TestSolution" in result
+        assert "class TestSolutionAdvanced" in result
+
+        # Verify non-unittest classes are removed
+        assert "class Solution" not in result
+        assert "class DataProcessor" not in result
+
+        # Verify functions are removed
+        assert "def preprocess_data" not in result
+
+        # Verify test methods are kept
+        assert "def setUp" in result
+        assert "def test_example_1" in result
+        assert "def test_example_2" in result
+        assert "def test_large_input" in result

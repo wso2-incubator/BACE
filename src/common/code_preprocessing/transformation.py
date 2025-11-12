@@ -450,3 +450,105 @@ def remove_if_main_block(code_string: str) -> str:
 
     tree.body = new_body
     return ast.unparse(tree)
+
+
+def is_unittest_class(node: ast.ClassDef) -> bool:
+    """
+    Checks if an ast.ClassDef node inherits from a class
+    whose name contains 'TestCase'.
+
+    Args:
+        node: An ast.ClassDef node to check
+
+    Returns:
+        True if the class inherits from TestCase, False otherwise
+
+    Example:
+        >>> code = "class MyTest(unittest.TestCase): pass"
+        >>> tree = ast.parse(code)
+        >>> is_unittest_class(tree.body[0])
+        True
+    """
+    for base in node.bases:
+        # Case 1: class MyTest(TestCase)
+        if isinstance(base, ast.Name):
+            if "TestCase" in base.id:
+                return True
+        # Case 2: class MyTest(unittest.TestCase)
+        elif isinstance(base, ast.Attribute):
+            if "TestCase" in base.attr:
+                return True
+    return False
+
+
+def extract_unittest_code(full_code: str) -> str:
+    """
+    Filters the full code to keep only imports and classes
+    that inherit from unittest.TestCase.
+
+    All top-level functions and non-unittest classes are removed.
+    All import statements are preserved.
+
+    Args:
+        full_code: Python source code string
+
+    Returns:
+        Filtered code string containing only imports and unittest classes
+
+    Raises:
+        CodeParsingError: If the code has syntax errors
+
+    Example:
+        >>> code = '''
+        ... import unittest
+        ... def helper(): return 1
+        ... class Solution: pass
+        ... class TestSolution(unittest.TestCase):
+        ...     def test_foo(self): pass
+        ... '''
+        >>> result = extract_unittest_code(code)
+        >>> "import unittest" in result
+        True
+        >>> "def helper" in result
+        False
+        >>> "class TestSolution" in result
+        True
+    """
+    # 1. Parse the full code into an AST
+    try:
+        full_tree = ast.parse(full_code)
+    except SyntaxError as e:
+        logger.error(f"Syntax error parsing code: {e}")
+        raise CodeParsingError(f"Failed to parse code: {e}") from e
+
+    # 2. Filter the tree's body to keep only desired nodes
+    new_body: list[ast.stmt] = []
+    for node in full_tree.body:
+        # Keep all import statements
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            new_body.append(node)
+            logger.trace(f"Keeping import: {ast.unparse(node)}")
+
+        # Keep classes that are unittest classes
+        elif isinstance(node, ast.ClassDef):
+            if is_unittest_class(node):
+                new_body.append(node)
+                logger.trace(f"Keeping unittest class: {node.name}")
+            else:
+                logger.debug(f"Removing non-unittest class: {node.name}")
+
+        # Remove all other top-level nodes (functions, other statements)
+        else:
+            if isinstance(node, ast.FunctionDef):
+                logger.debug(f"Removing top-level function: {node.name}")
+            else:
+                try:
+                    logger.trace(f"Removing other top-level node: {ast.unparse(node)}")
+                except Exception:
+                    logger.trace("Removing other non-code top-level node")
+
+    # Assign the new, filtered list back to the tree's body
+    full_tree.body = new_body
+
+    # 3. Convert the modified AST back to a string
+    return ast.unparse(full_tree)
