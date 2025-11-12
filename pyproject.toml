@@ -145,6 +145,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "loguru>=0.7.3",
     "typer>=0.20.0",
+    "networkx>=3.5",
 ]
 
 [project.optional-dependencies]
