@@ -177,7 +177,9 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         final_code_parts.append('if __name__ == "__main__":')
         final_code_parts.append("    unittest.main(verbosity=2)")
 
-    return "\n".join(final_code_parts)
+    test_script: str = "\n".join(final_code_parts)
+    logger.trace(f"Composed LCB test script: {test_script}")
+    return test_script
 
 
 def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -> str:
