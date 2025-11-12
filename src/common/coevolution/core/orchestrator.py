@@ -225,7 +225,7 @@ class Orchestrator:
         This method handles the complete flow:
         1. Build test class block from dataset test cases
         2. Extract individual test methods
-        3. Create TestPopulation with fixed probability (0.99)
+        3. Create TestPopulation with fixed probability
 
         Used for creating public and private test populations from the dataset.
         These populations have fixed probability and are not evolved.
