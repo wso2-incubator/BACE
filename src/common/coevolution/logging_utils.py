@@ -43,7 +43,6 @@ def setup_logging(
     console_level: str = "INFO",
     file_level: str = "TRACE",
     log_file_base_name: str = "coevolution_run",
-    setup_gen_log: bool = True,
 ) -> None:
     """
     Configures Loguru handlers for console and file logging.
@@ -84,23 +83,12 @@ def setup_logging(
         "{name}:{function}:{line} - {message}"
     )
 
-    gen_log_format = (
-        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-        "[{extra[run_id]}:{extra[problem_id]}] | "
-        "{message}"
-    )
-
-    # Define a filter to exclude generation logs from the main log
-    def exclude_gen_logs(record: Any) -> bool:
-        return "GEN_LOG" not in record["extra"]
-
     # Add the console logger
     logger.add(
         sys.stderr,
         level=console_level.upper(),
         format=console_format,
         colorize=True,
-        filter=exclude_gen_logs,
     )
 
     # Add the file logger
@@ -113,25 +101,10 @@ def setup_logging(
         retention="10 days",
         compression="zip",
         enqueue=True,  # Makes logging safe for multiprocessing
-        filter=exclude_gen_logs,
     )
 
     # Configure the extra context BEFORE any logging that uses it
     logger.configure(extra=default_context)
-
-    if setup_gen_log:
-        gen_log_file = f"logs/generations/{log_file_base_name}_{{time:YYYYMMDD}}.log"
-        logger.add(
-            gen_log_file,
-            level="INFO",
-            filter=lambda record: "GEN_LOG" in record["extra"],
-            format=gen_log_format,
-            enqueue=True,
-            rotation="10 MB",
-            compression="zip",
-        )
-        logger.info(f"Added generation log sink: {gen_log_file}")
-
     logger.info(
         f"Logging configured. Console level: {console_level}, File level: {file_level}."
     )
@@ -165,7 +138,6 @@ def log_subsection_header(level: str, message: str) -> None:
 
 
 def log_generation_summary(
-    gen_logger: Any,
     code_population: "CodePopulation",
     test_population: "TestPopulation",
 ) -> None:
@@ -175,7 +147,6 @@ def log_generation_summary(
     reducing redundancy since individuals are logged once when their lifecycle ends.
 
     Args:
-        gen_logger: The logger bound with GEN_LOG=True for generation logging
         code_population: The current code population
         test_population: The current test population
     """
@@ -207,13 +178,11 @@ def log_generation_summary(
         "new_test_ids": new_test_ids,
     }
 
-    logger.debug(f"Logging generation {gen_num} summary to generation log.")
-    gen_logger.info(f"--- Generation {gen_num} Summary ---")
-    gen_logger.info(f"GEN_SUMMARY|{gen_num}|{json.dumps(summary)}")
+    log_subsection_header("INFO", f"--- Generation {gen_num} Summary ---")
+    logger.info(f"GEN_SUMMARY|{gen_num}|{json.dumps(summary)}")
 
 
 def log_individual_complete(
-    gen_logger: Any,
     individual: "CodeIndividual | TestIndividual",
     status: str,
 ) -> None:
@@ -240,12 +209,11 @@ def log_individual_complete(
     record["status"] = status
 
     # Log with structured format for easy parsing
-    gen_logger.info(f"INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}")
+    logger.info(f"INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}")
     logger.debug(f"Logged complete record for {individual.id} with status {status}")
 
 
 def log_final_survivors(
-    gen_logger: Any,
     code_population: "CodePopulation",
     test_population: "TestPopulation",
 ) -> None:
@@ -258,20 +226,17 @@ def log_final_survivors(
         code_population: The final code population
         test_population: The final test population
     """
-    logger.info("Logging final survivors to generation log...")
-    gen_logger.info("=" * 80)
-    gen_logger.info("--- FINAL SURVIVORS ---")
-    gen_logger.info("=" * 80)
+    log_section_header("INFO", "Final Survivors")
 
     logger.debug(f"Logging {len(code_population)} code survivors")
     code_ind: "CodeIndividual"
     for code_ind in code_population:
-        log_individual_complete(gen_logger, code_ind, "SURVIVED")
+        log_individual_complete(code_ind, "SURVIVED")
 
     logger.debug(f"Logging {len(test_population)} test survivors")
     test_ind: "TestIndividual"
     for test_ind in test_population:
-        log_individual_complete(gen_logger, test_ind, "SURVIVED")
+        log_individual_complete(test_ind, "SURVIVED")
 
     logger.info(
         f"Logged {len(code_population)} code and {len(test_population)} test survivors"

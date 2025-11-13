@@ -153,7 +153,6 @@ class Orchestrator:
             initial_prior=self.test_pop_config.initial_prior,
         )
 
-        self.gen_logger = logging_utils.get_generation_logger()
         self._set_random_seed(evo_config.random_seed)
 
     def _set_random_seed(self, seed: int) -> None:
@@ -369,7 +368,7 @@ class Orchestrator:
             for ind in population:
                 if ind.id in removed_ids:
                     # Log complete lifecycle record BEFORE notifying
-                    logging_utils.log_individual_complete(self.gen_logger, ind, "DIED")
+                    logging_utils.log_individual_complete(ind, "DIED")
                     # Then notify the individual
                     ind.notify_died(generation=population.generation)
 
@@ -546,9 +545,7 @@ class Orchestrator:
             priv_obs_matrix, code_population, private_test_population, "private"
         )
 
-        logging_utils.log_generation_summary(
-            self.gen_logger, code_population, test_population
-        )
+        logging_utils.log_generation_summary(code_population, test_population)
 
         # --- Main Evolution Loop ---
         for gen in range(self.evo_config.num_generations):
@@ -633,9 +630,7 @@ class Orchestrator:
             self._notify_removed_individuals(test_population, new_test_gen)
             test_population.set_next_generation(new_test_gen)
 
-            logging_utils.log_generation_summary(
-                self.gen_logger, code_population, test_population
-            )
+            logging_utils.log_generation_summary(code_population, test_population)
 
         gen_exec_results, gen_obs_matrix = self._get_exec_results_and_obs_matrix(
             code_population, test_population
@@ -660,9 +655,7 @@ class Orchestrator:
         )
 
         # After evolution loop completes, log all final survivors
-        logging_utils.log_final_survivors(
-            self.gen_logger, code_population, test_population
-        )
+        logging_utils.log_final_survivors(code_population, test_population)
 
         logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
 
