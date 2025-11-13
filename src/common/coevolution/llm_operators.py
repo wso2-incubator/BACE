@@ -20,7 +20,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from ..code_preprocessing import analysis, extraction, transformation
+from ..code_preprocessing import CodeParsingError, analysis, extraction, transformation
 from .core.interfaces import ICodeOperator, ITestOperator, Problem
 
 
@@ -166,7 +166,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def create_initial_snippets(self, population_size: int) -> list[str]:
@@ -219,7 +219,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def crossover(self, parent1: str, parent2: str) -> str:
@@ -271,7 +271,7 @@ Return the new combined code in a python code block."""
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def mutate(self, individual: str) -> str:
@@ -311,7 +311,7 @@ Return the modified code in a python code block."""
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def edit(self, individual: str, feedback: str) -> str:
@@ -377,7 +377,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
@@ -421,7 +421,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def crossover(self, parent1: str, parent2: str) -> str:
@@ -466,7 +466,7 @@ Return only the new test method code in a python code block."""
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def mutate(self, individual: str) -> str:
@@ -504,7 +504,7 @@ Return only the test method code in a python code block."""
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(ValueError),
+        retry=retry_if_exception_type((ValueError, CodeParsingError)),
         reraise=True,
     )
     def edit(self, individual: str, feedback: str) -> str:
