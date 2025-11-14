@@ -138,6 +138,9 @@ class ParetoSystem(IPareto):
         # Stack objectives into (n_points, 2) array for maximization
         objectives = np.column_stack((probabilities, discriminations))
 
+        # Round objectives to 4 decimal places for comparison
+        objectives = np.round(objectives, 4)
+
         num_points = objectives.shape[0]
         candidate_indices = np.arange(num_points)
         current_objectives = objectives.copy()
