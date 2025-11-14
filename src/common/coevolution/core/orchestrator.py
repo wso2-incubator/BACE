@@ -128,8 +128,11 @@ class Orchestrator:
         self.code_prob_assigner = code_prob_assigner
         self.test_prob_assigner = test_prob_assigner
         self.execution_system = execution_system
+
+        # TODO: These can be the same instance, no need to have two
         self.code_bayesian_system = code_bayesian_system
         self.test_bayesian_system = test_bayesian_system
+
         self.pareto = pareto
         self.test_block_rebuilder = test_block_rebuilder
         self.code_feedback_gen = code_feedback_gen
@@ -269,44 +272,6 @@ class Orchestrator:
             f"(probability={FIXED_TEST_PROBABILITY})"
         )
         return test_population
-
-    def _compute_posterior_beliefs(
-        self,
-        code_probabilities: np.ndarray,
-        gen_test_probabilities: np.ndarray,
-        public_test_probabilities: np.ndarray,
-        gen_obs_matrix: np.ndarray,
-        pub_obs_matrix: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Helper to update beliefs for code and generated tests.
-        """
-
-        logger.debug("Updating code beliefs based on public tests...")
-        code_posterior_on_public = self.code_bayesian_system.update_code_beliefs(
-            prior_code_probs=code_probabilities,
-            prior_test_probs=public_test_probabilities,
-            observation_matrix=pub_obs_matrix,
-            config=self.bayesian_config,
-        )
-
-        logger.debug("Updating generated test beliefs based on updated code...")
-        test_posterior = self.test_bayesian_system.update_test_beliefs(
-            prior_code_probs=code_posterior_on_public,
-            prior_test_probs=gen_test_probabilities,
-            observation_matrix=gen_obs_matrix,
-            config=self.bayesian_config,
-        )
-
-        logger.debug("Updating code beliefs based on generated tests...")
-        code_posterior_on_generated = self.code_bayesian_system.update_code_beliefs(
-            prior_code_probs=code_posterior_on_public,
-            prior_test_probs=test_posterior,
-            observation_matrix=gen_obs_matrix,
-            config=self.bayesian_config,
-        )
-
-        return code_posterior_on_generated, test_posterior
 
     def _select_elites(
         self,
@@ -572,16 +537,37 @@ class Orchestrator:
 
             # --- Step 2: Update Beliefs ---
             logger.debug("Step 2: Updating beliefs...")
-            # 2a. Compute Posterior Beliefs
-            code_posterior, test_posterior = self._compute_posterior_beliefs(
-                code_population.probabilities,
-                test_population.probabilities,
-                public_test_population.probabilities,
-                gen_obs_matrix,
-                pub_obs_matrix,
+            # 2a. Compute Code Posterior Beliefs on Public Tests and Update
+            logger.debug("Updating code beliefs based on public tests...")
+            code_posterior_on_public = self.code_bayesian_system.update_code_beliefs(
+                prior_code_probs=code_population.probabilities,
+                prior_test_probs=public_test_population.probabilities,
+                observation_matrix=pub_obs_matrix,
+                config=self.bayesian_config,
             )
-            code_population.update_probabilities(code_posterior)
+
+            code_population.update_probabilities(code_posterior_on_public)
+
+            # 2b. Compute Generated Test Posterior Beliefs and Update
+            logger.debug("Updating test beliefs based on generated tests...")
+            test_posterior = self.test_bayesian_system.update_test_beliefs(
+                prior_code_probs=code_population.probabilities,
+                prior_test_probs=test_population.probabilities,
+                observation_matrix=gen_obs_matrix,
+                config=self.bayesian_config,
+            )
+
             test_population.update_probabilities(test_posterior)
+            # 2c. Compute Code Posterior Beliefs on Generated Tests and Update
+            logger.debug("Updating code beliefs based on generated tests...")
+            code_posterior_on_generated = self.code_bayesian_system.update_code_beliefs(
+                prior_code_probs=code_population.probabilities,
+                prior_test_probs=test_population.probabilities,
+                observation_matrix=gen_obs_matrix,
+                config=self.bayesian_config,
+            )
+
+            code_population.update_probabilities(code_posterior_on_generated)
 
             # --- Step 3: Select Elites ---
             logger.debug("Step 3: Selecting elites...")
