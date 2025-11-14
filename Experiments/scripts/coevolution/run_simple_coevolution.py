@@ -114,7 +114,7 @@ def main(
         test_prob_assigner = ProbabilityAssigner("mean")
 
         # Execution System
-        execution_system = ExecutionSystem(enable_multiprocessing=True)
+        execution_system = ExecutionSystem(enable_multiprocessing=True, num_workers=12)
 
         # Bayesian Systems (same implementation for code and test)
         code_bayesian_system = BayesianSystem()
@@ -146,12 +146,12 @@ def main(
             .with_evolution_config(
                 num_generations=5,  # Small number for quick testing
                 random_seed=42,
-                max_workers=10,
+                max_workers=12,
             )
             # Code population configuration
             .with_code_population_config(
                 initial_prior=0.5,
-                initial_population_size=10,  # Small for quick testing
+                initial_population_size=10,
                 max_population_size=15,
                 elitism_rate=0.5,
                 offspring_rate=0.5,
@@ -159,19 +159,19 @@ def main(
             # Test population configuration
             .with_test_population_config(
                 initial_prior=0.3,
-                initial_population_size=20,  # Small for quick testing
+                initial_population_size=20,
             )
             # Code operator rates
             .with_code_operator_rates(
-                crossover_rate=0.2,
+                crossover_rate=1.0,
                 mutation_rate=0.1,
-                edit_rate=0.7,
+                edit_rate=0.0,
             )
             # Test operator rates
             .with_test_operator_rates(
-                crossover_rate=0.3,
+                crossover_rate=1.0,
                 mutation_rate=0.1,
-                edit_rate=0.7,
+                edit_rate=0.0,
             )
             # Bayesian configuration
             .with_bayesian_config(
