@@ -101,6 +101,7 @@ def setup_logging(
         retention="10 days",
         compression="zip",
         enqueue=True,  # Makes logging safe for multiprocessing
+        serialize=True,  # JSON format for easier parsing
     )
 
     # Configure the extra context BEFORE any logging that uses it
@@ -209,7 +210,7 @@ def log_individual_complete(
     record["status"] = status
 
     # Log with structured format for easy parsing
-    logger.info(f"INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}")
+    logger.trace(f"INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}")
     logger.debug(f"Logged complete record for {individual.id} with status {status}")
 
 
@@ -548,6 +549,7 @@ def log_observation_matrix(
     # 3. Log the entire pre-formatted string.
     #    Add a newline to ensure it starts on its own line.
     logger.debug(f"\n{df.to_string()}")
+    logger.trace(f"{test_type.upper()} serialized | {df.to_json()}")
 
     # --- End New Method ---
 
