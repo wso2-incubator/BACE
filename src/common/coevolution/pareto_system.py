@@ -138,9 +138,6 @@ class ParetoSystem(IPareto):
         # Stack objectives into (n_points, 2) array for maximization
         objectives = np.column_stack((probabilities, discriminations))
 
-        # Round objectives to 4 decimal places for comparison
-        objectives = np.round(objectives, 4)
-
         num_points = objectives.shape[0]
         candidate_indices = np.arange(num_points)
         current_objectives = objectives.copy()
@@ -186,6 +183,65 @@ class ParetoSystem(IPareto):
         return [int(idx) for idx in candidate_indices]
 
     @staticmethod
+    def filter_by_diversity(
+        selected_indices: list[int],
+        probabilities: np.ndarray,
+        discriminations: np.ndarray,
+        observation_matrix: np.ndarray,
+    ) -> list[int]:
+        """
+        Filters selected individuals to ensure diversity based on minimum distance.
+
+        Args:
+            selected_indices: List of integer indices for selected individuals.
+            probabilities: 1D array of probabilities for all individuals.
+            discriminations: 1D array of discriminations for all individuals.
+            observation_matrix: 2D array of test results for all individuals.
+        Returns:
+            A filtered list of integer indices ensuring diversity.
+        """
+
+        def _duplicate_check(idx1: int, idx2: int) -> bool:
+            """Checks if two individuals are duplicates based on objectives and results."""
+            if (
+                probabilities[idx1] == probabilities[idx2]
+                and discriminations[idx1] == discriminations[idx2]
+                and np.array_equal(
+                    observation_matrix[:, idx1], observation_matrix[:, idx2]
+                )
+            ):
+                return True
+            return False
+
+        filtered_indices: list[int] = []
+
+        # Sort selected_indices to ensure a deterministic outcome
+        # (though not strictly necessary, it's good practice).
+        for idx in sorted(selected_indices):
+            is_duplicate = False
+
+            # Check if this individual is a duplicate of one we've *already added*
+            for existing_idx in filtered_indices:
+                if _duplicate_check(idx, existing_idx):
+                    is_duplicate = True
+                    break  # It's a duplicate, stop checking
+
+            if not is_duplicate:
+                # This is the first one of its kind we've seen
+                filtered_indices.append(idx)
+
+        # Log the change
+        if len(selected_indices) != len(filtered_indices):
+            logger.debug(
+                f"Diversity filtering reduced {len(selected_indices)} indices "
+                f"to {len(filtered_indices)} (removed exact duplicates)."
+            )
+        else:
+            logger.debug("Diversity filtering found no exact duplicates.")
+
+        return filtered_indices
+
+    @staticmethod
     def get_pareto_indices(
         probabilities: np.ndarray, observation_matrix: np.ndarray
     ) -> list[int]:
@@ -227,9 +283,17 @@ class ParetoSystem(IPareto):
         # Calculate discrimination scores
         discriminations = ParetoSystem.calculate_discrimination(observation_matrix)
 
+        logger.debug("Rounding probabilities and discriminations to 4 decimal places")
+        discriminations = np.round(discriminations, 4)
+        probabilities = np.round(probabilities, 4)
+
         # Calculate Pareto front
         pareto_indices = ParetoSystem.calculate_pareto_front(
             probabilities, discriminations
+        )
+
+        pareto_indices = ParetoSystem.filter_by_diversity(
+            pareto_indices, probabilities, discriminations, observation_matrix
         )
 
         logger.info(

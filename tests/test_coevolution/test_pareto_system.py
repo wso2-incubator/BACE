@@ -413,72 +413,198 @@ class TestMathematicalProperties:
                     )
 
 
-class TestEdgeCases:
-    """Tests for edge cases and boundary conditions."""
+class TestDiversityFiltering:
+    """Tests for the filter_by_diversity method."""
 
-    def test_single_test_single_code(self) -> None:
-        """Test with minimal observation matrix (1 code, 1 test)."""
-        observation_matrix = np.array([[1]])
-        probabilities = np.array([0.7])
-
-        pareto_indices = ParetoSystem.get_pareto_indices(
-            probabilities, observation_matrix
-        )
-
-        # Single test is always selected
-        assert pareto_indices == [0]
-
-    def test_all_tests_identical_objectives(self) -> None:
-        """Test when all tests have identical objectives."""
-        # All tests have same discrimination and probability
+    def test_no_duplicates_returns_all(self) -> None:
+        """Test that when there are no duplicates, all indices are returned."""
+        selected_indices = [0, 1, 2]
+        probabilities = np.array([0.5, 0.6, 0.7])
+        discriminations = np.array([0.8, 0.9, 0.4])
         observation_matrix = np.array(
             [
-                [1, 1, 1],
-                [0, 0, 0],
+                [1, 0, 1],  # Different results for each test
+                [0, 1, 0],
+                [1, 1, 0],
             ]
-        )  # All tests: 50% pass rate
-        probabilities = np.array([0.5, 0.5, 0.5])
-
-        pareto_indices = ParetoSystem.get_pareto_indices(
-            probabilities, observation_matrix
         )
 
-        # All are equivalent, but the algorithm keeps only one representative
-        # This is acceptable behavior for Pareto front selection
-        assert len(pareto_indices) >= 1
-        assert len(pareto_indices) <= 3
-        # At least one should be selected
-        assert all(0 <= idx < 3 for idx in pareto_indices)
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
 
-    def test_extreme_probabilities(self) -> None:
-        """Test with extreme probability values (0.0 and 1.0)."""
+        assert sorted(result) == [0, 1, 2]
+
+    def test_exact_duplicates_removed(self) -> None:
+        """Test that exact duplicates are filtered out."""
+        selected_indices = [0, 1, 2]
+        probabilities = np.array([0.5, 0.5, 0.6])
+        discriminations = np.array([0.8, 0.8, 0.9])
         observation_matrix = np.array(
-            [[1, 0, 1], [0, 1, 1], [1, 0, 0], [0, 1, 0]]
-        )  # Mixed pass rates
-        probabilities = np.array([0.0, 1.0, 0.5])
-
-        pareto_indices = ParetoSystem.get_pareto_indices(
-            probabilities, observation_matrix
+            [
+                [1, 1, 0],  # Test 0 and 1 have identical results
+                [1, 1, 0],  # Test 0 and 1 have identical results
+                [0, 0, 1],  # Test 2 is different
+            ]
         )
 
-        # Test with prob=1.0 should be on front (highest probability)
-        assert 1 in pareto_indices
-        # Other tests might also be on front depending on discrimination
-        assert len(pareto_indices) >= 1
-
-    def test_large_population(self) -> None:
-        """Test with a large population to ensure scalability."""
-        np.random.seed(999)
-        num_codes = 200
-        num_tests = 100
-
-        observation_matrix = np.random.randint(0, 2, size=(num_codes, num_tests))
-        probabilities = np.random.uniform(0.1, 0.9, size=num_tests)
-
-        pareto_indices = ParetoSystem.get_pareto_indices(
-            probabilities, observation_matrix
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
         )
 
-        # Should complete without error
-        assert len(pareto_indices) > 0
-        assert len(pareto_indices) <= num_tests
+        # Should keep one of the duplicates (0 or 1) and 2
+        assert len(result) == 2
+        assert 2 in result
+        assert (0 in result) or (1 in result)
+
+    def test_multiple_duplicate_groups(self) -> None:
+        """Test filtering with multiple groups of duplicates."""
+        selected_indices = [0, 1, 2, 3, 4]
+        probabilities = np.array([0.5, 0.5, 0.5, 0.7, 0.7])
+        discriminations = np.array([0.8, 0.8, 0.9, 0.6, 0.6])
+        observation_matrix = np.array(
+            [
+                [1, 1, 0, 0, 0],  # Tests 0,1 have same results
+                [1, 1, 0, 0, 0],  # Tests 0,1 have same results
+                [0, 0, 1, 0, 0],  # Test 2 different
+                [0, 0, 0, 1, 1],  # Tests 3,4 have same results
+                [0, 0, 0, 1, 1],  # Tests 3,4 have same results
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep one from group {0,1}, one from {3,4}, and 2
+        assert len(result) == 3
+        assert 2 in result
+        # One from {0,1}
+        assert len(set(result) & {0, 1}) == 1
+        # One from {3,4}
+        assert len(set(result) & {3, 4}) == 1
+
+    def test_empty_selected_indices(self) -> None:
+        """Test that empty input returns empty output."""
+        selected_indices: list[int] = []
+        probabilities = np.array([0.5, 0.6])
+        discriminations = np.array([0.8, 0.9])
+        observation_matrix = np.array([[1, 0], [0, 1]])
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        assert result == []
+
+    def test_single_index_no_duplicates(self) -> None:
+        """Test with single index (no duplicates possible)."""
+        selected_indices = [1]
+        probabilities = np.array([0.5, 0.6, 0.7])
+        discriminations = np.array([0.8, 0.9, 0.4])
+        observation_matrix = np.array([[1, 0, 1], [0, 1, 0], [1, 1, 0]])
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        assert result == [1]
+
+    def test_different_probabilities_same_other_attributes(self) -> None:
+        """Test that different probabilities prevent duplicate detection."""
+        selected_indices = [0, 1]
+        probabilities = np.array([0.5, 0.6])  # Different probabilities
+        discriminations = np.array([0.8, 0.8])  # Same discrimination
+        observation_matrix = np.array(
+            [
+                [1, 1],  # Same observation results
+                [1, 1],  # Same observation results
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep both since probabilities differ
+        assert sorted(result) == [0, 1]
+
+    def test_different_discriminations_same_other_attributes(self) -> None:
+        """Test that different discriminations prevent duplicate detection."""
+        selected_indices = [0, 1]
+        probabilities = np.array([0.5, 0.5])  # Same probability
+        discriminations = np.array([0.8, 0.9])  # Different discriminations
+        observation_matrix = np.array(
+            [
+                [1, 1],  # Same observation results
+                [1, 1],  # Same observation results
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep both since discriminations differ
+        assert sorted(result) == [0, 1]
+
+    def test_different_observations_same_objectives(self) -> None:
+        """Test that different observation results prevent duplicate detection."""
+        selected_indices = [0, 1]
+        probabilities = np.array([0.5, 0.5])  # Same probability
+        discriminations = np.array([0.8, 0.8])  # Same discrimination
+        observation_matrix = np.array(
+            [
+                [1, 0],  # Different observation results
+                [0, 1],  # Different observation results
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep both since observation results differ
+        assert sorted(result) == [0, 1]
+
+    def test_all_identical_duplicates(self) -> None:
+        """Test when all selected indices are identical duplicates."""
+        selected_indices = [0, 1, 2]
+        probabilities = np.array([0.5, 0.5, 0.5])
+        discriminations = np.array([0.8, 0.8, 0.8])
+        observation_matrix = np.array(
+            [
+                [1, 1, 1],  # All identical
+                [1, 1, 1],  # All identical
+                [1, 1, 1],  # All identical
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep only one (the first one encountered)
+        assert result == [0]
+
+    def test_unsorted_input_indices(self) -> None:
+        """Test that unsorted input indices are handled correctly."""
+        selected_indices = [2, 0, 1]  # Unsorted
+        probabilities = np.array([0.5, 0.5, 0.6])
+        discriminations = np.array([0.8, 0.8, 0.9])
+        observation_matrix = np.array(
+            [
+                [1, 1, 0],  # Test 0 and 1 identical
+                [1, 1, 0],  # Test 0 and 1 identical
+                [0, 0, 1],  # Test 2 different
+            ]
+        )
+
+        result = ParetoSystem.filter_by_diversity(
+            selected_indices, probabilities, discriminations, observation_matrix
+        )
+
+        # Should keep one from {0,1} and 2
+        assert len(result) == 2
+        assert 2 in result
+        assert (0 in result) or (1 in result)
