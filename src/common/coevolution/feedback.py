@@ -151,9 +151,11 @@ class CodeFeedbackGenerator(IFeedbackGenerator[TestIndividual]):
                 f"Code {individual_idx}: Script error detected, providing syntax feedback"
             )
             return (
-                "This code has syntax errors or import failures that prevented tests "
+                "This code may have syntax errors that prevented tests "
                 "from running. Fix the basic code structure and syntax before "
                 "addressing test failures."
+                "Another possibility is that the code is inefficient and caused a timeout."
+                "Optimization is needed to execute within time limits."
             )
 
         # Then check if all tests passed
