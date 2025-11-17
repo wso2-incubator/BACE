@@ -88,7 +88,7 @@ The solution code is imported in the format:
 - Pay special attention to edge cases as they often reveal hidden bugs.
 - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
 
-- The format of test cases should be in Python unittest framework. Do not use the examples given in the problem. You should write {population_size} distinct test cases.
+- The format of test cases should be in Python unittest framework in a python code block. Do not use the examples given in the problem. You should write {population_size} distinct test cases. 
 """
 
 
