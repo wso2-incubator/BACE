@@ -22,6 +22,16 @@ from tenacity import (
 
 from ..code_preprocessing import CodeParsingError, analysis, extraction, transformation
 from .core.interfaces import ICodeOperator, ITestOperator, Problem
+from .prompt_templates import (
+    CROSSOVER_CODE,
+    CROSSOVER_TEST,
+    EDIT_CODE,
+    EDIT_TEST,
+    INITIAL_CODE,
+    INITIAL_TEST_AGENT_CODER_STYLE,
+    MUTATE_CODE,
+    MUTATE_TEST,
+)
 
 
 class ILanguageModel(Protocol):
@@ -185,11 +195,10 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             ValueError: If after retries, still can't generate valid snippets
         """
 
-        prompt: str = (
-            f"Write {population_size} distinct solutions to solve the following problem:\n\n"
-            + f"{self.problem.question_content}\n\n"
-            + f"Starter Code:\n```python\n{self.problem.starter_code}\n```\n\n"
-            + "Each solution should be in a separate Python code block."
+        prompt: str = INITIAL_CODE.format(
+            population_size=population_size,
+            question_content=self.problem.question_content,
+            starter_code=self.problem.starter_code,
         )
 
         response: str = self._generate(prompt)
@@ -234,28 +243,11 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             New child code snippet resulting from crossover
         """
         logger.debug("Performing crossover between two parent code snippets")
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-And these two code solutions:
-
-Solution 1:
-```python
-{parent1}
-```
-
-Solution 2:
-```python
-{parent2}
-```
-
-Create a new solution that intelligently combines the best aspects of both solutions.
-Consider combining:
-- Better algorithms from either solution
-- More efficient data structures
-- Clearer variable names or logic flow
-
-Return the new combined code in a python code block."""
+        prompt = CROSSOVER_CODE.format(
+            question_content=self.problem.question_content,
+            parent1=parent1,
+            parent2=parent2,
+        )
 
         response = self._generate(prompt)
         child_code = self._extract_code_block(response)
@@ -285,20 +277,10 @@ Return the new combined code in a python code block."""
             New mutated code snippet
         """
         logger.debug("Performing mutation on individual code snippet")
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-And this code solution:
-```python
-{individual}
-```
-
-Generate a modified version of the code that:
-1. Maintains the same functionality
-2. Explores a different algorithmic approach or implementation style
-3. Could potentially be more efficient or clearer
-
-Return the modified code in a python code block."""
+        prompt = MUTATE_CODE.format(
+            question_content=self.problem.question_content,
+            individual=individual,
+        )
         response = self._generate(prompt)
         mutated_code = self._extract_code_block(response)
         if not self._contains_starter_code(mutated_code):
@@ -326,19 +308,11 @@ Return the modified code in a python code block."""
             New edited code snippet
         """
         logger.debug("Performing edit on individual code snippet based on feedback")
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-This code solution:
-```python
-{individual}
-```
-
-And this error/feedback:
-{feedback}
-
-Fix the code to address the error while maintaining the overall approach.
-Return the fixed code in a python code block."""
+        prompt = EDIT_CODE.format(
+            question_content=self.problem.question_content,
+            individual=individual,
+            feedback=feedback,
+        )
         response = self._generate(prompt)
         edited_code = self._extract_code_block(response)
         if not self._contains_starter_code(edited_code):
@@ -395,11 +369,10 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         Raises:
             ValueError: If after retries, still can't generate valid test snippets
         """
-        prompt: str = (
-            f"Write {population_size} distinct unit tests in a Python code block for the following problem:"
-            + f"\n{self.problem.question_content}"
-            + f"\nThe solution is imported in the format:\n```python\n{self.problem.starter_code}```"
-            + "\nWrite the tests using unittest framework. Do not use the examples given in the problem."
+        prompt: str = INITIAL_TEST_AGENT_CODER_STYLE.format(
+            population_size=population_size,
+            question_content=self.problem.question_content,
+            starter_code=self.problem.starter_code,
         )
 
         response: str = self._generate(prompt)
@@ -438,24 +411,11 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         Raises:
             ValueError: If after retries, still can't generate valid test snippet
         """
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-And these two test cases:
-
-Test 1:
-```python
-{parent1}
-```
-
-Test 2:
-```python
-{parent2}
-```
-
-Summarize test 1 and test 2, then create a new test case. 
-
-Return only the new test method code in a python code block."""
+        prompt = CROSSOVER_TEST.format(
+            question_content=self.problem.question_content,
+            parent1=parent1,
+            parent2=parent2,
+        )
 
         response = self._generate(prompt)
         child_test = self._extract_code_block(response)
@@ -482,18 +442,9 @@ Return only the new test method code in a python code block."""
         Raises:
             ValueError: If after retries, still can't generate valid test snippet
         """
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-And this test case:
-```python
-{individual}
-```
-
-Generate a modified test case that tests different edge cases or scenarios.
-Ensure it remains a valid unittest test case and contains only a single assertion.
-
-Return only the test method code in a python code block."""
+        prompt = MUTATE_TEST.format(
+            question_content=self.problem.question_content, individual=individual
+        )
 
         response = self._generate(prompt)
         mutated_test = self._extract_code_block(response)
@@ -521,19 +472,11 @@ Return only the test method code in a python code block."""
         Raises:
             ValueError: If after retries, still can't generate valid test snippet
         """
-        prompt = f"""Given this programming problem:
-{self.problem.question_content}
-
-This test case:
-```python
-{individual}
-```
-
-And this feedback:
-{feedback}
-
-Summarize the feedback and provide a single new test case method that can help identify these issues.
-Only return the new test code in a python code block"""
+        prompt = EDIT_TEST.format(
+            question_content=self.problem.question_content,
+            individual=individual,
+            feedback=feedback,
+        )
 
         response = self._generate(prompt)
         edited_test = self._extract_code_block(response)
