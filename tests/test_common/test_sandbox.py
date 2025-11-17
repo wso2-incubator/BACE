@@ -8,9 +8,13 @@ enhanced error categorization features.
 import pytest
 
 from common.sandbox import (
+    BasicExecutionResult,
+    PytestXmlAnalyzer,
     SafeCodeSandbox,
+    TestExecutor,
     check_test_execution_status,
     create_safe_test_environment,
+    create_test_executor,
 )
 
 
@@ -126,24 +130,24 @@ print(f"Sorted: {sorted_array}")
     def test_test_script_execution(self) -> None:
         """Test executing test scripts."""
         test_script = """
-def test_addition():
+def addition():
     assert 2 + 2 == 4
     assert 1 + 1 == 2
     print("Addition tests passed!")
 
-def test_multiplication():
+def multiplication():
     assert 2 * 3 == 6
     assert 5 * 0 == 0
     print("Multiplication tests passed!")
 
 # Run tests
-test_addition()
-test_multiplication()
+addition()
+multiplication()
 print("All tests completed!")
 """
         result = self.sandbox.execute_test_script(test_script)
         # Note: execute_test_script returns TestExecutionResult, not BasicExecutionResult
-        # This script doesn't use unittest, so it won't be parsed as tests
+        # This script doesn't use unittest/pytest conventions, so it won't be parsed as tests
         assert result.summary == "No tests were found or executed"
         assert result.total_tests == 0
 
@@ -155,7 +159,7 @@ class TestCreateSafeTestEnvironment:
         """Test creating a safe test environment."""
         sandbox = create_safe_test_environment()
         assert isinstance(sandbox, SafeCodeSandbox)
-        assert sandbox.timeout == 120  # Current default timeout
+        assert sandbox.timeout == 30  # Current default timeout
         assert sandbox.max_memory_mb == 100
 
         # Test that it can execute code
@@ -223,8 +227,10 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
-        assert result.script_error is True
-        assert "import" in result.summary.lower() or "module" in result.summary.lower()
+        # With pytest, import errors during collection are treated as test errors, not script errors
+        assert result.script_error is False
+        assert result.has_failures is True
+        assert result.tests_errors == 1
         assert result.tests_passed == 0
         assert result.tests_failed == 0
 
@@ -358,7 +364,7 @@ class TestExample(unittest.TestCase):
     def test_with_error(self):
         # This will cause an error, not a failure
         x = 1 / 0
-    
+
     def test_passing(self):
         self.assertTrue(True)
 
@@ -367,12 +373,13 @@ if __name__ == '__main__':
 """
 
         result = sandbox.execute_test_script(script)
+        # With pytest, exceptions during test execution are treated as failures
         assert result.has_failures is True
         assert result.script_error is False
         assert result.total_tests == 2
         assert result.tests_passed == 1
-        assert result.tests_failed == 0
-        assert result.tests_errors == 1
+        assert result.tests_failed == 1  # ZeroDivisionError is treated as a failure
+        assert result.tests_errors == 0
 
     def test_check_test_execution_status_helper(self) -> None:
         """Test the helper function for checking test execution status."""
@@ -430,7 +437,8 @@ if __name__ == '__main__':
         result = sandbox.execute_test_script(error_script)
         status_info = check_test_execution_status(result)
 
-        assert "SCRIPT ERROR" in status_info
+        # With pytest, import errors are treated as test errors, not script errors
+        assert "TESTS FAILED" in status_info
 
     def test_verbose_unittest_output(self) -> None:
         """Test parsing of verbose unittest output."""
@@ -493,7 +501,343 @@ import unittest
         assert result.script_error is False or "no tests" in result.summary.lower()
 
 
-if __name__ == "__main__":
-    pytest.main([__file__])
+class TestPytestXmlAnalyzer:
+    """Test cases for the new PytestXmlAnalyzer."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.analyzer = PytestXmlAnalyzer()
+
+    def test_analyze_pytest_xml_success(self) -> None:
+        """Test XML analysis for successful test execution."""
+        # Mock XML content for successful tests
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+    <testsuite name="test_module" tests="2" failures="0" errors="0" skipped="0">
+        <testcase name="test_one" classname="TestClass" time="0.001">
+        </testcase>
+        <testcase name="test_two" classname="TestClass" time="0.001">
+        </testcase>
+    </testsuite>
+</testsuites>"""
+
+        basic_result = BasicExecutionResult(
+            success=True,
+            output="",
+            error="",
+            execution_time=0.1,
+            timeout=False,
+            return_code=0,
+        )
+
+        result = self.analyzer.analyze_pytest_xml(xml_content, basic_result)
+
+        assert result.script_error is False
+        assert result.all_tests_passed is True
+        assert result.total_tests == 2
+        assert result.tests_passed == 2
+        assert result.tests_failed == 0
+        assert result.tests_errors == 0
+
+    def test_analyze_pytest_xml_with_failures(self) -> None:
+        """Test XML analysis for tests with failures."""
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+    <testsuite name="test_module" tests="3" failures="1" errors="1" skipped="0">
+        <testcase name="test_pass" classname="TestClass" time="0.001">
+        </testcase>
+        <testcase name="test_fail" classname="TestClass" time="0.001">
+            <failure message="AssertionError">Test failed</failure>
+        </testcase>
+        <testcase name="test_error" classname="TestClass" time="0.001">
+            <error message="ValueError">Test error</error>
+        </testcase>
+    </testsuite>
+</testsuites>"""
+
+        basic_result = BasicExecutionResult(
+            success=False,
+            output="",
+            error="",
+            execution_time=0.1,
+            timeout=False,
+            return_code=1,
+        )
+
+        result = self.analyzer.analyze_pytest_xml(xml_content, basic_result)
+
+        assert result.script_error is False
+        assert result.has_failures is True
+        assert result.total_tests == 3
+        assert result.tests_passed == 1
+        assert result.tests_failed == 1
+        assert result.tests_errors == 1
+
+    def test_analyze_pytest_xml_script_error(self) -> None:
+        """Test XML analysis fallback for script errors."""
+        # No XML content (script error)
+        basic_result = BasicExecutionResult(
+            success=False,
+            output="",
+            error="SyntaxError: invalid syntax",
+            execution_time=0.1,
+            timeout=False,
+            return_code=1,
+        )
+
+        result = self.analyzer.analyze_pytest_xml(None, basic_result)
+
+        assert result.script_error is True
+        assert "syntax" in result.summary.lower()
+        assert result.total_tests == 0
+
+
+class TestTestExecutor:
+    """Test cases for the new TestExecutor class."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.executor = TestExecutor()
+
+    def test_executor_creation(self) -> None:
+        """Test TestExecutor creation and configuration."""
+        assert isinstance(self.executor, TestExecutor)
+        assert isinstance(self.executor.sandbox, SafeCodeSandbox)
+        assert isinstance(self.executor.analyzer, PytestXmlAnalyzer)
+
+    def test_executor_execute_test_script(self) -> None:
+        """Test TestExecutor.execute_test_script method."""
+        test_script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_simple(self):
+        self.assertEqual(1, 1)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = self.executor.execute_test_script(test_script)
+
+        assert result.script_error is False
+        assert result.all_tests_passed is True
+        assert result.total_tests == 1
+        assert result.tests_passed == 1
+
+    def test_executor_execute_code(self) -> None:
+        """Test TestExecutor.execute_code method (delegates to sandbox)."""
+        code = "print('Hello from executor!')"
+        result = self.executor.execute_code(code)
+
+        assert result.success
+        assert "Hello from executor!" in result.output
+
+    def test_create_test_executor_function(self) -> None:
+        """Test the create_test_executor factory function."""
+        executor = create_test_executor()
+        assert isinstance(executor, TestExecutor)
+        assert isinstance(executor.sandbox, SafeCodeSandbox)
+
+
+class TestSandboxPytestIntegration:
+    """Test cases specifically for pytest/XML integration."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.sandbox = SafeCodeSandbox()
+
+    def test_pytest_discovers_test_functions(self) -> None:
+        """Test that pytest discovers functions starting with 'test_'."""
+        script = """
+def test_addition():
+    assert 2 + 2 == 4
+
+def test_multiplication():
+    assert 3 * 3 == 9
+
+def regular_function():
+    return "not a test"
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        # pytest should discover and run the test_ functions
+        assert result.total_tests == 2
+        assert result.tests_passed == 2
+        assert result.all_tests_passed is True
+
+    def test_pytest_handles_assertions(self) -> None:
+        """Test that pytest handles assertion failures correctly."""
+        script = """
+def test_passing():
+    assert 1 == 1
+
+def test_failing():
+    assert 1 == 2, "This should fail"
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        assert result.has_failures is True
+        assert result.total_tests == 2
+        assert result.tests_passed == 1
+        assert result.tests_failed == 1
+
+    def test_pytest_syntax_error_detection(self) -> None:
+        """Test that syntax errors are detected as script errors."""
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_something(self):
+        self.assertTrue(True)
+
+# Missing closing parenthesis - syntax error
+def broken_function(
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        assert result.script_error is True
+        assert "syntax" in result.summary.lower()
+
+    def test_pytest_import_error_handling(self) -> None:
+        """Test how pytest handles import errors."""
+        script = """
+import unittest
+import nonexistent_module_12345
+
+class TestExample(unittest.TestCase):
+    def test_something(self):
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        # Import errors during collection are treated as test errors
+        assert result.script_error is False
+        assert result.has_failures is True
+        assert result.tests_errors >= 1
+
+    def test_test_result_ordering(self) -> None:
+        """Test that test results are ordered to match script order."""
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def test_z_last(self):
+        self.assertTrue(True)
+
+    def test_a_first(self):
+        self.assertTrue(True)
+
+    def test_m_middle(self):
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        # Results should be ordered as they appear in the script
+        test_names = [t.name for t in result.test_results]
+        expected_order = ["test_z_last", "test_a_first", "test_m_middle"]
+
+        # The ordering should match the script order, not pytest's execution order
+        assert test_names == expected_order
+
+    def test_empty_test_class(self) -> None:
+        """Test handling of test classes with no test methods."""
+        script = """
+import unittest
+
+class TestExample(unittest.TestCase):
+    def not_a_test_method(self):
+        pass
+
+    def helper_method(self):
+        return True
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        assert result.total_tests == 0
+        assert "no tests" in result.summary.lower() or result.script_error is False
+
+
+class TestPerTestTimeout:
+    """Test cases for per-test timeout functionality."""
+
+    def test_per_test_timeout_configuration(self) -> None:
+        """Test that per-test timeout can be configured."""
+        sandbox = SafeCodeSandbox(test_method_timeout=2)
+        assert sandbox.test_method_timeout == 2
+
+        executor = TestExecutor(test_method_timeout=3)
+        assert executor.sandbox.test_method_timeout == 3
+
+    def test_per_test_timeout_default(self) -> None:
+        """Test default per-test timeout values."""
+        sandbox = create_safe_test_environment()
+        assert sandbox.test_method_timeout == 5
+
+        executor = create_test_executor()
+        assert executor.sandbox.test_method_timeout == 5
+
+    def test_per_test_timeout_disabled(self) -> None:
+        """Test that per-test timeout can be disabled."""
+        sandbox = SafeCodeSandbox(test_method_timeout=None)
+        assert sandbox.test_method_timeout is None
+
+        executor = TestExecutor(test_method_timeout=None)
+        assert executor.sandbox.test_method_timeout is None
+
+    def test_per_test_timeout_functionality(self) -> None:
+        """Test that per-test timeout actually works."""
+        sandbox = SafeCodeSandbox(test_method_timeout=1)  # 1 second per test
+
+        # Script with one test that should pass and one that should timeout
+        script = """
+import unittest
+import time
+
+class TestTimeout(unittest.TestCase):
+    def test_quick_pass(self):
+        self.assertEqual(1, 1)
+
+    def test_slow_timeout(self):
+        time.sleep(5)  # This should timeout after 1 second
+        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(script)
+
+        # Should have 2 tests total
+        assert result.total_tests == 2
+
+        # One should pass, one should fail due to timeout
+        assert result.tests_passed == 1
+        assert result.tests_failed == 1
+
+        # Check that one test result mentions timeout
+        timeout_found = any(
+            "timeout" in (t.details or "").lower() for t in result.test_results
+        )
+        assert timeout_found, (
+            f"No timeout found in test results: {[t.details for t in result.test_results]}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

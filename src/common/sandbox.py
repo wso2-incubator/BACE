@@ -6,11 +6,11 @@ with safety restrictions to prevent harm to the local machine.
 """
 
 import os
-import re
 import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
 
@@ -110,447 +110,171 @@ class TestAnalysis:
     test_results: List[TestResult]
 
 
-class TestResultAnalyzer:
+class PytestXmlAnalyzer:
     """
-    Analyzes unittest execution output to extract detailed test results.
+    Analyzes pytest JUnit XML output to extract detailed test results.
 
-    This class is responsible for parsing unittest output formats and
-    categorizing test results. It works independently of the execution
-    environment and can analyze any unittest output.
+    This class parses the structured XML output from pytest --junitxml
+    to provide robust and reliable test result analysis.
     """
 
     def __init__(self) -> None:
-        """Initialize the test result analyzer."""
+        """Initialize the pytest XML analyzer."""
         pass
 
-    def analyze_unittest_output(
-        self, basic_result: BasicExecutionResult
+    def analyze_pytest_xml(
+        self, xml_content: Optional[str], basic_result: BasicExecutionResult
     ) -> TestExecutionResult:
         """
-        Analyze unittest execution results and return detailed test information.
+        Analyze pytest XML output and return detailed test information.
 
         Args:
+            xml_content: The XML content from pytest --junitxml output, or None if XML wasn't generated
             basic_result: Basic execution result from code execution
 
         Returns:
             TestExecutionResult with detailed test analysis
         """
         logger.debug(
-            f"Analyzing unittest output: success={basic_result.success} return_code={basic_result.return_code} elapsed={basic_result.execution_time:.3f}s"
+            f"Analyzing pytest XML output: xml_available={xml_content is not None}, success={basic_result.success}, return_code={basic_result.return_code}"
         )
 
-        # Parse unittest output regardless of success/failure
-        # because unittest failures cause non-zero exit codes
-        test_analysis = self._parse_unittest_output(
-            basic_result.output, basic_result.error or ""
-        )
+        # If XML content is available, parse it
+        if xml_content:
+            try:
+                return self._parse_xml_content(xml_content)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to parse XML content: {e}. Falling back to error analysis."
+                )
+                # Fall through to error analysis
 
-        # Determine script error and create summary
+        # No XML or parsing failed - analyze based on basic result
+        return self._analyze_execution_error(basic_result)
+
+    def _parse_xml_content(self, xml_content: str) -> TestExecutionResult:
+        """Parse JUnit XML content and extract test results."""
+        try:
+            root = ET.fromstring(xml_content)
+        except ET.ParseError as e:
+            logger.error(f"XML parsing error: {e}")
+            raise
+
+        total_tests = 0
+        total_failures = 0
+        total_errors = 0
+        test_results = []
         script_error = False
-        summary = ""
 
-        # Check if failure is due to script errors vs test failures
-        if not basic_result.success and test_analysis.script_error:
-            # True script error (syntax, import, etc.)
-            script_error = True
-            summary = f"Script execution failed: {basic_result.error}"
-            logger.debug(
-                f"Detected script error while analyzing unittest output: {basic_result.error}",
-            )
-        elif test_analysis.failed > 0 or test_analysis.errors > 0:
-            # Tests ran but some failed
-            summary = f"Tests completed: {test_analysis.passed} passed, {test_analysis.failed} failed, {test_analysis.errors} errors"
-            logger.debug(f"Test run had failures/errors: {summary}")
-        elif test_analysis.passed > 0:
-            # All tests passed
-            summary = f"All tests passed: {test_analysis.passed} tests"
-            logger.debug(summary)
-        elif "NO TESTS RAN" in basic_result.error or (
-            basic_result.return_code == 5 and "Ran 0 tests" in basic_result.error
-        ):
-            # No tests found scenario (unittest exit code 5)
-            summary = "No tests were found or executed"
-        elif not basic_result.success:
-            # Script failed but no unittest patterns found - likely script error
-            script_error = True
-            summary = f"Script execution failed: {basic_result.error}"
+        # Parse each testsuite
+        for testsuite in root.findall(".//testsuite"):
+            suite_tests = int(testsuite.get("tests", 0))
+            suite_failures = int(testsuite.get("failures", 0))
+            suite_errors = int(testsuite.get("errors", 0))
+
+            total_tests += suite_tests
+            total_failures += suite_failures
+            total_errors += suite_errors
+
+            # Parse individual test cases
+            for testcase in testsuite.findall("testcase"):
+                test_name = testcase.get("name", "unknown")
+                classname = testcase.get("classname", "")
+
+                # Determine status and details
+                status: Literal["passed", "failed", "error"] = "passed"
+                details = None
+
+                # Check for failure
+                failure = testcase.find("failure")
+                if failure is not None:
+                    status = "failed"
+                    details = failure.text or failure.get("message", "")
+
+                # Check for error
+                error = testcase.find("error")
+                if error is not None:
+                    status = "error"
+                    details = error.text or error.get("message", "")
+                    # Check if this is a syntax error (script-level error)
+                    if details and (
+                        "SyntaxError" in details
+                        or "was never closed" in details
+                        or "invalid syntax" in details
+                    ):
+                        script_error = True
+
+                # Create description from classname and test name
+                description = f"{classname}.{test_name}" if classname else test_name
+
+                test_result = TestResult(
+                    name=test_name,
+                    description=description,
+                    status=status,
+                    details=details,
+                )
+                test_results.append(test_result)
+
+        # Create summary
+        if script_error:
+            summary = "Script execution failed: syntax error"
+        elif total_failures > 0 or total_errors > 0:
+            summary = f"Tests completed: {total_tests - total_failures - total_errors} passed, {total_failures} failed, {total_errors} errors"
+        elif total_tests > 0:
+            summary = f"All tests passed: {total_tests} tests"
         else:
-            # Script succeeded but no tests found
             summary = "No tests were found or executed"
 
         return TestExecutionResult(
             script_error=script_error,
-            tests_passed=test_analysis.passed,
-            tests_failed=test_analysis.failed,
-            tests_errors=test_analysis.errors,
-            test_results=test_analysis.test_results,
+            tests_passed=total_tests - total_failures - total_errors,
+            tests_failed=total_failures,
+            tests_errors=total_errors,
+            test_results=test_results,
             summary=summary,
         )
 
-    def ensure_unittest_verbosity(self, test_script: str) -> str:
-        """
-        Ensure that unittest.main() calls in the script use verbosity=2.
-
-        Args:
-            test_script: The original test script
-
-        Returns:
-            Modified test script with verbosity=2 for unittest.main() calls
-        """
-        modified_script = test_script
-        logger.trace(
-            f"Ensuring unittest verbosity for test script (len={len(test_script)})"
-        )
-
-        # Replace unittest.main() with unittest.main(verbosity=2)
-        modified_script = re.sub(
-            r"unittest\.main\(\)", "unittest.main(verbosity=2)", modified_script
-        )
-
-        # Handle all unittest.main() calls - upgrade verbosity and add if missing
-        def process_unittest_main(match: re.Match[str]) -> str:
-            params = match.group(1).strip()
-
-            # Check if verbosity is already present
-            verbosity_match = re.search(r"verbosity\s*=\s*([01])", params)
-            if verbosity_match:
-                # Replace verbosity=0 or verbosity=1 with verbosity=2
-                new_params = re.sub(r"verbosity\s*=\s*[01]", "verbosity=2", params)
-                return f"unittest.main({new_params})"
-            elif "verbosity" in params:
-                # verbosity=2 already present, keep unchanged
-                return match.group(0)
-            else:
-                # No verbosity parameter, add it
-                if params:
-                    return f"unittest.main({params}, verbosity=2)"
-                else:
-                    return "unittest.main(verbosity=2)"
-
-        modified_script = re.sub(
-            r"unittest\.main\(([^)]*)\)", process_unittest_main, modified_script
-        )
-
-        if modified_script != test_script:
-            logger.trace("Modified test script to increase unittest verbosity")
-
-        return modified_script
-
-    def _parse_unittest_output(self, stdout: str, stderr: str) -> TestAnalysis:
-        """
-        Parse unittest output to extract detailed test results.
-
-        Args:
-            stdout: Standard output from test execution
-            stderr: Standard error from test execution
-
-        Returns:
-            TestAnalysis with parsed test results
-        """
-        # Check for script-level errors first (syntax, import errors)
-        # But exclude unittest failure messages which also appear in stderr
+    def _analyze_execution_error(
+        self, basic_result: BasicExecutionResult
+    ) -> TestExecutionResult:
+        """Analyze execution results when XML parsing failed or wasn't available."""
         script_error = False
-        if stderr and any(
-            error_type in stderr.lower()
-            for error_type in [
-                "syntaxerror",
-                "indentationerror",
-                "importerror",
-                "modulenotfounderror",
-            ]
-        ):
-            # Make sure it's not just unittest output in stderr
-            if not ("Ran " in stderr and ("FAILED" in stderr or "OK" in stderr)):
-                script_error = True
-                logger.debug(
-                    "Detected script-level error in stderr while parsing unittest output"
-                )
-                return TestAnalysis(
-                    passed=0,
-                    failed=0,
-                    errors=0,
-                    script_error=script_error,
-                    test_results=[],
-                )
+        summary = ""
 
-        # Combine stdout and stderr for comprehensive parsing
-        full_output = stdout + "\n" + stderr
-
-        # Initialize counters
-        passed = 0
-        failed = 0
-        errors = 0
-
-        # Pattern for unittest summary line (e.g., "Ran 5 tests in 0.001s")
-        ran_pattern = r"Ran (\d+) tests? in ([\d.]+)s"
-        ran_match = re.search(ran_pattern, full_output)
-
-        if ran_match:
-            total_tests = int(ran_match.group(1))
-            logger.trace(f"Parsed unittest summary: total_tests={total_tests}")
-
-            # Look for OK (all passed)
-            if re.search(r"\nOK\s*$", full_output, re.MULTILINE):
-                passed = total_tests
-
-            # Look for FAILED with details
-            failed_pattern = r"FAILED \((.+?)\)"
-            failed_match = re.search(failed_pattern, full_output)
-
-            if failed_match:
-                failure_info = failed_match.group(1)
-
-                # Parse failures and errors
-                failures_match = re.search(r"failures=(\d+)", failure_info)
-                errors_match = re.search(r"errors=(\d+)", failure_info)
-
-                failures = int(failures_match.group(1)) if failures_match else 0
-                errors = int(errors_match.group(1)) if errors_match else 0
-
-                failed = failures
-                errors = errors
-                passed = total_tests - failures - errors
-            else:
-                # Check if we have failure output but no explicit FAILED line
-                # This can happen when tests fail but the format is different
-                if "FAIL:" in full_output or "ERROR:" in full_output:
-                    # Count failures and errors manually
-                    fail_count = len(re.findall(r"FAIL:", full_output))
-                    error_count = len(re.findall(r"ERROR:", full_output))
-
-                    failed = fail_count
-                    errors = error_count
-                    passed = max(0, total_tests - fail_count - error_count)
-        else:
-            # No "Ran X tests" found, try to parse test dots/letters
-            passed, failed, errors = self._parse_test_dots(full_output)
-
-        # Parse individual test results from detailed output (in execution order)
-        test_results = self._parse_individual_tests(full_output)
-
-        return TestAnalysis(
-            passed=passed,
-            failed=failed,
-            errors=errors,
-            script_error=script_error,
-            test_results=test_results,
-        )
-
-    def _parse_individual_tests(self, output: str) -> List[TestResult]:
-        """Parse individual test method results from verbose output, maintaining execution order."""
-
-        test_results = []
-
-        # Pattern for verbose unittest output - handle both cases:
-        # Case 1: test_name (module.path)\nDescription ... STATUS  (with docstring)
-        # Case 2: test_name (module.path) ... STATUS  (without docstring)
-
-        # Split output into lines and process sequentially to maintain order
-        lines = output.split("\n")
-        i = 0
-
-        while i < len(lines):
-            line = lines[i].strip()
-
-            # Try two-line format first (verbose unittest with docstrings):
-            # Line i: test_name (module.path)
-            # Line i+1: description ... status
-            name_match = re.match(r"(\w+) \(([^)]+)\)$", line)
-            if name_match and i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                status_match = re.match(r"(.+?) \.\.\. (ok|FAIL|ERROR)$", next_line)
-                if status_match:
-                    test_name = name_match.group(1)
-                    description = status_match.group(1)
-                    status = status_match.group(2)
-
-                    logger.trace(f"Found two-line test: {test_name} -> {status}")
-
-                    test_result = TestResult(
-                        name=test_name,
-                        description=description,
-                        status="passed"
-                        if status == "ok"
-                        else "failed"
-                        if status == "FAIL"
-                        else "error",
-                        details=None,
-                    )
-
-                    test_results.append(test_result)
-                    logger.trace(
-                        f"Appended TestResult: {test_name} status={test_result.status}"
-                    )
-
-                    # Skip the next line since we've processed it
-                    i += 2
-                    continue
-
-            # Fall back to single-line format (verbose unittest without docstrings):
-            # Pattern: test_name (module.TestClass) ... ok/FAIL/ERROR
-            test_match = re.match(r"(\w+) \([^)]+\) \.\.\. (ok|FAIL|ERROR)", line)
-            if test_match:
-                test_name, status = test_match.groups()
-                logger.trace(f"Found single-line test: {test_name} -> {status}")
-
-                description = f"Test method: {test_name}"  # Default
-
-                # Create TestResult with basic info
-                test_result = TestResult(
-                    name=test_name,
-                    description=description,
-                    status="passed"
-                    if status == "ok"
-                    else "failed"
-                    if status == "FAIL"
-                    else "error",
-                    details=None,
-                )
-
-                test_results.append(test_result)
-                logger.trace(
-                    f"Appended TestResult: {test_name} status={test_result.status}"
-                )
-
-            i += 1
-
-        # Now extract detailed failure/error information
-        self._extract_detailed_failures(output, test_results)
-
-        return test_results
-
-    def _extract_detailed_failures(
-        self, output: str, test_results: List[TestResult]
-    ) -> None:
-        """Extract detailed failure and error information from unittest output."""
-
-        # Pattern for detailed failure/error sections:
-        # ======================================================================
-        # FAIL/ERROR: test_name (module.path)
-        # ----------------------------------------------------------------------
-        # Traceback or error details...
-
-        # Find all detailed sections
-        detailed_sections = re.split(r"={70,}", output)
-        logger.trace(
-            f"Found {len(detailed_sections)} detailed sections when extracting failures/errors"
-        )
-
-        for section in detailed_sections:
-            if not section.strip():
-                continue
-
-            # Look for FAIL or ERROR headers
-            fail_match = re.search(
-                r"FAIL: (\w+) \([^)]+\)\n.*?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)",
-                section,
-                re.DOTALL,
-            )
-            error_match = re.search(
-                r"ERROR: (\w+) \([^)]+\)\n.*?-{70,}\n(.+?)(?=\n={70,}|\n-{70,}|$)",
-                section,
-                re.DOTALL,
-            )
-
-            if fail_match:
-                test_name, error_details = fail_match.groups()
-                logger.trace(f"Found detailed FAIL for test {test_name}")
-                self._update_test_details(
-                    test_results, test_name.strip(), error_details.strip()
-                )
-
-            elif error_match:
-                test_name, error_details = error_match.groups()
-                logger.trace(f"Found detailed ERROR for test {test_name}")
-                self._update_test_details(
-                    test_results, test_name.strip(), error_details.strip()
-                )
-
-    def _update_test_details(
-        self, test_results: List[TestResult], test_name: str, error_details: str
-    ) -> None:
-        """Update the details field for a specific test."""
-        for test_result in test_results:
-            if test_result.name == test_name:
-                # Clean the error details to extract only relevant parts
-                test_result.details = self._clean_error_details(error_details)
-                break
-
-    def _clean_error_details(self, raw_details: str) -> str:
-        """
-        Extract only the relevant assertion line and error message from traceback.
-
-        Args:
-            raw_details: Raw traceback string
-
-        Returns:
-            Cleaned error details with just the assertion and error message
-        """
-        if not raw_details:
-            return ""
-
-        lines = raw_details.strip().split("\n")
-
-        # Find the assertion line and error message
-        assertion_line = ""
-        error_message = ""
-
-        for i, line in enumerate(lines):
-            # Look for assertion lines (indented and contain self.assert)
-            if line.strip().startswith("self.assert") or "~~~" in line:
-                # Get the actual assertion (previous line if current is ~~~)
-                if "~~~" in line and i > 0:
-                    assertion_line = lines[i - 1].strip()
-                elif line.strip().startswith("self.assert"):
-                    assertion_line = line.strip()
-
-            # Look for error messages (AssertionError, ValueError, etc.)
-            elif any(
-                error_type in line
+        # Check if this was a script-level error (syntax, import, etc.)
+        if not basic_result.success:
+            # Look for common error patterns in stderr
+            error_output = (basic_result.error or "").lower()
+            if any(
+                error_type in error_output
                 for error_type in [
-                    "AssertionError:",
-                    "ValueError:",
-                    "TypeError:",
-                    "IndexError:",
-                    "KeyError:",
-                    "AttributeError:",
+                    "syntaxerror",
+                    "indentationerror",
+                    "importerror",
+                    "modulenotfounderror",
+                    "attributeerror",
+                    "nameerror",
+                    "typeerror",
                 ]
             ):
-                error_message = line.strip()
+                script_error = True
+                summary = f"Script execution failed: {basic_result.error}"
+            else:
+                # Other execution failure
+                script_error = True
+                summary = f"Test execution failed: {basic_result.error}"
+        else:
+            # Execution succeeded but no XML was generated
+            summary = "Test execution completed but no XML output was generated"
 
-        # Combine assertion and error message
-        result_parts = []
-        if assertion_line:
-            result_parts.append(assertion_line)
-        if error_message:
-            result_parts.append(error_message)
-
-        return "\n".join(result_parts) if result_parts else raw_details
-
-    def _parse_test_dots(self, output: str) -> tuple[int, int, int]:
-        """Parse test results from dot notation (e.g., '..F.E.')
-
-        Returns:
-            Tuple of (passed, failed, errors) counts
-        """
-        passed = 0
-        failed = 0
-        errors = 0
-
-        # Find test result dots/letters
-        dot_pattern = r"^([.FE]+)$"
-        matches = re.findall(dot_pattern, output, re.MULTILINE)
-
-        for match in matches:
-            for char in match:
-                if char == ".":
-                    passed += 1
-                elif char == "F":
-                    failed += 1
-                elif char == "E":
-                    errors += 1
-
-        return passed, failed, errors
+        return TestExecutionResult(
+            script_error=script_error,
+            tests_passed=0,
+            tests_failed=0,
+            tests_errors=0,
+            test_results=[],
+            summary=summary,
+        )
 
 
 class SafeCodeSandbox:
@@ -565,21 +289,24 @@ class SafeCodeSandbox:
         max_output_size: int = 10000,
         allowed_imports: Optional[List[str]] = None,
         python_executable: Optional[str] = None,
+        test_method_timeout: Optional[int] = None,
     ):
         """
         Initialize the sandbox with safety parameters.
 
         Args:
-            timeout: Maximum execution time in seconds
+            timeout: Maximum execution time in seconds for the entire script
             max_memory_mb: Maximum memory usage in MB (not enforced on all systems)
             max_output_size: Maximum output size in characters
             allowed_imports: List of allowed import modules
             python_executable: Path to Python executable (defaults to sys.executable)
+            test_method_timeout: Maximum execution time in seconds for individual test methods (None = no limit)
         """
         self.timeout = timeout
         self.max_memory_mb = max_memory_mb
         self.max_output_size = max_output_size
         self.python_executable = python_executable or sys.executable
+        self.test_method_timeout = test_method_timeout
         self.allowed_imports = allowed_imports or [
             "math",
             "random",
@@ -592,6 +319,8 @@ class SafeCodeSandbox:
             "re",
             "string",
             "unittest",
+            "pytest",
+            "pytest_timeout",  # Add pytest-timeout plugin
             "typing",
             "dataclasses",
             "enum",
@@ -930,12 +659,12 @@ class SafeCodeSandbox:
         Execute a test script and return detailed results with test categorization.
 
         This method is a convenience wrapper that combines safe code execution
-        with unittest output analysis. For more control over the process, use
-        execute_code() and TestResultAnalyzer separately.
+        with pytest XML analysis. For more control over the process, use
+        execute_code() and PytestXmlAnalyzer separately.
 
         IMPORTANT: The returned TestExecutionResult.test_results list is guaranteed
         to be in the same order as the test methods appear in the test_script,
-        regardless of the order unittest executes them. This ensures consistent
+        regardless of the order pytest executes them. This ensures consistent
         indexing when building observation matrices and generating feedback.
 
         Args:
@@ -945,22 +674,102 @@ class SafeCodeSandbox:
             TestExecutionResult containing comprehensive execution results,
             with test_results ordered to match the script's test method order
         """
-        # Create analyzer and prepare the test script
         logger.debug(f"SafeCodeSandbox: executing test script (len={len(test_script)})")
-        analyzer = TestResultAnalyzer()
-        modified_script = analyzer.ensure_unittest_verbosity(test_script)
 
-        # Execute the code safely
-        basic_result = self.execute_code(modified_script)
+        # Create temporary files for script and XML output
+        with (
+            tempfile.NamedTemporaryFile(
+                mode="w", suffix=".py", delete=False
+            ) as script_file,
+            tempfile.NamedTemporaryFile(
+                mode="w", suffix=".xml", delete=False
+            ) as xml_file,
+        ):
+            script_file_path = script_file.name
+            xml_file_path = xml_file.name
+            script_file.write(test_script)
 
-        # Analyze the test results
-        result = analyzer.analyze_unittest_output(basic_result)
+        try:
+            # Execute pytest with JUnit XML output
+            start_time = time.time()
 
-        # Reorder test results to match the script order (CRITICAL FIX)
-        result = self._reorder_test_results_to_match_script(test_script, result)
+            # Build pytest command
+            cmd = [
+                self.python_executable,
+                "-m",
+                "pytest",
+                script_file_path,
+                "--junitxml",
+                xml_file_path,
+            ]
 
-        logger.debug(f"SafeCodeSandbox: test script result summary: {result.summary}")
-        return result
+            # Add per-test timeout if configured
+            if self.test_method_timeout is not None:
+                cmd.extend(["--timeout", str(self.test_method_timeout)])
+
+            proc_result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=tempfile.gettempdir(),
+            )
+
+            execution_time = time.time() - start_time
+
+            # Read XML content if file exists
+            xml_content = None
+            if os.path.exists(xml_file_path):
+                try:
+                    with open(xml_file_path, "r", encoding="utf-8") as f:
+                        xml_content = f.read()
+                except Exception as e:
+                    logger.warning(f"Failed to read XML file: {e}")
+
+            # Create basic result for error analysis fallback
+            basic_result = BasicExecutionResult(
+                success=proc_result.returncode == 0,
+                output=proc_result.stdout,
+                error=proc_result.stderr,
+                execution_time=execution_time,
+                timeout=False,
+                return_code=proc_result.returncode,
+            )
+
+            # Create analyzer and analyze the test results
+            analyzer = PytestXmlAnalyzer()
+            execution_result = analyzer.analyze_pytest_xml(xml_content, basic_result)
+
+            # Reorder test results to match the script order (CRITICAL FIX)
+            execution_result = self._reorder_test_results_to_match_script(
+                test_script, execution_result
+            )
+
+            logger.debug(
+                f"SafeCodeSandbox: test script result summary: {execution_result.summary}"
+            )
+            return execution_result
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Test execution timed out after {self.timeout} seconds")
+            basic_result = BasicExecutionResult(
+                success=False,
+                output="",
+                error=f"Test execution timed out after {self.timeout} seconds",
+                execution_time=self.timeout,
+                timeout=True,
+                return_code=-1,
+            )
+            analyzer = PytestXmlAnalyzer()
+            return analyzer.analyze_pytest_xml(None, basic_result)
+
+        finally:
+            # Clean up temporary files
+            try:
+                os.unlink(script_file_path)
+                os.unlink(xml_file_path)
+            except OSError:
+                pass
 
 
 class TestExecutor:
@@ -979,16 +788,18 @@ class TestExecutor:
         max_output_size: int = 10000,
         allowed_imports: Optional[List[str]] = None,
         python_executable: Optional[str] = None,
+        test_method_timeout: Optional[int] = None,
     ):
         """
         Initialize test executor with sandbox configuration.
 
         Args:
-            timeout: Maximum execution time in seconds
+            timeout: Maximum execution time in seconds for the entire script
             max_memory_mb: Maximum memory usage in MB
             max_output_size: Maximum output size in characters
             allowed_imports: List of allowed import modules
             python_executable: Path to Python executable
+            test_method_timeout: Maximum execution time in seconds for individual test methods (None = no limit)
         """
         self.sandbox = SafeCodeSandbox(
             timeout=timeout,
@@ -996,10 +807,11 @@ class TestExecutor:
             max_output_size=max_output_size,
             allowed_imports=allowed_imports,
             python_executable=python_executable,
+            test_method_timeout=test_method_timeout,
         )
-        self.analyzer = TestResultAnalyzer()
+        self.analyzer = PytestXmlAnalyzer()
         logger.debug(
-            f"Initialized TestExecutor(timeout={timeout}, max_memory_mb={max_memory_mb}, max_output_size={max_output_size})"
+            f"Initialized TestExecutor(timeout={timeout}, max_memory_mb={max_memory_mb}, max_output_size={max_output_size}, test_method_timeout={test_method_timeout})"
         )
 
     def execute_test_script(self, test_script: str) -> TestExecutionResult:
@@ -1008,7 +820,7 @@ class TestExecutor:
 
         IMPORTANT: The returned TestExecutionResult.test_results list is guaranteed
         to be in the same order as the test methods appear in the test_script,
-        regardless of the order unittest executes them. This ensures consistent
+        regardless of the order pytest executes them. This ensures consistent
         indexing when building observation matrices and generating feedback.
 
         Args:
@@ -1018,20 +830,103 @@ class TestExecutor:
             TestExecutionResult with detailed analysis and properly ordered test results
         """
         logger.debug(f"TestExecutor: executing test script (len={len(test_script)})")
-        # Prepare the test script with proper verbosity
-        modified_script = self.analyzer.ensure_unittest_verbosity(test_script)
 
-        # Execute safely in the sandbox
-        basic_result = self.sandbox.execute_code(modified_script)
+        # Create temporary files for script and XML output
+        with (
+            tempfile.NamedTemporaryFile(
+                mode="w", suffix=".py", delete=False
+            ) as script_file,
+            tempfile.NamedTemporaryFile(
+                mode="w", suffix=".xml", delete=False
+            ) as xml_file,
+        ):
+            script_file_path = script_file.name
+            xml_file_path = xml_file.name
+            script_file.write(test_script)
 
-        # Analyze the results
-        result = self.analyzer.analyze_unittest_output(basic_result)
+        try:
+            # Execute pytest with JUnit XML output
+            start_time = time.time()
 
-        # Reorder test results to match script order (use sandbox's method)
-        result = self.sandbox._reorder_test_results_to_match_script(test_script, result)
+            # Build pytest command
+            cmd = [
+                self.sandbox.python_executable,
+                "-m",
+                "pytest",
+                script_file_path,
+                "--junitxml",
+                xml_file_path,
+            ]
 
-        logger.debug(f"TestExecutor: finished execution: {result.summary}")
-        return result
+            # Add per-test timeout if configured
+            if self.sandbox.test_method_timeout is not None:
+                cmd.extend(["--timeout", str(self.sandbox.test_method_timeout)])
+
+            proc_result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.sandbox.timeout,
+                cwd=tempfile.gettempdir(),
+            )
+
+            execution_time = time.time() - start_time
+
+            # Read XML content if file exists
+            xml_content = None
+            if os.path.exists(xml_file_path):
+                try:
+                    with open(xml_file_path, "r", encoding="utf-8") as f:
+                        xml_content = f.read()
+                except Exception as e:
+                    logger.warning(f"Failed to read XML file: {e}")
+
+            # Create basic result for error analysis fallback
+            basic_result = BasicExecutionResult(
+                success=proc_result.returncode == 0,
+                output=proc_result.stdout,
+                error=proc_result.stderr,
+                execution_time=execution_time,
+                timeout=False,
+                return_code=proc_result.returncode,
+            )
+
+            # Analyze the results
+            execution_result = self.analyzer.analyze_pytest_xml(
+                xml_content, basic_result
+            )
+
+            # Reorder test results to match script order (use sandbox's method)
+            execution_result = self.sandbox._reorder_test_results_to_match_script(
+                test_script, execution_result
+            )
+
+            logger.debug(
+                f"TestExecutor: finished execution: {execution_result.summary}"
+            )
+            return execution_result
+
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"Test execution timed out after {self.sandbox.timeout} seconds"
+            )
+            basic_result = BasicExecutionResult(
+                success=False,
+                output="",
+                error=f"Test execution timed out after {self.sandbox.timeout} seconds",
+                execution_time=self.sandbox.timeout,
+                timeout=True,
+                return_code=-1,
+            )
+            return self.analyzer.analyze_pytest_xml(None, basic_result)
+
+        finally:
+            # Clean up temporary files
+            try:
+                os.unlink(script_file_path)
+                os.unlink(xml_file_path)
+            except OSError:
+                pass
 
     def execute_code(self, code: str) -> BasicExecutionResult:
         """
@@ -1046,17 +941,23 @@ class TestExecutor:
         return self.sandbox.execute_code(code)
 
 
-def create_safe_test_environment() -> SafeCodeSandbox:
+def create_safe_test_environment(
+    test_method_timeout: Optional[int] = 5,
+) -> SafeCodeSandbox:
     """
     Create a default safe test environment.
+
+    Args:
+        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 5)
 
     Returns:
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=30,
+        timeout=30,  # 30 seconds max for entire script
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
+        test_method_timeout=test_method_timeout,  # 5 seconds max per test method
         allowed_imports=[
             "math",
             "random",
@@ -1069,6 +970,8 @@ def create_safe_test_environment() -> SafeCodeSandbox:
             "re",
             "string",
             "unittest",
+            "pytest",
+            "pytest_timeout",  # Add pytest-timeout plugin
             "typing",
             "dataclasses",
             "enum",
@@ -1078,17 +981,21 @@ def create_safe_test_environment() -> SafeCodeSandbox:
     )
 
 
-def create_test_executor() -> TestExecutor:
+def create_test_executor(test_method_timeout: Optional[int] = 15) -> TestExecutor:
     """
     Create a default test executor with safe configuration.
+
+    Args:
+        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 15)
 
     Returns:
         Configured TestExecutor instance
     """
     return TestExecutor(
-        timeout=30,  # 30 seconds max
+        timeout=180,  # 180 seconds max for entire script
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
+        test_method_timeout=test_method_timeout,  # 15 seconds max per test method
         allowed_imports=[
             "math",
             "random",
@@ -1101,6 +1008,8 @@ def create_test_executor() -> TestExecutor:
             "re",
             "string",
             "unittest",
+            "pytest",
+            "pytest_timeout",  # Add pytest-timeout plugin
             "typing",
             "dataclasses",
             "enum",
@@ -1167,12 +1076,10 @@ if __name__ == '__main__':
 
     # Example 2: Using components separately for more control
     sandbox = create_safe_test_environment()
-    analyzer = TestResultAnalyzer()
+    analyzer = PytestXmlAnalyzer()
 
-    # Prepare and execute
-    modified_code = analyzer.ensure_unittest_verbosity(safe_code)
-    basic_result = sandbox.execute_code(modified_code)
-    detailed_result = analyzer.analyze_unittest_output(basic_result)
+    # Execute test script directly
+    detailed_result = sandbox.execute_test_script(safe_code)
 
     print("\nDetailed analysis:")
     print(f"- Passed: {detailed_result.tests_passed}")
