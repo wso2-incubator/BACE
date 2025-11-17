@@ -6,8 +6,15 @@ Keeping templates in a separate file makes them easier to review and
 modify without touching code logic.
 """
 
+_CODER_ROLE = "You are a software programmer."
+_TESTER_ROLE = "You are a software tester."
+_TEST_METHOD_FORMAT_INSTRUCTION = (
+    "Return only the code for a single unittest test method in a python code block."
+)
+_CODE_FORMAT_INSTRUCTION = "Return the code in a python code block."
 # Code generation prompts
 INITIAL_CODE = (
+    _CODER_ROLE + "\n\n"
     "Write {population_size} distinct solutions to solve the following problem:\n\n"
     "{question_content}\n\n"
     "Starter Code:\n```python\n{starter_code}\n```\n\n"
@@ -15,35 +22,42 @@ INITIAL_CODE = (
 )
 
 CROSSOVER_CODE = (
+    _CODER_ROLE + "\n\n"
     "Given this programming problem:\n{question_content}\n\n"
     "And these two code solutions:\n\n"
     "Solution 1:\n```python\n{parent1}\n```\n\n"
     "Solution 2:\n```python\n{parent2}\n```\n\n"
     "Create a new solution that intelligently combines the best aspects of both solutions.\n"
-    "Consider combining:\n- Better algorithms from either solution\n- More efficient data structures\n- Clearer variable names or logic flow\n\n"
-    "Return the new combined code in a python code block."
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 MUTATE_CODE = (
+    _CODER_ROLE + "\n\n"
     "Given this programming problem:\n{question_content}\n\n"
     "And this code solution:\n```python\n{individual}\n```\n\n"
     "Generate a modified version of the code that:\n"
     "1. Maintains the same functionality\n"
     "2. Explores a different algorithmic approach or implementation style\n"
     "3. Could potentially be more efficient or clearer\n\n"
-    "Return the modified code in a python code block."
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 EDIT_CODE = (
+    _CODER_ROLE + "\n\n"
     "Given this programming problem:\n{question_content}\n\n"
     "This code solution:\n```python\n{individual}\n```\n\n"
     "And this error/feedback:\n{feedback}\n\n"
-    "Fix the code to address the error while maintaining the overall approach.\n"
-    "Return the fixed code in a python code block."
+    "Utilizing the feedback, generate a new code solution that addresses the issues raised.\n"
+    "If no issues are found or if you strongly believe the original code is correct, return a slightly modified version of the original code.\n"
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 # Test generation/editing prompts
 INITIAL_TEST = (
+    _TESTER_ROLE + "\n\n"
     "Write {population_size} distinct unit tests in a Python code block for the following problem:\n"
     "{question_content}\n"
     "The solution is imported in the format:\n```python\n{starter_code}```\n"
@@ -66,7 +80,7 @@ The solution code is imported in the format:
 - **Objective**: To evaluate the function's behavior under extreme or unusual conditions.
 
 **3. Large Scale Test Cases**:
-- **Objective**: To assess the function’s performance and scalability with large data samples.
+- **Objective**: To assess the function's performance and scalability with large data samples.
 
 **Instructions**:
 - Implement a comprehensive set of test cases following the guidelines above.
@@ -79,28 +93,35 @@ The solution code is imported in the format:
 
 
 CROSSOVER_TEST = (
-    "Given this programming problem:\n{question_content}\n\n"
-    "And these two test cases:\n\n"
+    _TESTER_ROLE + "\n\n"
+    "PROBLEM: \n{question_content}\n\n"
+    "The following two test cases were identified to be good tests\n\n"
     "Test 1:\n```python\n{parent1}\n```\n\n"
     "Test 2:\n```python\n{parent2}\n```\n\n"
-    "Summarize test 1 and test 2, then create a new test case.\n\n"
-    "Return only the new test method code in a python code block."
+    "Your task is to create a new test case that covers the gaps in the existing tests.\n"
+    + _TEST_METHOD_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 MUTATE_TEST = (
-    "Given this programming problem:\n{question_content}\n\n"
-    "And this test case:\n```python\n{individual}\n```\n\n"
-    "Generate a modified test case that tests different edge cases or scenarios.\n"
-    "Ensure it remains a valid unittest test case and contains only a single assertion.\n\n"
-    "Return only the test method code in a python code block."
+    _TESTER_ROLE + "\n\n"
+    "PROBLEM:\n{question_content}\n\n"
+    "The following test case was identified to be a good test\n```python\n{individual}\n```\n\n"
+    "Your task is to create a mutated version of this test case.\n"
+    "Ensure it remains a valid unittest test case\n\n"
+    + _TEST_METHOD_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 EDIT_TEST = (
+    _TESTER_ROLE + "\n\n"
     "Given this programming problem:\n{question_content}\n\n"
     "This test case:\n```python\n{individual}\n```\n\n"
     "And this feedback:\n{feedback}\n\n"
-    "Summarize the feedback and provide a single new test case method that can help identify these issues.\n"
-    "Only return the new test code in a python code block"
+    "Utilize the feedback to generate a new test case that addresses the issues raised.\n"
+    "If no issues are found or if you strongly believe the original test case was correct, return a slightly modified version of the original test case.\n"
+    + _TEST_METHOD_FORMAT_INSTRUCTION
+    + "\n"
 )
 
 __all__ = [
