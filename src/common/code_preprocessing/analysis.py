@@ -8,6 +8,31 @@ from typing import List
 from .exceptions import CodeParsingError
 
 
+def validate_code_syntax(code_string: str) -> bool:
+    """
+    Validate the syntax of a Python code string.
+
+    Args:
+        code_string: Python source code
+
+    Returns:
+        True if the code is syntactically valid, False otherwise
+
+    Example:
+        >>> code = "def foo():\\n    return 42"
+        >>> validate_code_syntax(code)
+        True
+        >>> invalid_code = "def foo(\\n    return 42"
+        >>> validate_code_syntax(invalid_code)
+        False
+    """
+    try:
+        ast.parse(code_string)
+        return True
+    except SyntaxError:
+        return False
+
+
 def extract_method_name(method_snippet: str) -> str:
     """
     Extract the method name from a method code snippet.
@@ -282,4 +307,5 @@ def contains_starter_code(code_string: str, starter_code: str) -> bool:
         if matches > 0 and matches / len(starter_lines) >= 0.8:  # 80% threshold
             return True
 
+    return False
     return False
