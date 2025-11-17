@@ -4,6 +4,7 @@ import ast
 import re
 from typing import Dict, List, Tuple, TypedDict
 
+from .analysis import validate_code_syntax
 from .exceptions import CodeParsingError
 
 
@@ -71,6 +72,8 @@ def extract_all_code_blocks_from_response(response: str) -> List[str]:
 def extract_code_block_from_response(response: str) -> str:
     """
     Extract the first Python code block (```python ... ```) from the LLM response.
+    If no valid code block is found, raises CodeParsingError.
+    If the entire response is valid code, it is returned as is.
 
     Args:
         response: LLM response text potentially containing markdown code blocks
@@ -90,6 +93,11 @@ def extract_code_block_from_response(response: str) -> str:
     match = pattern.search(response)
     if match:
         return match.group(1)
+
+    # Check if the entire response is code (no markdown)
+    stripped_response = response.strip()
+    if validate_code_syntax(stripped_response):
+        return stripped_response
 
     # No code block found - raise explicit error instead of silent fallback
     raise CodeParsingError(
