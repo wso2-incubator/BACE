@@ -297,21 +297,14 @@ class TestFeedbackGenerator(IFeedbackGenerator[CodeIndividual]):
         if len(passed_code_indices) == 0:
             logger.debug(f"Test {individual_idx}: No code snippets passed this test")
             feedback_builder.append("No code snippets passed this test case")
-            feedback_builder.append("The following code snippet failed the test:\n")
-
-            code_idx = random.choice(failed_code_indices)
-            code_snippet = other_population[code_idx].snippet
-            feedback_builder.append("```python")
-            feedback_builder.append(code_snippet.strip())
-            feedback_builder.append("```")
-            feedback_builder.append("")
-            feedback_builder.append("However, the above code snippet is correct.")
             feedback_builder.append(
                 "This indicates that the test case is incorrect, or too hard."
             )
 
-        else:
-            feedback_builder.append("The following code snippet passed the test:\n")
+        if len(passed_code_indices) > 0:
+            feedback_builder.append(
+                "The following code candidate snippet passed the test:\n"
+            )
             code_idx = random.choice(passed_code_indices)
             code_snippet = other_population[code_idx].snippet
 
@@ -327,10 +320,30 @@ class TestFeedbackGenerator(IFeedbackGenerator[CodeIndividual]):
             )
 
             feedback_builder.append(
-                "However, the above code snippet is buggy and needs improvement."
-            )
-            feedback_builder.append(
                 "The test case could not identify the bugs in this snippet."
+            )
+
+        # a discriminative test, passes some and fails some
+        if len(passed_code_indices) > 0 and len(failed_code_indices) > 0:
+            feedback_builder.append(
+                "The following code candidate snippet failed the test:\n"
+            )
+            code_idx = random.choice(failed_code_indices)
+            code_snippet = other_population[code_idx].snippet
+
+            feedback_builder.append("```python")
+            feedback_builder.append(code_snippet.strip())
+            feedback_builder.append("```")
+            feedback_builder.append("")
+
+            # Trace-level logging for each snippet added to feedback
+            logger.trace(
+                f"Test {individual_idx}: Added failing snippet from code index {code_idx} "
+                f"(chars={len(code_snippet)})"
+            )
+
+            feedback_builder.append(
+                "The test case identified the bugs in this snippet."
             )
 
         feedback = "\n".join(feedback_builder).strip()
