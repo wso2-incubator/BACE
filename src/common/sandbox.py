@@ -942,22 +942,22 @@ class TestExecutor:
 
 
 def create_safe_test_environment(
-    test_method_timeout: Optional[int] = 5,
+    test_method_timeout: Optional[int] = 30,
 ) -> SafeCodeSandbox:
     """
     Create a default safe test environment.
 
     Args:
-        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 5)
+        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 30)
 
     Returns:
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=30,  # 30 seconds max for entire script
+        timeout=180,  # 180 seconds max for entire script
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
-        test_method_timeout=test_method_timeout,  # 5 seconds max per test method
+        test_method_timeout=test_method_timeout,  # 30 seconds max per test method
         allowed_imports=[
             "math",
             "random",
@@ -981,12 +981,12 @@ def create_safe_test_environment(
     )
 
 
-def create_test_executor(test_method_timeout: Optional[int] = 15) -> TestExecutor:
+def create_test_executor(test_method_timeout: Optional[int] = 30) -> TestExecutor:
     """
     Create a default test executor with safe configuration.
 
     Args:
-        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 15)
+        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 30)
 
     Returns:
         Configured TestExecutor instance
@@ -995,7 +995,7 @@ def create_test_executor(test_method_timeout: Optional[int] = 15) -> TestExecuto
         timeout=180,  # 180 seconds max for entire script
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
-        test_method_timeout=test_method_timeout,  # 15 seconds max per test method
+        test_method_timeout=test_method_timeout,  # 30 seconds max per test method
         allowed_imports=[
             "math",
             "random",
