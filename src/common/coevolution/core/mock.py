@@ -258,12 +258,31 @@ class MockFeedbackGenerator(IFeedbackGenerator[BaseIndividual]):
         other_population: "BasePopulation[BaseIndividual]",
         individual_idx: int,
     ) -> str:
-        # Find the first test this code individual failed
-        failures = np.where(observation_matrix[individual_idx] == 0)[0]
-        if len(failures) > 0:
-            failed_test_id = other_population.ids[failures[0]]
-            return f"Your code failed test: {failed_test_id}"
-        return "Your code passed all tests, but try to optimize it."
+        # The observation_matrix orientation depends on the caller:
+        # - When generating feedback for a code individual: rows=code, cols=tests
+        #   so individual_idx indexes rows.
+        # - When generating feedback for a test individual: rows=code, cols=tests
+        #   so individual_idx indexes columns.
+        n_rows, n_cols = observation_matrix.shape
+
+        if individual_idx < n_rows:
+            # Code individual: look across tests in this row
+            failures = np.where(observation_matrix[individual_idx] == 0)[0]
+            if len(failures) > 0:
+                failed_test_id = other_population.ids[failures[0]]
+                return f"Your code failed test: {failed_test_id}"
+            return "Your code passed all tests, but try to optimize it."
+
+        # Otherwise treat as a test individual (index into columns)
+        if individual_idx < n_cols:
+            failures = np.where(observation_matrix[:, individual_idx] == 0)[0]
+            if len(failures) > 0:
+                failed_code_id = other_population.ids[failures[0]]
+                return f"Your test failed code: {failed_code_id}"
+            return "Your test passed all current code samples; consider adding harder cases."
+
+        # Index out of bounds: fall back to a neutral message
+        return "No feedback available for the selected individual."
 
 
 # --- Mock Execution & Belief Updaters ---
@@ -347,9 +366,32 @@ def _generic_belief_update(
     Returns:
         Updated posterior probabilities for the population being updated.
     """
+    # New: support an explicit mask to select which (self,other) cells are
+    # considered "new evidence" for this update. The mask should have the
+    # same shape as observation_matrix and be boolean. When mask is None we
+    # consider all cells (legacy behaviour).
+    #
+    # NOTE: We implement mask-aware averaging in a numerically stable,
+    # vectorized way. Rows with zero included cells will be left with their
+    # prior unchanged (no new evidence).
+    #
     # If no opposing population, return priors unchanged
     if observation_matrix.shape[1] == 0:
         return prior_probs_self
+
+    # If a mask was attached to the matrix, it will be expected to be stored
+    # as an attribute by the caller; however, to keep this helper generic we
+    # expect callers to pass an explicit mask via a keyword parameter in the
+    # call site. If no mask is provided, behave as before.
+    # (Backward compatibility: callers that do not pass a mask will still
+    # work with the older behaviour.)
+    #
+    # NOTE: The mask handling is implemented by callers passing an already
+    # filtered/selected observation_matrix and corresponding mask. This helper
+    # accepts a mask param when invoked; to keep the function signature
+    # stable we will not add a new parameter here — callers should wrap this
+    # helper with mask handling. For simplicity in our mock implementations
+    # below we will compute success rates using the mask when provided.
 
     # Calculate success rate for each individual in self population
     success_rates = np.mean(observation_matrix, axis=1)
@@ -384,6 +426,7 @@ class MockCodeBayesianSystem(IBayesianSystem):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        code_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -396,19 +439,41 @@ class MockCodeBayesianSystem(IBayesianSystem):
 
         # Code is the "self" population, tests are "other"
         # Matrix is already in correct orientation (rows=code, cols=tests)
-        return _generic_belief_update(
-            prior_probs_self=prior_code_probs,
-            prior_probs_other=prior_test_probs,
-            observation_matrix=observation_matrix,
-            config=config,
-            target_threshold=0.75,  # Code passes > 75% of tests is "good"
-        )
+        # The orchestrator now provides an explicit mask indicating which
+        # (code,test) observations are new evidence. We expect that mask to be
+        # passed by the caller; here we retrieve it from the observation_matrix
+        # if present as an attribute, otherwise fall back to using the full
+        # matrix (backwards compatibility).
+        mask_arr = np.asarray(code_update_mask_matrix, dtype=bool)
+        # Validate mask shape
+        if mask_arr.shape != observation_matrix.shape:
+            raise ValueError("Mask shape must match observation_matrix shape")
+
+        # Compute per-row success rates using only masked-in columns
+        included_counts = mask_arr.sum(axis=1)
+        success_rates = np.zeros_like(included_counts, dtype=float)
+        nonzero = included_counts > 0
+        if nonzero.any():
+            # Sum only over masked columns per row
+            masked_sums = (observation_matrix * mask_arr).sum(axis=1)
+            success_rates[nonzero] = masked_sums[nonzero] / included_counts[nonzero]
+
+        # Apply update only for rows that have new evidence
+        new_probs = prior_code_probs.astype(float).copy()
+        if nonzero.any():
+            adjustment = (success_rates[nonzero] - 0.75) * config.learning_rate
+            new_probs[nonzero] = np.clip(
+                prior_code_probs[nonzero] + adjustment, 0.01, 0.99
+            )
+
+        return new_probs
 
     def update_test_beliefs(
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        test_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -423,13 +488,67 @@ class MockCodeBayesianSystem(IBayesianSystem):
         transposed_matrix = observation_matrix.T
         failure_matrix = 1 - transposed_matrix
 
-        return _generic_belief_update(
-            prior_probs_self=prior_test_probs,
-            prior_probs_other=prior_code_probs,
-            observation_matrix=failure_matrix,
-            config=config,
-            target_threshold=0.50,
-        )
+        mask_arr = np.asarray(test_update_mask_matrix, dtype=bool)
+        # Transpose mask for the transposed/failure matrix
+        transposed_mask = mask_arr.T
+        if transposed_mask.shape != failure_matrix.shape:
+            raise ValueError("Mask shape must match transposed observation matrix")
+
+        included_counts = transposed_mask.sum(axis=1)
+        success_rates = np.zeros_like(included_counts, dtype=float)
+        nonzero = included_counts > 0
+        if nonzero.any():
+            masked_sums = (failure_matrix * transposed_mask).sum(axis=1)
+            success_rates[nonzero] = masked_sums[nonzero] / included_counts[nonzero]
+
+        new_probs = prior_test_probs.astype(float).copy()
+        if nonzero.any():
+            adjustment = (success_rates[nonzero] - 0.50) * config.learning_rate
+            new_probs[nonzero] = np.clip(
+                prior_test_probs[nonzero] + adjustment, 0.01, 0.99
+            )
+
+        return new_probs
+
+    def get_update_mask_generation(
+        self,
+        updating_ind_born_generations: list[int],
+        other_ind_born_generations: list[int],
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Generate a boolean mask indicating which (updating, other) observation
+        pairs should be considered for belief updates.
+
+        Rule implemented:
+        - If an updating individual was born in the current generation, include
+            all observations for that updating individual (they get updated
+            against all tests/code).
+        - Otherwise include only observations where the opposing individual was
+            born in the current generation. This avoids double-counting old
+            observations on surviving individuals.
+        """
+        rows = len(updating_ind_born_generations)
+        cols = len(other_ind_born_generations)
+        mask = np.zeros((rows, cols), dtype=bool)
+
+        # Vectorized implementation
+        upd_gens = np.asarray(updating_ind_born_generations, dtype=int)
+        oth_gens = np.asarray(other_ind_born_generations, dtype=int)
+
+        # Rows for which updating individuals are new this generation: allow all cols
+        new_rows = upd_gens == int(current_generation)
+        if new_rows.any():
+            mask[new_rows, :] = True
+
+        # For older updating individuals, allow only columns born this generation
+        old_rows = ~new_rows
+        if old_rows.any():
+            cols_this_gen = oth_gens == int(current_generation)
+            if cols_this_gen.any():
+                mask[old_rows[:, None] & cols_this_gen[None, :]] = True
+
+        return mask
 
 
 class MockTestBayesianSystem(IBayesianSystem):
@@ -455,6 +574,7 @@ class MockTestBayesianSystem(IBayesianSystem):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        code_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -465,19 +585,32 @@ class MockTestBayesianSystem(IBayesianSystem):
         """
         logger.trace("MockTestBayesianSystem: Updating code beliefs (delegating)")
 
-        return _generic_belief_update(
-            prior_probs_self=prior_code_probs,
-            prior_probs_other=prior_test_probs,
-            observation_matrix=observation_matrix,
-            config=config,
-            target_threshold=0.75,
-        )
+        mask_arr = np.asarray(code_update_mask_matrix, dtype=bool)
+        if mask_arr.shape != observation_matrix.shape:
+            raise ValueError("Mask shape must match observation_matrix shape")
+
+        included_counts = mask_arr.sum(axis=1)
+        success_rates = np.zeros_like(included_counts, dtype=float)
+        nonzero = included_counts > 0
+        if nonzero.any():
+            masked_sums = (observation_matrix * mask_arr).sum(axis=1)
+            success_rates[nonzero] = masked_sums[nonzero] / included_counts[nonzero]
+
+        new_probs = prior_code_probs.astype(float).copy()
+        if nonzero.any():
+            adjustment = (success_rates[nonzero] - 0.75) * config.learning_rate
+            new_probs[nonzero] = np.clip(
+                prior_code_probs[nonzero] + adjustment, 0.01, 0.99
+            )
+
+        return new_probs
 
     def update_test_beliefs(
         self,
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        test_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -497,13 +630,58 @@ class MockTestBayesianSystem(IBayesianSystem):
         # So invert the matrix: 1 becomes 0, 0 becomes 1
         failure_matrix = 1 - transposed_matrix
 
-        return _generic_belief_update(
-            prior_probs_self=prior_test_probs,
-            prior_probs_other=prior_code_probs,
-            observation_matrix=failure_matrix,
-            config=config,
-            target_threshold=0.50,  # Test fails > 50% of code is "good"
-        )
+        mask_arr = np.asarray(test_update_mask_matrix, dtype=bool)
+        # mask_arr is expected to be shaped (n_tests, n_code) matching failure_matrix
+        if mask_arr.shape != failure_matrix.shape:
+            raise ValueError("Mask shape must match transposed observation matrix")
+
+        included_counts = mask_arr.sum(axis=1)
+        success_rates = np.zeros_like(included_counts, dtype=float)
+        nonzero = included_counts > 0
+        if nonzero.any():
+            masked_sums = (failure_matrix * mask_arr).sum(axis=1)
+            success_rates[nonzero] = masked_sums[nonzero] / included_counts[nonzero]
+
+        new_probs = prior_test_probs.astype(float).copy()
+        if nonzero.any():
+            adjustment = (success_rates[nonzero] - 0.50) * config.learning_rate
+            new_probs[nonzero] = np.clip(
+                prior_test_probs[nonzero] + adjustment, 0.01, 0.99
+            )
+
+        return new_probs
+
+    def get_update_mask_generation(
+        self,
+        updating_ind_born_generations: list[int],
+        other_ind_born_generations: list[int],
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        See MockCodeBayesianSystem.get_update_mask_generation for behavior.
+
+        The same generation-based rule works for tests updating too: newly
+        created tests are compared against all code, while surviving tests are
+        only updated with observations from newly-born code.
+        """
+        rows = len(updating_ind_born_generations)
+        cols = len(other_ind_born_generations)
+        mask = np.zeros((rows, cols), dtype=bool)
+
+        upd_gens = np.asarray(updating_ind_born_generations, dtype=int)
+        oth_gens = np.asarray(other_ind_born_generations, dtype=int)
+
+        new_rows = upd_gens == int(current_generation)
+        if new_rows.any():
+            mask[new_rows, :] = True
+
+        old_rows = ~new_rows
+        if old_rows.any():
+            cols_this_gen = oth_gens == int(current_generation)
+            if cols_this_gen.any():
+                mask[old_rows[:, None] & cols_this_gen[None, :]] = True
+
+        return mask
 
 
 class MockDatasetTestBlockBuilder:

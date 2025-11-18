@@ -458,6 +458,59 @@ class Orchestrator:
 
         return exec_results, obs_matrix
 
+    def _get_mask_matrices(
+        self,
+        code_population: CodePopulation,
+        test_population: TestPopulation,
+        public_test_population: TestPopulation,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Helper to get the mask matrices for code and test populations
+        based on generation born sequences.
+
+        Args:
+            code_population: The current code population
+            test_population: The current test population
+            public_test_population: The public test population
+        Returns:
+            Tuple of (code_mask_matrix_generated, code_mask_matrix_public, test_mask_matrix)
+        """
+        code_mask_matrix_generated = (
+            self.code_bayesian_system.get_update_mask_generation(
+                updating_ind_born_generations=[
+                    ind.generation_born for ind in code_population
+                ],
+                other_ind_born_generations=[
+                    ind.generation_born for ind in test_population
+                ],
+                current_generation=code_population.generation,
+            )
+        )
+
+        code_mask_matrix_public = self.code_bayesian_system.get_update_mask_generation(
+            updating_ind_born_generations=[
+                ind.generation_born for ind in code_population
+            ],
+            other_ind_born_generations=[
+                ind.generation_born for ind in public_test_population
+            ],
+            current_generation=code_population.generation,
+        )
+
+        test_mask_matrix = self.test_bayesian_system.get_update_mask_generation(
+            updating_ind_born_generations=[
+                ind.generation_born for ind in test_population
+            ],
+            other_ind_born_generations=[ind.generation_born for ind in code_population],
+            current_generation=test_population.generation,
+        )
+
+        return (
+            code_mask_matrix_generated,
+            code_mask_matrix_public,
+            test_mask_matrix,
+        )
+
     def run(self) -> tuple[CodePopulation, TestPopulation]:
         """
         Runs the main co-evolutionary loop for the configured number of generations.
@@ -537,12 +590,19 @@ class Orchestrator:
 
             # --- Step 2: Update Beliefs ---
             logger.debug("Step 2: Updating beliefs...")
+            logger.debug("Getting mask matrices for belief updates...")
+            code_mask_matrix_generated, code_mask_matrix_public, test_mask_matrix = (
+                self._get_mask_matrices(
+                    code_population, test_population, public_test_population
+                )
+            )
             # 2a. Compute Code Posterior Beliefs on Public Tests and Update
             logger.debug("Updating code beliefs based on public tests...")
             code_posterior_on_public = self.code_bayesian_system.update_code_beliefs(
                 prior_code_probs=code_population.probabilities,
                 prior_test_probs=public_test_population.probabilities,
                 observation_matrix=pub_obs_matrix,
+                code_update_mask_matrix=code_mask_matrix_public,
                 config=self.bayesian_config,
             )
 
@@ -554,6 +614,7 @@ class Orchestrator:
                 prior_code_probs=code_population.probabilities,
                 prior_test_probs=test_population.probabilities,
                 observation_matrix=gen_obs_matrix,
+                test_update_mask_matrix=test_mask_matrix,
                 config=self.bayesian_config,
             )
 
@@ -564,6 +625,7 @@ class Orchestrator:
                 prior_code_probs=code_population.probabilities,
                 prior_test_probs=test_population.probabilities,
                 observation_matrix=gen_obs_matrix,
+                code_update_mask_matrix=code_mask_matrix_generated,
                 config=self.bayesian_config,
             )
 

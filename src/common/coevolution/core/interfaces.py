@@ -1087,6 +1087,31 @@ class IBeliefInitializer(Protocol):
         ...
 
 
+class IBeliefMaskGenerator(Protocol):
+    """
+    Protocol defining the contract for generating the mask for belief updates.
+    This is to not update beliefs on the same observation repeatedly across generations.
+    """
+
+    def get_update_mask_generation(
+        self,
+        updating_ind_born_generations: list[int],
+        other_ind_born_generations: list[int],
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Generates a mask for belief updates based on the given populations.
+
+        Args:
+            updating_ind_born_generations: The generation born list in order from the population that is being updated.
+            other_ind_born_generations: The generation born list in order from the opposing population.
+            current_generation: The current generation number.
+        Returns:
+            A numpy array representing the update mask.
+        """
+        ...
+
+
 class IBeliefUpdater(Protocol):
     """
     Protocol defining the contract for Bayesian belief update strategies.
@@ -1101,6 +1126,7 @@ class IBeliefUpdater(Protocol):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        code_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -1110,6 +1136,7 @@ class IBeliefUpdater(Protocol):
             prior_code_probs: Prior probabilities for the code population.
             prior_test_probs: Prior probabilities for the test population.
             observation_matrix: Matrix of interactions (rows=code, cols=tests).
+            code_update_mask_matrix: Matrix indicating which observations to consider for updates.
             config: A BayesianConfig object containing hyperparameters
                     (alpha, beta, gamma, learning_rate).
 
@@ -1123,6 +1150,7 @@ class IBeliefUpdater(Protocol):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        test_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
@@ -1132,6 +1160,7 @@ class IBeliefUpdater(Protocol):
             prior_code_probs: Prior probabilities for the code population.
             prior_test_probs: Prior probabilities for the test population.
             observation_matrix: Matrix of interactions (rows=code, cols=tests).
+            test_update_mask_matrix: Matrix indicating which observations to consider for updates.
             config: A BayesianConfig object containing hyperparameters
                     (alpha, beta, gamma, learning_rate).
 
@@ -1148,7 +1177,9 @@ class IBeliefUpdater(Protocol):
 # typically implemented together as cohesive subsystems.
 
 
-class IBayesianSystem(IBeliefInitializer, IBeliefUpdater, Protocol):
+class IBayesianSystem(
+    IBeliefInitializer, IBeliefUpdater, IBeliefMaskGenerator, Protocol
+):
     """
     Unified interface for Bayesian belief management.
 

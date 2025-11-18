@@ -263,7 +263,6 @@ def test_orchestrator_full_run(
         console_level="INFO",  # Less verbose for pytest
         file_level="DEBUG",
         log_file_base_name="test_mock_coevolution",
-        setup_gen_log=True,
     )
 
     # Unpack configurations
@@ -354,7 +353,6 @@ def main() -> None:
         console_level="DEBUG",
         file_level="TRACE",
         log_file_base_name="mock_coevolution",
-        setup_gen_log=True,
     )
 
     logging_utils.log_section_header(
