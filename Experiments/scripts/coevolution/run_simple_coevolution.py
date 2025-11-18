@@ -110,8 +110,8 @@ def main(
         test_selector = SelectionStrategy("roulette_wheel")
 
         # Probability Assigners
-        code_prob_assigner = ProbabilityAssigner("mean")
-        test_prob_assigner = ProbabilityAssigner("mean")
+        code_prob_assigner = ProbabilityAssigner("min")
+        test_prob_assigner = ProbabilityAssigner("min")
 
         # Execution System
         execution_system = ExecutionSystem(enable_multiprocessing=True, num_workers=12)
@@ -150,7 +150,7 @@ def main(
             )
             # Code population configuration
             .with_code_population_config(
-                initial_prior=0.5,
+                initial_prior=0.2,
                 initial_population_size=10,
                 max_population_size=15,
                 elitism_rate=0.5,
@@ -158,27 +158,27 @@ def main(
             )
             # Test population configuration
             .with_test_population_config(
-                initial_prior=0.3,
+                initial_prior=0.2,
                 initial_population_size=20,
             )
             # Code operator rates
             .with_code_operator_rates(
-                crossover_rate=1.0,
+                crossover_rate=0.2,
                 mutation_rate=0.1,
-                edit_rate=0.0,
+                edit_rate=0.8,
             )
             # Test operator rates
             .with_test_operator_rates(
-                crossover_rate=1.0,
-                mutation_rate=0.1,
-                edit_rate=0.0,
+                crossover_rate=0.2,
+                mutation_rate=0.8,
+                edit_rate=0.2,
             )
             # Bayesian configuration
             .with_bayesian_config(
                 alpha=0.01,  # P(pass | code correct, test incorrect)
                 beta=0.2,  # P(pass | code incorrect, test correct)
                 gamma=0.2,  # P(pass | code incorrect, test incorrect)
-                learning_rate=0.1,
+                learning_rate=0.05,
             )
             # Problem and sandbox
             .with_problem(problem)
