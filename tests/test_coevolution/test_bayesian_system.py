@@ -240,7 +240,7 @@ class TestCodeBeliefUpdate:
         """Helper to generate all-true masks on the fly."""
 
         def _make_mask(rows: int, cols: int) -> np.ndarray:
-            return np.ones((rows, cols), dtype=bool)
+            return np.ones((rows, cols), dtype=int)
 
         return _make_mask
 
@@ -403,7 +403,7 @@ class TestTestBeliefUpdate:
         # NOTE: Mask for test update is (Test, Code)
         # Obs is (Code, Test) = (2, 2)
         # Mask should be (2, 2)
-        mask = np.ones((2, 2), dtype=bool)
+        mask = np.ones((2, 2), dtype=int)
 
         posterior = BayesianSystem.update_test_beliefs(
             prior_code_probs,
@@ -434,7 +434,7 @@ class TestRealisticScenarios:
     @pytest.fixture
     def all_true_mask(self) -> Callable[[int, int], np.ndarray]:
         def _make_mask(rows: int, cols: int) -> np.ndarray:
-            return np.ones((rows, cols), dtype=bool)
+            return np.ones((rows, cols), dtype=int)
 
         return _make_mask
 
@@ -498,7 +498,7 @@ class TestUpdateCalculations:
         prior_code_probs = np.array([0.5])
         prior_test_probs = np.array([0.9])
         observation_matrix = np.array([[1]])
-        mask = np.ones_like(observation_matrix, dtype=bool)
+        mask = np.ones_like(observation_matrix, dtype=int)
 
         # Manual Calc Reference (from PDF/Previous logic)
         # Logit(0.5) = 0
@@ -538,7 +538,7 @@ class TestMaskingLogic:
         obs = np.array([[1]])
 
         # MASK IS FALSE
-        mask = np.zeros_like(obs, dtype=bool)
+        mask = np.zeros_like(obs, dtype=int)
 
         posterior = BayesianSystem.update_code_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -558,7 +558,7 @@ class TestMaskingLogic:
         obs = np.array([[0]])  # Code 0, Test 0
 
         # Mask shape for tests is (Tests, Codes) -> (1, 1)
-        mask = np.zeros((1, 1), dtype=bool)
+        mask = np.zeros((1, 1), dtype=int)
 
         posterior = BayesianSystem.update_test_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -579,7 +579,7 @@ class TestMaskingLogic:
         obs = np.array([[1], [1]])  # Shape (2, 1)
 
         # Mask: [False, True]
-        mask = np.array([[False], [True]], dtype=bool)
+        mask = np.array([[False], [True]], dtype=int)
 
         posterior = BayesianSystem.update_code_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -601,7 +601,7 @@ class TestMaskingLogic:
 
         # Fail -> Should drop belief
         obs = np.array([[0]])
-        mask = np.zeros_like(obs, dtype=bool)
+        mask = np.zeros_like(obs, dtype=int)
 
         posterior = BayesianSystem.update_code_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -622,7 +622,7 @@ class TestMaskingLogic:
         prior_test = np.array([0.9])
 
         obs = np.array([[1], [1]])  # (2, 1)
-        mask = np.ones((1, 1), dtype=bool)  # Mismatch row count
+        mask = np.ones((1, 1), dtype=int)  # Mismatch row count
 
         # This might raise a ValueError during matrix mult or earlier
         try:
@@ -657,7 +657,7 @@ class TestMatrixDimensions:
         # Random observations and masks
         rng = np.random.default_rng(42)
         obs = rng.integers(0, 2, size=(100, 3))
-        mask = rng.integers(0, 2, size=(100, 3)).astype(bool)
+        mask = rng.integers(0, 2, size=(100, 3)).astype(int)
 
         posterior = BayesianSystem.update_code_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -675,7 +675,7 @@ class TestMatrixDimensions:
         rng = np.random.default_rng(42)
         # Obs shape is (Codes, Tests) -> (3, 100)
         obs = rng.integers(0, 2, size=(3, 100))
-        mask = rng.integers(0, 2, size=(3, 100)).astype(bool)
+        mask = rng.integers(0, 2, size=(3, 100)).astype(int)
 
         posterior = BayesianSystem.update_code_beliefs(
             prior_code, prior_test, obs, mask, standard_config
@@ -697,7 +697,7 @@ class TestMatrixDimensions:
         prior_test = np.full(5, 0.5)
 
         obs = np.zeros((10, 5))  # (Codes, Tests)
-        mask = np.ones((5, 10), dtype=bool)  # (Tests, Codes)
+        mask = np.ones((10, 5), dtype=int)  # (Tests, Codes)
 
         posterior = BayesianSystem.update_test_beliefs(
             prior_code, prior_test, obs, mask, standard_config

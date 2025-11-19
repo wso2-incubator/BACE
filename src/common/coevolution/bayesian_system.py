@@ -37,7 +37,7 @@ class UpdateMaskGenerator(IBeliefMaskGenerator):
     """
 
     @staticmethod
-    def _get_update_mask_from_populations(
+    def _get_update_mask(
         updating_ind_born_generations: list[int] | np.ndarray,
         other_ind_born_generations: list[int] | np.ndarray,
         current_generation: int,
@@ -76,8 +76,8 @@ class UpdateMaskGenerator(IBeliefMaskGenerator):
 
         mask = (upd_gen[:, None] == current_generation) | (
             oth_gen[None, :] == current_generation
-        )
-        return np.asarray(mask, dtype=bool)
+        ).astype(int)
+        return np.asarray(mask, dtype=int)
 
     @staticmethod
     def get_code_update_mask_generation(
@@ -96,7 +96,7 @@ class UpdateMaskGenerator(IBeliefMaskGenerator):
         Returns:
             A numpy array representing the code update mask.
         """
-        return UpdateMaskGenerator._get_update_mask_from_populations(
+        return UpdateMaskGenerator._get_update_mask(
             updating_ind_born_generations,
             other_ind_born_generations,
             current_generation,
@@ -119,7 +119,7 @@ class UpdateMaskGenerator(IBeliefMaskGenerator):
         Returns:
             A numpy array representing the test update mask.
         """
-        return UpdateMaskGenerator._get_update_mask_from_populations(
+        return UpdateMaskGenerator._get_update_mask(
             updating_ind_born_generations,
             other_ind_born_generations,
             current_generation,
@@ -265,8 +265,8 @@ class BayesianSystem(IBayesianSystem, UpdateMaskGenerator):
         # Note: Transpose observations because Rows=Tests, Cols=Codes for this perspective
         posterior_log_odds = BayesianSystem._perform_vectorized_update(
             prior_log_odds=prior_log_odds,
-            observation_matrix=observation_matrix.T,
-            mask_matrix=test_update_mask_matrix,
+            observation_matrix=observation_matrix.T,  # Transpose for Test perspective
+            mask_matrix=test_update_mask_matrix.T,  # Transpose for Test perspective
             woe_pass_vector=woe_pass,
             woe_fail_vector=woe_fail,
             learning_rate=config.learning_rate,
@@ -325,17 +325,17 @@ class BayesianSystem(IBayesianSystem, UpdateMaskGenerator):
         Returns:
             (N,) Updated posterior log-odds.
         """
-        # Ensure mask is float for multiplication
-        mask = mask_matrix.astype(float)
+        # Ensure mask is in in for multiplication
+        mask_matrix = mask_matrix.astype(int)
 
         # 1. Calculate contribution from Passing interactions
         # logic: (Mask * Obs) gives 1 only where valid update AND Pass occurred
-        pass_interactions = mask * observation_matrix
+        pass_interactions = mask_matrix * observation_matrix
         pass_update = pass_interactions @ woe_pass_vector
 
         # 2. Calculate contribution from Failing interactions
         # logic: (Mask * (1-Obs)) gives 1 only where valid update AND Fail occurred
-        fail_interactions = mask * (1 - observation_matrix)
+        fail_interactions = mask_matrix * (1 - observation_matrix)
         fail_update = fail_interactions @ woe_fail_vector
 
         # 3. Combine
