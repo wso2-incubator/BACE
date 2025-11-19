@@ -1093,21 +1093,31 @@ class IBeliefMaskGenerator(Protocol):
     This is to not update beliefs on the same observation repeatedly across generations.
     """
 
-    def get_update_mask_generation(
+    # New explicit public wrappers to disambiguate orientation
+    def get_code_update_mask_generation(
+        self,
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Returns a mask suitable for updating code beliefs. Shape is
+        (n_code, n_tests) with rows corresponding to code individuals and
+        columns to tests.
+        """
+        ...
+
+    def get_test_update_mask_generation(
         self,
         updating_ind_born_generations: list[int],
         other_ind_born_generations: list[int],
         current_generation: int,
     ) -> np.ndarray:
         """
-        Generates a mask for belief updates based on the given populations.
-
-        Args:
-            updating_ind_born_generations: The generation born list in order from the population that is being updated.
-            other_ind_born_generations: The generation born list in order from the opposing population.
-            current_generation: The current generation number.
-        Returns:
-            A numpy array representing the update mask.
+        Returns a mask suitable for updating test beliefs. Shape is
+        (n_tests, n_code) with rows corresponding to tests and columns to code
+        individuals. Implementations may return the transpose of the code
+        update mask.
         """
         ...
 
