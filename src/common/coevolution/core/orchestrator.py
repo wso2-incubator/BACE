@@ -592,46 +592,49 @@ class Orchestrator:
 
             # --- Step 2: Update Beliefs ---
             logger.debug("Step 2: Updating beliefs...")
-            logger.debug("Getting mask matrices for belief updates...")
-            code_mask_matrix_generated, code_mask_matrix_public, test_mask_matrix = (
-                self._get_mask_matrices(
-                    code_population, test_population, public_test_population
-                )
+            logger.debug("Getting mask matrices for updates...")
+            code_mask_generated, code_mask_public, test_mask = self._get_mask_matrices(
+                code_population, test_population, public_test_population
             )
-            # 2a. Compute Code Posterior Beliefs on Public Tests and Update
+
+            # PHASE A: Anchor to Ground Truth (Public Tests)
             logger.debug("Updating code beliefs based on public tests...")
-            code_posterior_on_public = self.code_bayesian_system.update_code_beliefs(
+            code_posterior_after_public = self.code_bayesian_system.update_code_beliefs(
                 prior_code_probs=code_population.probabilities,
                 prior_test_probs=public_test_population.probabilities,
                 observation_matrix=pub_obs_matrix,
-                code_update_mask_matrix=code_mask_matrix_public,
+                code_update_mask_matrix=code_mask_public,
                 config=self.bayesian_config,
             )
 
-            code_population.update_probabilities(code_posterior_on_public)
+            # Commit this update immediately so tests are judged by "smarter" code
+            code_population.update_probabilities(code_posterior_after_public)
 
-            # 2b. Compute Generated Test Posterior Beliefs and Update
-            logger.debug("Updating test beliefs based on generated tests...")
-            test_posterior = self.test_bayesian_system.update_test_beliefs(
-                prior_code_probs=code_population.probabilities,
-                prior_test_probs=test_population.probabilities,
+            # PHASE B: Mutual Adjustment (Generated Tests)
+            # 1. Calculate Test Updates (using Code that has seen Public tests)
+            logger.debug("Calculating test posteriors...")
+            test_posterior_generated = self.test_bayesian_system.update_test_beliefs(
+                prior_code_probs=code_population.probabilities,  # Uses post-public probs
+                prior_test_probs=test_population.probabilities,  # Uses current priors
                 observation_matrix=gen_obs_matrix,
-                test_update_mask_matrix=test_mask_matrix,
+                test_update_mask_matrix=test_mask,
                 config=self.bayesian_config,
             )
 
-            test_population.update_probabilities(test_posterior)
-            # 2c. Compute Code Posterior Beliefs on Generated Tests and Update
-            logger.debug("Updating code beliefs based on generated tests...")
-            code_posterior_on_generated = self.code_bayesian_system.update_code_beliefs(
-                prior_code_probs=code_population.probabilities,
-                prior_test_probs=test_population.probabilities,
+            # 2. Calculate Code Updates (using Test Priors, NOT posteriors)
+            # We use test_population.probabilities (the priors) here, NOT test_posterior_generated
+            logger.debug("Calculating code posteriors on generated data...")
+            code_posterior_generated = self.code_bayesian_system.update_code_beliefs(
+                prior_code_probs=code_population.probabilities,  # Uses post-public probs
+                prior_test_probs=test_population.probabilities,  # Uses PRIORS
                 observation_matrix=gen_obs_matrix,
-                code_update_mask_matrix=code_mask_matrix_generated,
+                code_update_mask_matrix=code_mask_generated,
                 config=self.bayesian_config,
             )
 
-            code_population.update_probabilities(code_posterior_on_generated)
+            # PHASE C: Apply Mutual Updates
+            test_population.update_probabilities(test_posterior_generated)
+            code_population.update_probabilities(code_posterior_generated)
 
             # --- Step 3: Select Elites ---
             logger.debug("Step 3: Selecting elites...")
