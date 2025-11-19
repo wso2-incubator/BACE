@@ -15,7 +15,7 @@ architectural improvements for the protocol-based system.
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import BayesianConfig, IBayesianSystem
+from .core.interfaces import BayesianConfig, IBayesianSystem, IBeliefMaskGenerator
 from .logging_utils import (
     log_belief_changes,
     log_belief_update_start,
@@ -30,7 +30,103 @@ from .logging_utils import (
 _NUMERICAL_STABILITY_EPSILON = 1e-9
 
 
-class BayesianSystem(IBayesianSystem):
+class UpdateMaskGenerator(IBeliefMaskGenerator):
+    """
+    Implementation of IBeliefMaskGenerator to generate update masks
+    based on individuals' generation born.
+    """
+
+    @staticmethod
+    def _get_update_mask_from_populations(
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Generate a mask for belief updates based on generations born.
+
+        An individual can update its belief about another individual only if:
+        - It was born in the current generation or later (All observations are new to it), or
+        - The other individual was born in the current generation. (Only the observations from individuals born in the current generation are new to it)
+
+        Args:
+            updating_population: The population that is being updated.
+            other_population: The opposing population.
+            current_generation: The current generation number.
+
+        Returns:
+            A numpy array representing the update mask.
+        """
+        upd_gen = np.array(updating_ind_born_generations)
+        oth_gen = np.array(other_ind_born_generations)
+
+        # raise error if any generation is negative
+        if np.any(upd_gen < 0) or np.any(oth_gen < 0):
+            raise ValueError("Generation born values must be non-negative integers")
+
+        # raise error if current_generation is negative
+        if current_generation < 0:
+            raise ValueError("Current generation must be a non-negative integer")
+
+        # raise error if current_generation is less than any generation in upd_gen or oth_gen
+        if np.any(upd_gen > current_generation) or np.any(oth_gen > current_generation):
+            raise ValueError(
+                "Current generation must be greater than or equal to all generation born values"
+            )
+
+        mask = (upd_gen[:, None] == current_generation) | (
+            oth_gen[None, :] == current_generation
+        )
+        return np.asarray(mask, dtype=bool)
+
+    @staticmethod
+    def get_code_update_mask_generation(
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Generate code update mask based on generations born.
+
+        Args:
+            updating_ind_born_generations: Generations born of code individuals.
+            other_ind_born_generations: Generations born of test individuals.
+            current_generation: The current generation number.
+
+        Returns:
+            A numpy array representing the code update mask.
+        """
+        return UpdateMaskGenerator._get_update_mask_from_populations(
+            updating_ind_born_generations,
+            other_ind_born_generations,
+            current_generation,
+        )
+
+    @staticmethod
+    def get_test_update_mask_generation(
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
+        current_generation: int,
+    ) -> np.ndarray:
+        """
+        Generate test update mask based on generations born.
+
+        Args:
+            updating_ind_born_generations: Generations born of test individuals.
+            other_ind_born_generations: Generations born of code individuals.
+            current_generation: The current generation number.
+
+        Returns:
+            A numpy array representing the test update mask.
+        """
+        return UpdateMaskGenerator._get_update_mask_from_populations(
+            updating_ind_born_generations,
+            other_ind_born_generations,
+            current_generation,
+        ).T
+
+
+class BayesianSystem(IBayesianSystem, UpdateMaskGenerator):
     """
     Static implementation of the IBayesianSystem protocol.
 
@@ -104,47 +200,38 @@ class BayesianSystem(IBayesianSystem):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        code_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
         Update beliefs for the code population based on test results.
-
-        Args:
-            prior_code_probs: Prior probabilities for the code population.
-            prior_test_probs: Prior probabilities for the test population.
-            observation_matrix: Matrix of interactions (rows=code, cols=tests).
-                               Values are 1 for pass, 0 for fail.
-            config: BayesianConfig containing hyperparameters
-                   (alpha, beta, gamma, learning_rate).
-
-        Returns:
-            Updated posterior probabilities for the code population.
+        Uses vectorized matrix operations for efficiency.
         """
         log_belief_update_start("code", len(prior_code_probs), len(prior_test_probs))
         log_prior_statistics("code", prior_code_probs)
 
-        # Calculate WoE matrix for code update
-        logger.trace("Calculating WoE matrix for code updates")
-        woe_for_code = BayesianSystem._calculate_woe_for_code_update(
+        # 1. Calculate WoE vectors (One value per Test)
+        woe_fail, woe_pass = BayesianSystem._calculate_woe_vectors_for_code_update(
             prior_test_probs, config
         )
 
-        # Convert to log-odds space
-        logger.trace("Converting prior code probabilities to log-odds")
-        prior_code_log_odds = BayesianSystem._probabilities_to_log_odds(
-            prior_code_probs
+        # 2. Convert priors to log-odds
+        prior_log_odds = BayesianSystem._probabilities_to_log_odds(prior_code_probs)
+
+        # 3. Perform vectorized update using mask and observations
+        # We treat observations (0/1) as selectors for WoE values
+        posterior_log_odds = BayesianSystem._perform_vectorized_update(
+            prior_log_odds=prior_log_odds,
+            observation_matrix=observation_matrix,
+            mask_matrix=code_update_mask_matrix,
+            woe_pass_vector=woe_pass,
+            woe_fail_vector=woe_fail,
+            learning_rate=config.learning_rate,
         )
 
-        # Update in log-odds space
-        logger.debug("Updating code beliefs in log-odds space")
-        posterior_code_log_odds = BayesianSystem._update_log_odds(
-            prior_code_log_odds, observation_matrix, woe_for_code, config.learning_rate
-        )
-
-        # Convert back to probabilities
-        logger.trace("Converting posterior log-odds to probabilities")
+        # 4. Convert back to probabilities
         posterior_code_probs = BayesianSystem._log_odds_to_probabilities(
-            posterior_code_log_odds
+            posterior_log_odds
         )
 
         log_posterior_statistics("code", prior_code_probs, posterior_code_probs)
@@ -157,50 +244,37 @@ class BayesianSystem(IBayesianSystem):
         prior_code_probs: np.ndarray,
         prior_test_probs: np.ndarray,
         observation_matrix: np.ndarray,
+        test_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
         """
         Update beliefs for the test population based on code results.
-
-        Args:
-            prior_code_probs: Prior probabilities for the code population.
-            prior_test_probs: Prior probabilities for the test population.
-            observation_matrix: Matrix of interactions (rows=code, cols=tests).
-                               Values are 1 for pass, 0 for fail.
-            config: BayesianConfig containing hyperparameters
-                   (alpha, beta, gamma, learning_rate).
-
-        Returns:
-            Updated posterior probabilities for the test population.
         """
         log_belief_update_start("test", len(prior_test_probs), len(prior_code_probs))
         log_prior_statistics("test", prior_test_probs)
 
-        # Calculate WoE matrix for test update
-        logger.trace("Calculating WoE matrix for test updates")
-        woe_for_test = BayesianSystem._calculate_woe_for_test_update(
+        # 1. Calculate WoE vectors (One value per Code)
+        woe_fail, woe_pass = BayesianSystem._calculate_woe_vectors_for_test_update(
             prior_code_probs, config
         )
 
-        # Convert to log-odds space
-        logger.trace("Converting prior test probabilities to log-odds")
-        prior_test_log_odds = BayesianSystem._probabilities_to_log_odds(
-            prior_test_probs
+        # 2. Convert priors to log-odds
+        prior_log_odds = BayesianSystem._probabilities_to_log_odds(prior_test_probs)
+
+        # 3. Perform vectorized update
+        # Note: Transpose observations because Rows=Tests, Cols=Codes for this perspective
+        posterior_log_odds = BayesianSystem._perform_vectorized_update(
+            prior_log_odds=prior_log_odds,
+            observation_matrix=observation_matrix.T,
+            mask_matrix=test_update_mask_matrix,
+            woe_pass_vector=woe_pass,
+            woe_fail_vector=woe_fail,
+            learning_rate=config.learning_rate,
         )
 
-        # Update in log-odds space (need to transpose observation matrix for tests)
-        logger.debug("Updating test beliefs in log-odds space")
-        posterior_test_log_odds = BayesianSystem._update_log_odds(
-            prior_test_log_odds,
-            observation_matrix.T,  # Transpose: rows become tests, cols become codes
-            woe_for_test,
-            config.learning_rate,
-        )
-
-        # Convert back to probabilities
-        logger.trace("Converting posterior log-odds to probabilities")
+        # 4. Convert back to probabilities
         posterior_test_probs = BayesianSystem._log_odds_to_probabilities(
-            posterior_test_log_odds
+            posterior_log_odds
         )
 
         log_posterior_statistics("test", prior_test_probs, posterior_test_probs)
@@ -212,166 +286,121 @@ class BayesianSystem(IBayesianSystem):
 
     @staticmethod
     def _probabilities_to_log_odds(probabilities: np.ndarray) -> np.ndarray:
-        """
-        Convert array of probabilities to log-odds.
-
-        Clips values to avoid log(0) or division by zero.
-
-        Args:
-            probabilities: Array of probability values.
-
-        Returns:
-            Array of log-odds values.
-        """
-        # Clip probabilities to avoid infinity in log-odds
-        clipped_probs = np.clip(
+        """Convert probabilities to log-odds with clipping."""
+        clipped = np.clip(
             probabilities,
             _NUMERICAL_STABILITY_EPSILON,
             1 - _NUMERICAL_STABILITY_EPSILON,
         )
-        return np.asarray(np.log(clipped_probs / (1 - clipped_probs)))
+        return np.asarray(np.log(clipped / (1 - clipped)))
 
     @staticmethod
-    def _log_odds_to_probabilities(log_odds_array: np.ndarray) -> np.ndarray:
-        """
-        Convert array of log-odds to probabilities.
-
-        Uses the logistic (sigmoid) function.
-
-        Args:
-            log_odds_array: Array of log-odds values.
-
-        Returns:
-            Array of probability values.
-        """
-        return np.asarray(1 / (1 + np.exp(-log_odds_array)))
+    def _log_odds_to_probabilities(log_odds: np.ndarray) -> np.ndarray:
+        """Convert log-odds to probabilities using sigmoid."""
+        return np.asarray(1 / (1 + np.exp(-log_odds)))
 
     @staticmethod
-    def _calculate_woe_for_code_update(
-        test_probs: np.ndarray, config: BayesianConfig
-    ) -> np.ndarray:
-        """
-        Calculate the Weight of Evidence (WoE) matrix for updating code beliefs.
-
-        Corresponds to Equations 16 and 17 in the coevolution documentation.
-
-        Args:
-            test_probs: Current correctness probabilities P(T_j) for tests.
-            config: BayesianConfig containing alpha, beta, gamma.
-
-        Returns:
-            WoE matrix of shape (num_tests, 2) for updating code beliefs.
-            Last dimension contains [WoE for fail (0), WoE for pass (1)].
-        """
-        t_p = test_probs[np.newaxis, :]  # Shape (1, num_tests)
-
-        # Likelihood P(D=1 | C_i=1) and P(D=1 | C_i=0)
-        like_pass_c_correct = t_p + config.alpha * (1 - t_p)
-        like_pass_c_incorrect = config.beta * t_p + config.gamma * (1 - t_p)
-
-        # Likelihood P(D=0 | C_i=1) and P(D=0 | C_i=0)
-        like_fail_c_correct = (1 - config.alpha) * (1 - t_p)
-        like_fail_c_incorrect = (1 - config.beta) * t_p + (1 - config.gamma) * (1 - t_p)
-
-        # WoE = log(Likelihood(Correct) / Likelihood(Incorrect))
-        # Add epsilon inside log to prevent log(0)
-        woe_code_pass = np.log(
-            (like_pass_c_correct + _NUMERICAL_STABILITY_EPSILON)
-            / (like_pass_c_incorrect + _NUMERICAL_STABILITY_EPSILON)
-        )
-        woe_code_fail = np.log(
-            (like_fail_c_correct + _NUMERICAL_STABILITY_EPSILON)
-            / (like_fail_c_incorrect + _NUMERICAL_STABILITY_EPSILON)
-        )
-
-        # Stack fail WoE (index 0) and pass WoE (index 1) along last axis
-        # Use reshape instead of squeeze to preserve shape even with single test
-        woe_code_fail_flat = woe_code_fail.ravel()
-        woe_code_pass_flat = woe_code_pass.ravel()
-        return np.stack([woe_code_fail_flat, woe_code_pass_flat], axis=-1)
-
-    @staticmethod
-    def _calculate_woe_for_test_update(
-        code_probs: np.ndarray, config: BayesianConfig
-    ) -> np.ndarray:
-        """
-        Calculate the Weight of Evidence (WoE) matrix for updating test beliefs.
-
-        Corresponds to Equations 18 and 19 in the coevolution documentation.
-
-        Args:
-            code_probs: Current correctness probabilities P(C_i) for codes.
-            config: BayesianConfig containing alpha, beta, gamma.
-
-        Returns:
-            WoE matrix of shape (num_codes, 2) for updating test beliefs.
-            Last dimension contains [WoE for fail (0), WoE for pass (1)].
-        """
-        c_p = code_probs[:, np.newaxis]  # Shape (num_codes, 1)
-
-        # Likelihood P(D=1 | T_j=1) and P(D=1 | T_j=0)
-        like_pass_t_correct = c_p + config.beta * (1 - c_p)
-        like_pass_t_incorrect = config.alpha * c_p + config.gamma * (1 - c_p)
-
-        # Likelihood P(D=0 | T_j=1) and P(D=0 | T_j=0)
-        like_fail_t_correct = (1 - config.beta) * (1 - c_p)
-        like_fail_t_incorrect = (1 - config.alpha) * c_p + (1 - config.gamma) * (
-            1 - c_p
-        )
-
-        # WoE = log(Likelihood(Correct) / Likelihood(Incorrect))
-        woe_test_pass = np.log(
-            (like_pass_t_correct + _NUMERICAL_STABILITY_EPSILON)
-            / (like_pass_t_incorrect + _NUMERICAL_STABILITY_EPSILON)
-        )
-        woe_test_fail = np.log(
-            (like_fail_t_correct + _NUMERICAL_STABILITY_EPSILON)
-            / (like_fail_t_incorrect + _NUMERICAL_STABILITY_EPSILON)
-        )
-
-        # Stack fail WoE (index 0) and pass WoE (index 1) along last axis
-        # Use reshape instead of squeeze to preserve shape even with single code
-        woe_test_fail_flat = woe_test_fail.ravel()
-        woe_test_pass_flat = woe_test_pass.ravel()
-        return np.stack([woe_test_fail_flat, woe_test_pass_flat], axis=-1)
-
-    @staticmethod
-    def _update_log_odds(
+    def _perform_vectorized_update(
         prior_log_odds: np.ndarray,
         observation_matrix: np.ndarray,
-        woe_matrix: np.ndarray,
+        mask_matrix: np.ndarray,
+        woe_pass_vector: np.ndarray,
+        woe_fail_vector: np.ndarray,
         learning_rate: float,
     ) -> np.ndarray:
         """
-        Update log-odds using the WoE matrix, scaled by learning rate.
+        Core optimized update logic using matrix multiplication.
 
-        This is a generic update function that works for both code and test updates.
-        The observation_matrix should be oriented such that rows correspond to
-        the population being updated.
+        Mathematical Logic:
+        Update = LearningRate * Sum_over_j( Mask_ij * [ Obs_ij * WoE_Pass_j + (1-Obs_ij) * WoE_Fail_j ] )
 
         Args:
-            prior_log_odds: Prior log-odds for the population being updated.
-            observation_matrix: Matrix of observations (0 or 1), with rows
-                               corresponding to the population being updated.
-            woe_matrix: Weight of Evidence matrix with shape (num_observations, 2).
-            learning_rate: Scaling factor for the Bayesian update.
+            prior_log_odds: (N,) Initial beliefs in log-odds.
+            observation_matrix: (N, M) Binary matrix of outcomes.
+            mask_matrix: (N, M) Boolean/Binary matrix indicating valid updates.
+            woe_pass_vector: (M,) WoE values if outcome is Pass (1).
+            woe_fail_vector: (M,) WoE values if outcome is Fail (0).
+            learning_rate: Scaling factor.
 
         Returns:
-            Posterior log-odds for the population.
+            (N,) Updated posterior log-odds.
         """
-        # Expand observation matrix to index into WoE matrix
-        indices = observation_matrix[..., np.newaxis]
-        woe_matrix_expanded = woe_matrix[np.newaxis, :, :]
+        # Ensure mask is float for multiplication
+        mask = mask_matrix.astype(float)
 
-        # Extract relevant WoE values based on observations
-        relevant_woes = np.take_along_axis(
-            woe_matrix_expanded, indices, axis=2
-        ).squeeze(-1)
+        # 1. Calculate contribution from Passing interactions
+        # logic: (Mask * Obs) gives 1 only where valid update AND Pass occurred
+        pass_interactions = mask * observation_matrix
+        pass_update = pass_interactions @ woe_pass_vector
 
-        # Sum WoE across all observations for each individual
-        total_woe = np.sum(relevant_woes, axis=1)
+        # 2. Calculate contribution from Failing interactions
+        # logic: (Mask * (1-Obs)) gives 1 only where valid update AND Fail occurred
+        fail_interactions = mask * (1 - observation_matrix)
+        fail_update = fail_interactions @ woe_fail_vector
 
-        # Apply Bayesian update scaled by learning rate
-        posterior_log_odds = prior_log_odds + learning_rate * total_woe
+        # 3. Combine
+        total_woe_update = pass_update + fail_update
+        updated_log_odds = prior_log_odds + (learning_rate * total_woe_update)
 
-        return np.asarray(posterior_log_odds, dtype=float)
+        return np.asarray(updated_log_odds)
+
+    @staticmethod
+    def _calculate_woe_vectors_for_code_update(
+        test_probs: np.ndarray, config: BayesianConfig
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate WoE vectors for code updates.
+        Returns (woe_fail_vector, woe_pass_vector).
+        """
+        t_p = test_probs  # Shape (num_tests,)
+
+        # Likelihoods P(D|C)
+        # Pass | Correct / Incorrect
+        like_pass_c_corr = t_p + config.alpha * (1 - t_p)
+        like_pass_c_inc = config.beta * t_p + config.gamma * (1 - t_p)
+
+        # Fail | Correct / Incorrect
+        like_fail_c_corr = (1 - config.alpha) * (1 - t_p)
+        like_fail_c_inc = (1 - config.beta) * t_p + (1 - config.gamma) * (1 - t_p)
+
+        # WoE = log(Likelihood_Correct / Likelihood_Incorrect)
+        woe_pass = np.log(
+            (like_pass_c_corr + _NUMERICAL_STABILITY_EPSILON)
+            / (like_pass_c_inc + _NUMERICAL_STABILITY_EPSILON)
+        )
+        woe_fail = np.log(
+            (like_fail_c_corr + _NUMERICAL_STABILITY_EPSILON)
+            / (like_fail_c_inc + _NUMERICAL_STABILITY_EPSILON)
+        )
+
+        return woe_fail, woe_pass
+
+    @staticmethod
+    def _calculate_woe_vectors_for_test_update(
+        code_probs: np.ndarray, config: BayesianConfig
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate WoE vectors for test updates.
+        Returns (woe_fail_vector, woe_pass_vector).
+        """
+        c_p = code_probs  # Shape (num_codes,)
+
+        # Likelihoods P(D|T)
+        # Pass | Correct / Incorrect
+        like_pass_t_corr = c_p + config.beta * (1 - c_p)
+        like_pass_t_inc = config.alpha * c_p + config.gamma * (1 - c_p)
+
+        # Fail | Correct / Incorrect
+        like_fail_t_corr = (1 - config.beta) * (1 - c_p)
+        like_fail_t_inc = (1 - config.alpha) * c_p + (1 - config.gamma) * (1 - c_p)
+
+        woe_pass = np.log(
+            (like_pass_t_corr + _NUMERICAL_STABILITY_EPSILON)
+            / (like_pass_t_inc + _NUMERICAL_STABILITY_EPSILON)
+        )
+        woe_fail = np.log(
+            (like_fail_t_corr + _NUMERICAL_STABILITY_EPSILON)
+            / (like_fail_t_inc + _NUMERICAL_STABILITY_EPSILON)
+        )
+
+        return woe_fail, woe_pass
