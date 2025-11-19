@@ -2,6 +2,7 @@
 
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 import numpy as np
 from loguru import logger
@@ -38,6 +39,16 @@ from .interfaces import (
     Test,
 )
 from .population import CodePopulation, TestPopulation
+
+
+@dataclass
+class InteractionData:
+    """Container for execution results and observation matrices for a generation."""
+
+    gen_exec_results: ExecutionResults
+    pub_exec_results: ExecutionResults
+    gen_obs_matrix: np.ndarray
+    pub_obs_matrix: np.ndarray
 
 
 class Orchestrator:
@@ -157,6 +168,246 @@ class Orchestrator:
         )
 
         self._set_random_seed(evo_config.random_seed)
+
+    def run(self) -> tuple[CodePopulation, TestPopulation]:
+        """
+        Runs the main co-evolutionary loop.
+        """
+        logging_utils.log_section_header("INFO", "STARTING CO-EVOLUTION RUN")
+
+        # 1. Initialization
+        code_pop, test_pop, pub_pop, priv_pop = self._initialize_evolution()
+
+        # 2. Main Loop
+        for gen in range(self.evo_config.num_generations):
+            logging_utils.log_subsection_header(
+                "INFO",
+                f"GENERATION {gen} / {self.evo_config.num_generations}",
+            )
+
+            # A. Execute
+            interactions = self._execute_all_interactions(code_pop, test_pop, pub_pop)
+
+            # B. Update Beliefs (Cooperative & Anchored)
+            code_pop, test_pop = self._perform_cooperative_updates(
+                code_pop,
+                test_pop,
+                pub_pop,
+                interactions.gen_obs_matrix,
+                interactions.pub_obs_matrix,
+            )
+
+            # C. Evolve (Select -> Breed -> Transition)
+            code_pop, test_pop = self._produce_next_generation(
+                code_pop,
+                test_pop,
+                interactions.gen_exec_results,
+                interactions.gen_obs_matrix,
+            )
+
+            # D. Log
+            logging_utils.log_generation_summary(code_pop, test_pop)
+
+        # 3. Finalization
+        self._finalize_evolution(code_pop, test_pop, pub_pop, priv_pop)
+
+        return code_pop, test_pop
+
+    # =========================================================================
+    # Lifecycle Phase 1: Initialization
+    # =========================================================================
+
+    def _initialize_evolution(
+        self,
+    ) -> tuple[CodePopulation, TestPopulation, TestPopulation, TestPopulation]:
+        """Creates initial populations and logs initial state."""
+
+        # Create Populations
+        code_pop = self._create_initial_code_population()
+        test_pop = self._create_initial_test_populations()
+
+        pub_pop = self._create_fixed_test_population_from_test_cases(
+            self.problem.public_test_cases, self.problem.starter_code
+        )
+        priv_pop = self._create_fixed_test_population_from_test_cases(
+            self.problem.private_test_cases, self.problem.starter_code
+        )
+
+        # Initial Private Run (Baseline)
+        _, priv_obs = self._get_exec_results_and_obs_matrix(code_pop, priv_pop)
+
+        logging_utils.log_observation_matrix(priv_obs, code_pop, priv_pop, "private")
+        logging_utils.log_generation_summary(code_pop, test_pop)
+
+        return code_pop, test_pop, pub_pop, priv_pop
+
+    # =========================================================================
+    # Lifecycle Phase 2A: Execution
+    # =========================================================================
+
+    def _execute_all_interactions(
+        self,
+        code_pop: CodePopulation,
+        test_pop: TestPopulation,
+        pub_pop: TestPopulation,
+    ) -> InteractionData:
+        """Executes code against both generated and public tests."""
+        logger.debug("Step 1: Executing gen and public test sets...")
+
+        gen_exec, gen_obs = self._get_exec_results_and_obs_matrix(code_pop, test_pop)
+        pub_exec, pub_obs = self._get_exec_results_and_obs_matrix(code_pop, pub_pop)
+
+        logging_utils.log_observation_matrix(gen_obs, code_pop, test_pop, "generated")
+        logging_utils.log_observation_matrix(pub_obs, code_pop, pub_pop, "public")
+
+        return InteractionData(gen_exec, pub_exec, gen_obs, pub_obs)
+
+    # =========================================================================
+    # Lifecycle Phase 2B: Belief Updates (The Core Logic)
+    # =========================================================================
+
+    def _perform_cooperative_updates(
+        self,
+        code_pop: CodePopulation,
+        test_pop: TestPopulation,
+        pub_pop: TestPopulation,
+        gen_obs_matrix: np.ndarray,
+        pub_obs_matrix: np.ndarray,
+    ) -> tuple[CodePopulation, TestPopulation]:
+        """
+        Performs the Bayesian belief updates in a specific order to prevent
+        confirmation bias.
+
+        Strategy:
+        1. Masking: Determine which individuals should be updated based on their
+           generation born and the current generation.
+        2. Anchor: Update Code using Public Tests (Ground Truth).
+        3. Calculate: Compute updates for both populations using the generated observations.
+           - Tests judge Code (that has seen Public tests).
+           - Code judges Tests (using Test Priors).
+        4. Apply: Apply updates simultaneously.
+        """
+        logger.debug("Step 2: Updating beliefs...")
+
+        # 1. Get Masks
+        logger.debug("Getting mask matrices for updates...")
+        code_mask_gen, code_mask_pub, test_mask = self._get_mask_matrices(
+            code_pop, test_pop, pub_pop
+        )
+
+        # 2. ANCHOR: Update Code based on Public Tests first
+        logger.debug("Anchoring code beliefs with public tests...")
+        code_post_public = self.code_bayesian_system.update_code_beliefs(
+            prior_code_probs=code_pop.probabilities,
+            prior_test_probs=pub_pop.probabilities,
+            observation_matrix=pub_obs_matrix,
+            code_update_mask_matrix=code_mask_pub,
+            config=self.bayesian_config,
+        )
+        code_pop.update_probabilities(code_post_public)
+
+        # 3. CALCULATE: Compute updates for both populations using the generated observations.
+        logger.debug("Calculating test updates based on updated code beliefs...")
+        test_post_generated = self.test_bayesian_system.update_test_beliefs(
+            prior_code_probs=code_pop.probabilities,
+            prior_test_probs=test_pop.probabilities,
+            observation_matrix=gen_obs_matrix,
+            test_update_mask_matrix=test_mask,
+            config=self.bayesian_config,
+        )
+        logger.debug("Calculating code updates based on test priors...")
+        code_post_generated = self.code_bayesian_system.update_code_beliefs(
+            prior_code_probs=code_pop.probabilities,
+            prior_test_probs=test_pop.probabilities,
+            observation_matrix=gen_obs_matrix,
+            code_update_mask_matrix=code_mask_gen,
+            config=self.bayesian_config,
+        )
+
+        # 4. APPLY: Apply simultaneous updates
+        logger.debug("Applying simultaneous updates...")
+        test_pop.update_probabilities(test_post_generated)
+        code_pop.update_probabilities(code_post_generated)
+
+        return code_pop, test_pop
+
+    # =========================================================================
+    # Lifecycle Phase 2C: Evolution (Selection & Breeding)
+    # =========================================================================
+
+    def _produce_next_generation(
+        self,
+        code_pop: CodePopulation,
+        test_pop: TestPopulation,
+        gen_exec_results: ExecutionResults,
+        gen_obs_matrix: np.ndarray,
+    ) -> tuple[CodePopulation, TestPopulation]:
+        """
+        Handles the full evolution cycle: Selection, Breeding, and Transition.
+        Mutates the population objects in-place.
+        """
+        # 1. Select Elites
+        logger.debug("Step 3: Selecting elites...")
+        code_elites, test_elites = self._select_elites(
+            code_pop, test_pop, gen_obs_matrix
+        )
+        self._notify_elites(code_elites, code_pop.generation)
+        self._notify_elites(test_elites, test_pop.generation)
+
+        # 2. Breed Code
+        logger.debug("Step 4: Generating offspring...")
+        code_offsprings = self._breed_code(
+            code_pop, test_pop, gen_exec_results, gen_obs_matrix, len(code_elites)
+        )
+
+        # 3. Breed Tests
+        test_offsprings = self._breed_tests(
+            test_pop, code_pop, gen_exec_results, gen_obs_matrix, len(test_elites)
+        )
+
+        # 4. Transition Code Population
+        logger.debug("Step 5: Setting next generation...")
+        new_code_gen = code_elites + code_offsprings
+        self._notify_removed_individuals(code_pop, new_code_gen)
+        code_pop.set_next_generation(new_code_gen)
+
+        # 5. Transition Test Population
+        new_test_gen = test_elites + test_offsprings
+        self._notify_removed_individuals(test_pop, new_test_gen)
+        test_pop.set_next_generation(new_test_gen)
+
+        return code_pop, test_pop
+
+    # =========================================================================
+    # Lifecycle Phase 3: Finalization
+    # =========================================================================
+
+    def _finalize_evolution(
+        self,
+        code_pop: CodePopulation,
+        test_pop: TestPopulation,
+        pub_pop: TestPopulation,
+        priv_pop: TestPopulation,
+    ) -> None:
+        """Runs final private evaluation and logs closing stats."""
+
+        _, pub_obs = self._get_exec_results_and_obs_matrix(code_pop, pub_pop)
+        logging_utils.log_observation_matrix(pub_obs, code_pop, pub_pop, "public")
+        _, gen_obs = self._get_exec_results_and_obs_matrix(code_pop, test_pop)
+        logging_utils.log_observation_matrix(gen_obs, code_pop, test_pop, "generated")
+
+        # Run final private tests
+        _, priv_obs = self._get_exec_results_and_obs_matrix(code_pop, priv_pop)
+
+        logging_utils.log_observation_matrix(priv_obs, code_pop, priv_pop, "private")
+
+        # Log final survivors
+        logging_utils.log_final_survivors(code_pop, test_pop)
+        logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
 
     def _set_random_seed(self, seed: int) -> None:
         """
@@ -512,204 +763,3 @@ class Orchestrator:
             code_mask_matrix_public,
             test_mask_matrix,
         )
-
-    def run(self) -> tuple[CodePopulation, TestPopulation]:
-        """
-        Runs the main co-evolutionary loop for the configured number of generations.
-
-        Evolution Process:
-        - Creates initial populations (code, test, public test, private test)
-        - Iterates through generations performing:
-          1. Execution & Observation (run tests, build observation matrices)
-          2. Belief Updates (Bayesian updates on probabilities)
-          3. Elite Selection (top-k code, Pareto front tests)
-          4. Offspring Generation (via breeding strategies)
-          5. Population Transition (set next generation, notify removed individuals)
-          6. Logging (generation summaries)
-
-        Logging Behavior:
-        - Each generation: Logs lightweight summary with aggregate statistics
-        - When individuals die: Logs complete lifecycle record (once per individual)
-        - After evolution: Logs all final survivors with complete lifecycle records
-
-        This logging strategy ensures each individual is logged exactly once,
-        eliminating redundancy from repeated logging across generations.
-
-        Returns:
-            Tuple of (final_code_population, final_test_population)
-        """
-        logging_utils.log_section_header("INFO", "STARTING CO-EVOLUTION RUN")
-
-        # --- Create Initial Populations ---
-        code_population = self._create_initial_code_population()
-        test_population = self._create_initial_test_populations()
-
-        # Create fixed test populations from dataset test cases
-        public_test_population = self._create_fixed_test_population_from_test_cases(
-            self.problem.public_test_cases, self.problem.starter_code
-        )
-        private_test_population = self._create_fixed_test_population_from_test_cases(
-            self.problem.private_test_cases, self.problem.starter_code
-        )
-
-        assert code_population is not None
-        assert test_population is not None
-        assert public_test_population is not None
-        assert private_test_population is not None
-
-        priv_exec_results, priv_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, private_test_population
-        )
-
-        logging_utils.log_observation_matrix(
-            priv_obs_matrix, code_population, private_test_population, "private"
-        )
-
-        logging_utils.log_generation_summary(code_population, test_population)
-
-        # --- Main Evolution Loop ---
-        for gen in range(self.evo_config.num_generations):
-            logging_utils.log_subsection_header(
-                "INFO",
-                f"GENERATION {gen} / {self.evo_config.num_generations}",
-            )
-
-            # --- Step 1: Execute & Observe ---
-            logger.debug("Step 1: Executing gen and public test sets...")
-            gen_exec_results, gen_obs_matrix = self._get_exec_results_and_obs_matrix(
-                code_population, test_population
-            )
-            _, pub_obs_matrix = self._get_exec_results_and_obs_matrix(
-                code_population, public_test_population
-            )
-
-            logging_utils.log_observation_matrix(
-                gen_obs_matrix, code_population, test_population, "generated"
-            )
-            logging_utils.log_observation_matrix(
-                pub_obs_matrix, code_population, public_test_population, "public"
-            )
-
-            # --- Step 2: Update Beliefs ---
-            logger.debug("Step 2: Updating beliefs...")
-            logger.debug("Getting mask matrices for updates...")
-            code_mask_generated, code_mask_public, test_mask = self._get_mask_matrices(
-                code_population, test_population, public_test_population
-            )
-
-            # PHASE A: Anchor to Ground Truth (Public Tests)
-            logger.debug("Updating code beliefs based on public tests...")
-            code_posterior_after_public = self.code_bayesian_system.update_code_beliefs(
-                prior_code_probs=code_population.probabilities,
-                prior_test_probs=public_test_population.probabilities,
-                observation_matrix=pub_obs_matrix,
-                code_update_mask_matrix=code_mask_public,
-                config=self.bayesian_config,
-            )
-
-            # Commit this update immediately so tests are judged by "smarter" code
-            code_population.update_probabilities(code_posterior_after_public)
-
-            # PHASE B: Mutual Adjustment (Generated Tests)
-            # 1. Calculate Test Updates (using Code that has seen Public tests)
-            logger.debug("Calculating test posteriors...")
-            test_posterior_generated = self.test_bayesian_system.update_test_beliefs(
-                prior_code_probs=code_population.probabilities,  # Uses post-public probs
-                prior_test_probs=test_population.probabilities,  # Uses current priors
-                observation_matrix=gen_obs_matrix,
-                test_update_mask_matrix=test_mask,
-                config=self.bayesian_config,
-            )
-
-            # 2. Calculate Code Updates (using Test Priors, NOT posteriors)
-            # We use test_population.probabilities (the priors) here, NOT test_posterior_generated
-            logger.debug("Calculating code posteriors on generated data...")
-            code_posterior_generated = self.code_bayesian_system.update_code_beliefs(
-                prior_code_probs=code_population.probabilities,  # Uses post-public probs
-                prior_test_probs=test_population.probabilities,  # Uses PRIORS
-                observation_matrix=gen_obs_matrix,
-                code_update_mask_matrix=code_mask_generated,
-                config=self.bayesian_config,
-            )
-
-            # PHASE C: Apply Mutual Updates
-            test_population.update_probabilities(test_posterior_generated)
-            code_population.update_probabilities(code_posterior_generated)
-
-            # --- Step 3: Select Elites ---
-            logger.debug("Step 3: Selecting elites...")
-            code_elites, test_elites = self._select_elites(
-                code_population, test_population, gen_obs_matrix
-            )
-
-            self._notify_elites(code_elites, generation=code_population.generation)
-            self._notify_elites(test_elites, generation=test_population.generation)
-
-            # --- Step 4: Generate Offspring ---
-            logger.debug("Step 4: Generating offspring...")
-            code_offsprings: list[CodeIndividual] = self._breed_code(
-                code_population=code_population,
-                test_population=test_population,
-                gen_exec_results=gen_exec_results,
-                gen_observation_matrix=gen_obs_matrix,
-                num_elites=len(code_elites),
-            )
-            test_offsprings: list[TestIndividual] = self._breed_tests(
-                test_population=test_population,
-                code_population=code_population,
-                gen_exec_results=gen_exec_results,
-                gen_observation_matrix=gen_obs_matrix,
-                num_elites=len(test_elites),
-            )
-
-            # --- Step 5: Set Next Generation ---
-            logger.debug("Step 5: Setting next generation...")
-
-            # 5a. Code Population
-            new_code_gen = code_elites + code_offsprings
-            assert len(new_code_gen) <= self.code_pop_config.max_population_size, (
-                "Code population exceeded max size"
-            )
-            # Notify removed individuals before transitioning
-            self._notify_removed_individuals(code_population, new_code_gen)
-            code_population.set_next_generation(new_code_gen)
-
-            # 5b. Test Population
-            new_test_gen = test_elites + test_offsprings
-            assert len(new_test_gen) == self.test_pop_config.initial_population_size, (
-                "Test population size mismatch"
-            )
-            # Notify removed individuals before transitioning
-            self._notify_removed_individuals(test_population, new_test_gen)
-            test_population.set_next_generation(new_test_gen)
-
-            logging_utils.log_generation_summary(code_population, test_population)
-
-        gen_exec_results, gen_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, test_population
-        )
-
-        pub_exec_results, pub_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, public_test_population
-        )
-
-        priv_exec_results, priv_obs_matrix = self._get_exec_results_and_obs_matrix(
-            code_population, private_test_population
-        )
-
-        logging_utils.log_observation_matrix(
-            gen_obs_matrix, code_population, test_population, "generated"
-        )
-        logging_utils.log_observation_matrix(
-            pub_obs_matrix, code_population, public_test_population, "public"
-        )
-        logging_utils.log_observation_matrix(
-            priv_obs_matrix, code_population, private_test_population, "private"
-        )
-
-        # After evolution loop completes, log all final survivors
-        logging_utils.log_final_survivors(code_population, test_population)
-
-        logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
-
-        return code_population, test_population
