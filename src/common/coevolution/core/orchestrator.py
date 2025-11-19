@@ -179,7 +179,7 @@ class Orchestrator:
         code_pop, test_pop, pub_pop, priv_pop = self._initialize_evolution()
 
         # 2. Main Loop
-        for gen in range(self.evo_config.num_generations):
+        for gen in range(self.evo_config.num_generations + 1):
             logging_utils.log_subsection_header(
                 "INFO",
                 f"GENERATION {gen} / {self.evo_config.num_generations}",
@@ -197,13 +197,14 @@ class Orchestrator:
                 interactions.pub_obs_matrix,
             )
 
-            # C. Evolve (Select -> Breed -> Transition)
-            code_pop, test_pop = self._produce_next_generation(
-                code_pop,
-                test_pop,
-                interactions.gen_exec_results,
-                interactions.gen_obs_matrix,
-            )
+            # C. Evolve (Select -> Breed -> Transition) # Only if not last generation
+            if gen < self.evo_config.num_generations:
+                code_pop, test_pop = self._produce_next_generation(
+                    code_pop,
+                    test_pop,
+                    interactions.gen_exec_results,
+                    interactions.gen_obs_matrix,
+                )
 
             # D. Log
             logging_utils.log_generation_summary(code_pop, test_pop)
@@ -390,12 +391,6 @@ class Orchestrator:
         priv_pop: TestPopulation,
     ) -> None:
         """Runs final private evaluation and logs closing stats."""
-
-        _, pub_obs = self._get_exec_results_and_obs_matrix(code_pop, pub_pop)
-        logging_utils.log_observation_matrix(pub_obs, code_pop, pub_pop, "public")
-        _, gen_obs = self._get_exec_results_and_obs_matrix(code_pop, test_pop)
-        logging_utils.log_observation_matrix(gen_obs, code_pop, test_pop, "generated")
-
         # Run final private tests
         _, priv_obs = self._get_exec_results_and_obs_matrix(code_pop, priv_pop)
 
