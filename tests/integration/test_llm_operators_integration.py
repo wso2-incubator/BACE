@@ -243,14 +243,19 @@ def test_code_operator_edit(llm_client: Any, simple_problem: Any) -> None:
 def test_test_operator_create_initial_snippets(
     llm_client: Any, simple_problem: Any
 ) -> None:
-    """Test that TestLLMOperator can create initial test snippets with real LLM."""
+    """Test that TestLLMOperator can create initial test snippets with real LLM.
+
+    This test verifies the new adjustment logic: if the LLM generates more test methods
+    than requested, excess methods are trimmed; if fewer, additional calls are made
+    to generate more methods.
+    """
     operator = TestLLMOperator(llm_client, simple_problem)
 
-    # Generate 3 initial test cases
-    test_methods, full_test_code = operator.create_initial_snippets(population_size=3)
+    # Generate 5 initial test cases - this may trigger trimming or additional generation
+    test_methods, full_test_code = operator.create_initial_snippets(population_size=5)
 
-    # Verify we got the right number of test methods
-    assert len(test_methods) == 3, f"Expected 3 test methods, got {len(test_methods)}"
+    # Verify we got the right number of test methods (adjusted if necessary)
+    assert len(test_methods) == 5, f"Expected 5 test methods, got {len(test_methods)}"
 
     # Verify each test method looks like a test
     for i, test_method in enumerate(test_methods):
@@ -264,7 +269,71 @@ def test_test_operator_create_initial_snippets(
     assert "class" in full_test_code, "Full test code missing class definition"
     logger.info(f"Full test code:\n{full_test_code}\n")
 
-    logger.success("Successfully generated initial test snippets with real LLM")
+    logger.success(
+        "Successfully generated initial test snippets with real LLM (with adjustment logic)"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.llm
+def test_test_operator_create_initial_snippets_small_population(
+    llm_client: Any, simple_problem: Any
+) -> None:
+    """Test that TestLLMOperator handles small population sizes correctly.
+
+    With small population sizes, LLMs may generate more test methods than requested,
+    triggering the trimming logic.
+    """
+    operator = TestLLMOperator(llm_client, simple_problem)
+
+    # Generate only 1 test case - LLM might generate more, triggering trimming
+    test_methods, full_test_code = operator.create_initial_snippets(population_size=1)
+
+    # Verify we got exactly 1 test method (trimmed if necessary)
+    assert len(test_methods) == 1, f"Expected 1 test method, got {len(test_methods)}"
+
+    # Verify the test method looks valid
+    test_method = test_methods[0]
+    assert "def test_" in test_method, "Test missing 'def test_'"
+    assert "assert" in test_method or "assertEqual" in test_method, (
+        "Test missing assertion"
+    )
+
+    logger.info(f"Generated single test:\n{test_method}\n")
+    logger.success(
+        "Successfully handled small population size (potentially with trimming)"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.llm
+def test_test_operator_create_initial_snippets_large_population(
+    llm_client: Any, coding_problem: Any
+) -> None:
+    """Test that TestLLMOperator handles large population sizes correctly.
+
+    With large population sizes, LLMs may generate fewer test methods than requested,
+    triggering additional generation calls.
+    """
+    operator = TestLLMOperator(llm_client, coding_problem)
+
+    # Generate 8 test cases - LLM might generate fewer, triggering additional calls
+    test_methods, full_test_code = operator.create_initial_snippets(population_size=8)
+
+    # Verify we got exactly 8 test methods (additional generated if necessary)
+    assert len(test_methods) == 8, f"Expected 8 test methods, got {len(test_methods)}"
+
+    # Verify all test methods look valid
+    for i, test_method in enumerate(test_methods):
+        assert "def test_" in test_method, f"Test {i} missing 'def test_'"
+        assert "assert" in test_method or "assertEqual" in test_method, (
+            f"Test {i} missing assertion"
+        )
+
+    logger.info(f"Generated {len(test_methods)} tests for large population")
+    logger.success(
+        "Successfully handled large population size (potentially with additional generation)"
+    )
 
 
 @pytest.mark.integration

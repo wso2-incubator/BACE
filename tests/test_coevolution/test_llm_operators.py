@@ -16,15 +16,23 @@ from common.coevolution.llm_operators import (
 class MockLLM:
     """Mock implementation of ILanguageModel protocol for testing."""
 
-    def __init__(self, response: str | None = None, should_fail: bool = False) -> None:
+    def __init__(
+        self,
+        response: str | None = None,
+        should_fail: bool = False,
+        responses: list[str] | None = None,
+    ) -> None:
         """
         Initialize mock LLM.
 
         Args:
             response: The response to return from generate()
             should_fail: If True, raise an exception on generate()
+            responses: List of responses to return sequentially
         """
         self.response: str | None = response
+        self.responses: list[str] | None = responses
+        self.response_index: int = 0
         self.should_fail: bool = should_fail
         self.call_count: int = 0
         self.prompts: list[str] = []
@@ -36,6 +44,13 @@ class MockLLM:
 
         if self.should_fail:
             raise Exception("Mock LLM failure")
+
+        if self.responses:
+            if self.response_index >= len(self.responses):
+                raise ValueError("No more responses configured")
+            response = self.responses[self.response_index]
+            self.response_index += 1
+            return response
 
         if self.response is None:
             raise ValueError("No response configured")
@@ -372,11 +387,10 @@ class TestTwoSum(unittest.TestCase):
         assert "class TestTwoSum" in full_code
         assert mock_llm.call_count == 1
 
-    def test_create_initial_snippets_wrong_count_retries(
-        self, sample_problem: Any
-    ) -> None:
-        """Test that create_initial_snippets retries when wrong number of tests generated."""
-        response = """Here is 1 test case:
+    def test_create_initial_snippets_adjusts_count(self, sample_problem: Any) -> None:
+        """Test that create_initial_snippets adjusts when wrong number of tests generated."""
+        # First response has 1 test method, second has 1 more
+        response1 = """Here is 1 test case:
 ```python
 import unittest
 
@@ -385,14 +399,53 @@ class TestTwoSum(unittest.TestCase):
         self.assertEqual(twoSum([2, 7], 9), [0, 1])
 ```
 """
+        response2 = """Here is 1 additional test case:
+```python
+import unittest
+
+class TestTwoSum(unittest.TestCase):
+    def test_additional_case(self) -> None:
+        self.assertEqual(twoSum([1, 2], 3), [0, 1])
+```
+"""
+        mock_llm = MockLLM(responses=[response1, response2])
+        operator = TestLLMOperator(mock_llm, sample_problem)
+
+        snippets, full_code = operator.create_initial_snippets(population_size=2)
+
+        assert len(snippets) == 2
+        assert "def test_basic_case" in snippets[0]
+        assert "def test_additional_case" in snippets[1]
+        # Should have made 2 calls: initial and additional
+        assert mock_llm.call_count == 2
+
+    def test_create_initial_snippets_trims_excess(self, sample_problem: Any) -> None:
+        """Test that create_initial_snippets trims excess test methods."""
+        response = """Here are 3 test cases:
+```python
+import unittest
+
+class TestTwoSum(unittest.TestCase):
+    def test_basic_case(self) -> None:
+        self.assertEqual(twoSum([2, 7, 11, 15], 9), [0, 1])
+    
+    def test_negative_numbers(self) -> None:
+        self.assertEqual(twoSum([-1, -2, -3, -4], -6), [1, 2])
+    
+    def test_extra_case(self) -> None:
+        self.assertEqual(twoSum([1, 3, 5], 4), [0, 1])
+```
+"""
         mock_llm = MockLLM(response=response)
         operator = TestLLMOperator(mock_llm, sample_problem)
 
-        with pytest.raises(ValueError, match="Generated 1 test methods, expected 2"):
-            operator.create_initial_snippets(population_size=2)
+        snippets, full_code = operator.create_initial_snippets(population_size=2)
 
-        # Should have tried 3 times
-        assert mock_llm.call_count == 3
+        assert len(snippets) == 2
+        assert "def test_basic_case" in snippets[0]
+        assert "def test_negative_numbers" in snippets[1]
+        assert "def test_extra_case" not in "\n".join(snippets)
+        assert mock_llm.call_count == 1
 
     def test_crossover_success(self, sample_problem: Any) -> None:
         """Test successful crossover of two parent test cases."""

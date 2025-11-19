@@ -348,6 +348,20 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         """
         return transformation.extract_unittest_code(code)
 
+    def _rebuild_unittest_with_methods(
+        self, test_block: str, test_methods: list[str]
+    ) -> str:
+        """
+        Rebuild a unittest class by replacing old test methods with new ones.
+
+        Args:
+            test_block: String containing the original unittest test class definition
+            test_methods: List of code strings for new test methods to insert
+        Returns:
+            String containing the rebuilt unittest class with new test methods
+        """
+        return transformation.replace_test_methods(test_block, test_methods)
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -381,12 +395,30 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         test_methods: list[str] = self._extract_test_methods(test_block)
 
         if len(test_methods) != population_size:
-            logger.error(
+            logger.warning(
                 f"Generated {len(test_methods)} test methods, expected {population_size}."
             )
-            raise ValueError(
-                f"Generated {len(test_methods)} test methods, expected {population_size}."
+
+        if len(test_methods) > population_size:
+            logger.debug("Trimming excess test methods to match population size")
+            test_methods = test_methods[:population_size]
+            test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
+
+        if len(test_methods) < population_size:
+            logger.debug("Adding additional test methods to match population size")
+            additional_methods_needed = population_size - len(test_methods)
+            prompt_additional = INITIAL_TEST_AGENT_CODER_STYLE.format(
+                population_size=additional_methods_needed,
+                question_content=self.problem.question_content,
+                starter_code=self.problem.starter_code,
             )
+            response_additional = self._generate(prompt_additional)
+            extracted_additional = self._extract_code_block(response_additional)
+            additional_test_block = self._extract_unittest_block(extracted_additional)
+            additional_test_methods = self._extract_test_methods(additional_test_block)
+            test_methods.extend(additional_test_methods)
+            test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
+
         logger.info(f"Successfully generated {population_size} initial test snippets")
         logger.trace(f"Generated test block:\n{test_block}")
         return test_methods, test_block
