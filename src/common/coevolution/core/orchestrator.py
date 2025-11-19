@@ -476,7 +476,7 @@ class Orchestrator:
             Tuple of (code_mask_matrix_generated, code_mask_matrix_public, test_mask_matrix)
         """
         code_mask_matrix_generated = (
-            self.code_bayesian_system.get_update_mask_generation(
+            self.code_bayesian_system.get_code_update_mask_generation(
                 updating_ind_born_generations=[
                     ind.generation_born for ind in code_population
                 ],
@@ -487,17 +487,19 @@ class Orchestrator:
             )
         )
 
-        code_mask_matrix_public = self.code_bayesian_system.get_update_mask_generation(
-            updating_ind_born_generations=[
-                ind.generation_born for ind in code_population
-            ],
-            other_ind_born_generations=[
-                ind.generation_born for ind in public_test_population
-            ],
-            current_generation=code_population.generation,
+        code_mask_matrix_public = (
+            self.code_bayesian_system.get_code_update_mask_generation(
+                updating_ind_born_generations=[
+                    ind.generation_born for ind in code_population
+                ],
+                other_ind_born_generations=[
+                    ind.generation_born for ind in public_test_population
+                ],
+                current_generation=code_population.generation,
+            )
         )
 
-        test_mask_matrix = self.test_bayesian_system.get_update_mask_generation(
+        test_mask_matrix = self.test_bayesian_system.get_test_update_mask_generation(
             updating_ind_born_generations=[
                 ind.generation_born for ind in test_population
             ],
