@@ -954,7 +954,7 @@ def create_safe_test_environment(
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=180,  # 180 seconds max for entire script
+        timeout=300,  # 300 seconds (5 mins) max for entire script
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
         test_method_timeout=test_method_timeout,  # 30 seconds max per test method
