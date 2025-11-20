@@ -310,6 +310,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         logger.debug("Performing edit on individual code snippet based on feedback")
         prompt = EDIT_CODE.format(
             question_content=self.problem.question_content,
+            starter_code=self.problem.starter_code,
             individual=individual,
             feedback=feedback,
         )
@@ -416,7 +417,9 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
             extracted_additional = self._extract_code_block(response_additional)
             additional_test_block = self._extract_unittest_block(extracted_additional)
             additional_test_methods = self._extract_test_methods(additional_test_block)
-            test_methods.extend(additional_test_methods)
+            test_methods.extend(
+                additional_test_methods[:additional_methods_needed]
+            )  # Trim if too many
             test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
 
         logger.info(f"Successfully generated {population_size} initial test snippets")
