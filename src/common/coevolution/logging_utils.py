@@ -97,8 +97,8 @@ def setup_logging(
         log_file_path,
         level=file_level.upper(),
         format=file_format,
-        rotation="100 MB",
-        retention="10 days",
+        rotation="1000 MB",
+        retention="365 days",
         compression="zip",
         enqueue=True,  # Makes logging safe for multiprocessing
         serialize=True,  # JSON format for easier parsing
