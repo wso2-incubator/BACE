@@ -588,7 +588,7 @@ def extract_unittest_code(full_code: str) -> str:
     try:
         full_tree = ast.parse(full_code)
     except SyntaxError as e:
-        logger.debug(f"Code string:\n{full_code}")
+        logger.debug(f"Offending code with syntax error:\n{full_code}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # 2. Filter the tree's body to keep only desired nodes
