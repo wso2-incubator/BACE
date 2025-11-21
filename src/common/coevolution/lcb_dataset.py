@@ -61,7 +61,7 @@ class LCBCodeGenerationProblem(Problem):
     DEFAULT_STARTER_CODE = """
 class Solution:
     def sol(self, input_str: str) -> str:
-        pass
+        # Input is provided as a single string.
 """
 
     def __post_init__(self) -> None:
