@@ -137,10 +137,6 @@ class ProbabilityAssigner(IProbabilityAssigner):
             logger.warning(
                 f"Assigned probability {assigned_prob:.4f} is less than initial prior {initial_prior:.4f}"
             )
-            logger.info(
-                "PROBABILITY ASSIGNMENT: Reverting to initial prior since assigned probability is lower."
-            )
-            assigned_prob = initial_prior
 
         logger.trace(
             f"Assigned probability {assigned_prob:.4f} for {operation.value} "
