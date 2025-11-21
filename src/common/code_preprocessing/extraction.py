@@ -4,6 +4,8 @@ import ast
 import re
 from typing import Dict, List, Tuple, TypedDict
 
+from loguru import logger
+
 from .analysis import validate_code_syntax
 from .exceptions import CodeParsingError
 
@@ -61,6 +63,7 @@ def extract_all_code_blocks_from_response(response: str) -> List[str]:
     matches = pattern.findall(response)
 
     if not matches:
+        logger.debug(f"No Python code blocks found in response: {response}")
         raise CodeParsingError(
             "No Python code blocks found in LLM response. "
             "Expected format: ```python\\n<code>\\n```"
@@ -100,6 +103,7 @@ def extract_code_block_from_response(response: str) -> str:
         return stripped_response
 
     # No code block found - raise explicit error instead of silent fallback
+    logger.debug(f"No Python code block found in response: {response}")
     raise CodeParsingError(
         "No Python code block found in LLM response. "
         "Expected format: ```python\\n<code>\\n```"
@@ -136,6 +140,7 @@ def extract_code_structure(code_string: str) -> CodeStructure:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
+        logger.debug(f"Failed to parse code string: {code_string}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     for node in tree.body:

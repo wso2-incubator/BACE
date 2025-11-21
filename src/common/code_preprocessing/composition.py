@@ -34,7 +34,7 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
     try:
         prog_tree = ast.parse(programmer_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing programmer code: {e}")
+        logger.debug(f"Syntax error parsing programmer code: {programmer_code}")
         raise CodeParsingError(f"Failed to parse programmer code: {e}") from e
 
     prog_imports = []
@@ -78,7 +78,9 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         )
 
     if not solution_class_node:
-        logger.error("No Solution class or functions found in programmer code")
+        logger.debug(
+            f"No Solution class or functions found in programmer code: {programmer_code}"
+        )
         raise CodeTransformationError(
             "No Solution class or functions found in programmer code"
         )
@@ -104,7 +106,7 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         tester_tree = SolutionImportRemover().visit(tester_tree)
         ast.fix_missing_locations(tester_tree)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing tester code: {e}")
+        logger.debug(f"Syntax error parsing tester code: {tester_code}")
         raise CodeParsingError(f"Failed to parse tester code: {e}") from e
 
     tester_imports = []
@@ -210,7 +212,9 @@ def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing test code: {e}")
+        logger.debug(
+            f"Syntax error parsing test code in rebuild_unittest_with_methods: {test_code}"
+        )
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -224,6 +228,7 @@ def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -
             other_nodes.append(node)
 
     if class_node is None:
+        logger.debug(f"No class definition found in test code: {test_code}")
         raise CodeParsingError("No class definition found in test code")
 
     # Separate test methods from non-test methods

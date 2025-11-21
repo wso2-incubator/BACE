@@ -91,6 +91,9 @@ def get_target_from_starter(starter_code: str) -> tuple[type, str]:
             try:
                 tree = ast.parse(dedented_code)
             except SyntaxError as e:
+                logger.debug(
+                    f"Syntax error parsing dedented starter code: {dedented_code}"
+                )
                 raise ValueError(f"Error parsing starter code: {e}") from e
 
         # Find the first top-level class or function definition
@@ -98,12 +101,14 @@ def get_target_from_starter(starter_code: str) -> tuple[type, str]:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 return type(node), node.name
 
+        logger.debug(f"Starter code:\n{starter_code}")
         raise ValueError(
             "Starter code must contain at least one top-level class or function definition."
         )
     except ValueError:
         raise
     except Exception as e:
+        logger.debug(f"Unexpected error parsing starter code: {starter_code}")
         raise ValueError(f"Error parsing starter code: {e}")
 
 
@@ -121,12 +126,14 @@ def remove_starter_from_code(full_code: str, starter_code: str) -> str:
             f"Targeting top-level {target_type.__name__} named '{target_name}' for removal."
         )
     except ValueError as e:
+        logger.debug(f"Error getting target from starter code: {starter_code}")
         return str(e)
 
     # 2. Parse the full code into an AST
     try:
         full_tree = ast.parse(full_code)
     except Exception as e:
+        logger.debug(f"Error parsing full code: {full_code}")
         return f"Error parsing full code: {e}"
 
     # 3. Filter the tree's body directly
@@ -188,7 +195,7 @@ def extract_test_methods_code(test_code: str) -> List[str]:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing test code: {e}")
+        logger.debug(f"Test code:\n{test_code}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -230,7 +237,7 @@ def extract_first_test_method_code(test_code: str) -> str:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing test code: {e}")
+        logger.debug(f"Test code:\n{test_code}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     target_node = None
@@ -253,6 +260,7 @@ def extract_first_test_method_code(test_code: str) -> str:
                 break
 
     if not target_node:
+        logger.debug(f"Test code:\n{test_code}")
         logger.error("No test method found in the provided code")
         raise CodeTransformationError("No test method found in the provided code")
 
@@ -288,7 +296,9 @@ def extract_function_with_helpers(code_string: str, target_function_name: str) -
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing code: {e}")
+        logger.debug(
+            f"Syntax error parsing code string in extract_function_with_helpers: {code_string}"
+        )
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # Find target function and helpers
@@ -306,7 +316,9 @@ def extract_function_with_helpers(code_string: str, target_function_name: str) -
                 helper_functions.append(node)
 
     if target_function is None:
-        logger.error(f"Target function '{target_function_name}' not found")
+        logger.debug(
+            f"Target function '{target_function_name}' not found in code: {code_string}"
+        )
         raise CodeTransformationError(
             f"Target function '{target_function_name}' not found"
         )
@@ -361,6 +373,9 @@ def extract_class_block(code_string: str) -> str:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
+        logger.debug(
+            f"Syntax error parsing code string in extract_class_block: {code_string}"
+        )
         logger.error(f"Syntax error parsing code: {e}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
@@ -369,6 +384,7 @@ def extract_class_block(code_string: str) -> str:
         if isinstance(node, ast.ClassDef):
             return ast.unparse(node)
 
+    logger.debug(f"No class definition found in code: {code_string}")
     logger.error("No class definition found in code")
     raise CodeTransformationError("No class definition found in code")
 
@@ -400,7 +416,7 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing test code: {e}")
+        logger.debug(f"Test code:\n{test_code}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the first class definition
@@ -411,7 +427,7 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
             break
 
     if class_node is None:
-        logger.error("No class definition found in test code")
+        logger.debug(f"No class definition found in test code: {test_code}")
         raise CodeTransformationError("No class definition found in test code")
 
     # Build new class body: non-test elements + new test methods
@@ -437,6 +453,7 @@ def replace_test_methods(test_code: str, new_test_methods: List[str]) -> str:
             else:
                 logger.warning(f"Invalid test method code: {test_method_str[:50]}...")
         except SyntaxError as e:
+            logger.debug(f"Failed to parse test method: {test_method_str}")
             logger.warning(f"Failed to parse test method: {e}")
             continue
 
@@ -464,7 +481,9 @@ def remove_if_main_block(code_string: str) -> str:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing code: {e}")
+        logger.debug(
+            f"Syntax error parsing code string in remove_if_main_block: {code_string}"
+        )
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # Filter out the if __name__ == "__main__": block
@@ -569,7 +588,7 @@ def extract_unittest_code(full_code: str) -> str:
     try:
         full_tree = ast.parse(full_code)
     except SyntaxError as e:
-        logger.error(f"Syntax error parsing code: {e}")
+        logger.debug(f"Code string:\n{full_code}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     # 2. Filter the tree's body to keep only desired nodes

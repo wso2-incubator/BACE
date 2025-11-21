@@ -5,6 +5,8 @@ import re
 import textwrap
 from typing import List
 
+from loguru import logger
+
 from .exceptions import CodeParsingError
 
 
@@ -65,8 +67,12 @@ def extract_method_name(method_snippet: str) -> str:
             if isinstance(node, ast.FunctionDef):
                 return node.name
 
+        logger.debug(
+            f"No function definition found in method snippet: {method_snippet}"
+        )
         raise CodeParsingError("No function definition found in snippet")
     except SyntaxError as e:
+        logger.debug(f"Syntax error parsing method snippet: {method_snippet}")
         raise CodeParsingError(f"Failed to parse method snippet: {e}") from e
 
 
@@ -92,6 +98,7 @@ def analyze_test_methods(test_code: str) -> List[str]:
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
+        logger.debug(f"Syntax error parsing test code: {test_code}")
         raise CodeParsingError(f"Failed to parse test code: {e}") from e
 
     # Find the test class definition (skip Solution class if present)
@@ -137,6 +144,9 @@ def analyze_code_imports(code_string: str) -> List[str]:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
+        logger.debug(
+            f"Syntax error parsing code string in analyze_code_imports: {code_string}"
+        )
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     for node in tree.body:
@@ -171,6 +181,9 @@ def analyze_code_functions(code_string: str) -> List[str]:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
+        logger.debug(
+            f"Syntax error parsing code string in analyze_code_functions: {code_string}"
+        )
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     function_names = []
@@ -202,6 +215,9 @@ def analyze_code_classes(code_string: str) -> List[str]:
     try:
         tree = ast.parse(code_string)
     except SyntaxError as e:
+        logger.debug(
+            f"Syntax error parsing code string in analyze_code_classes: {code_string}"
+        )
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
     class_names = []
@@ -307,5 +323,4 @@ def contains_starter_code(code_string: str, starter_code: str) -> bool:
         if matches > 0 and matches / len(starter_lines) >= 0.8:  # 80% threshold
             return True
 
-    return False
     return False
