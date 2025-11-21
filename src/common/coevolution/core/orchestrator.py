@@ -587,8 +587,8 @@ class Orchestrator:
         self,
         code_population: CodePopulation,
         test_population: TestPopulation,
-        gen_exec_results: ExecutionResults,
-        gen_observation_matrix: np.ndarray,
+        exec_results: ExecutionResults,
+        observation_matrix: np.ndarray,
         num_elites: int = 0,
     ) -> list[CodeIndividual]:
         """
@@ -610,9 +610,9 @@ class Orchestrator:
             return self.code_breeder.generate_single_offspring(
                 population=code_population,
                 other_population=test_population,
-                execution_results=gen_exec_results,
+                execution_results=exec_results,
                 feedback_generator=self.code_feedback_gen,
-                observation_matrix=gen_observation_matrix,
+                observation_matrix=observation_matrix,
                 operation_rates=self.code_op_rates_config,
             )
 
