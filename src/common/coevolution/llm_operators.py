@@ -10,15 +10,18 @@ Design:
 """
 
 from abc import ABC
-from typing import Protocol
+from typing import Callable, Protocol, Tuple, Type
 
 from loguru import logger
 from tenacity import (
+    WrappedFn,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+from common.code_preprocessing.exceptions import CodeTransformationError
 
 from ..code_preprocessing import CodeParsingError, analysis, extraction, transformation
 from .core.interfaces import ICodeOperator, ITestOperator, Problem
@@ -32,6 +35,17 @@ from .prompt_templates import (
     MUTATE_CODE,
     MUTATE_TEST,
 )
+
+
+def llm_retry(
+    exception_types: Tuple[Type[Exception], ...],
+) -> Callable[[WrappedFn], WrappedFn]:
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(exception_types),
+        reraise=True,
+    )
 
 
 class ILanguageModel(Protocol):
@@ -173,12 +187,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         """
         return analysis.contains_starter_code(code, self.problem.starter_code)
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError))
     def create_initial_snippets(self, population_size: int) -> list[str]:
         """
         Create initial code snippets for the population.
@@ -225,12 +234,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         logger.trace(f"Generated initial code snippets:\n{'\n\n'.join(code_blocks)}")
         return code_blocks
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def crossover(self, parent1: str, parent2: str) -> str:
         """
         Perform crossover between two parent code snippets.
@@ -260,12 +264,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         logger.trace(f"Generated child code snippet (Crossover):\n{child_code}")
         return child_code
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def mutate(self, individual: str) -> str:
         """
         Perform mutation on a individual code snippet.
@@ -290,12 +289,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         logger.trace(f"Generated mutated code snippet:\n{mutated_code}")
         return mutated_code
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def edit(self, individual: str, feedback: str) -> str:
         """
         Edit an individual code snippet based on provided feedback.
@@ -374,12 +368,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         """
         return transformation.replace_test_methods(test_block, test_methods)
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
         """
         Create initial test code snippets for a population of test cases.
@@ -437,12 +426,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         logger.trace(f"Generated test block:\n{test_block}")
         return test_methods, test_block
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def crossover(self, parent1: str, parent2: str) -> str:
         """
         Perform crossover between two parent test snippets.
@@ -470,12 +454,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         logger.trace(f"Generated child test snippet (Crossover):\n{child_test}")
         return child_test
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def mutate(self, individual: str) -> str:
         """
         Mutate an individual test snippet by modifying its structure or assertions.
@@ -500,12 +479,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         logger.trace(f"Generated mutated test snippet:\n{mutated_test}")
         return mutated_test
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ValueError, CodeParsingError)),
-        reraise=True,
-    )
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def edit(self, individual: str, feedback: str) -> str:
         """
         Edit an individual test snippet based on provided feedback.
