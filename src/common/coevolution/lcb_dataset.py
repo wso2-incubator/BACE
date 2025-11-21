@@ -185,8 +185,8 @@ class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
 
             # Get input/output directly from the object attributes
             # Use repr() to create a valid, escaped Python string literal
-            input_literal = repr(test_obj.input)
-            output_literal = repr(test_obj.output)
+            input_literal = repr(test_obj.input.rstrip("\n"))
+            output_literal = repr(test_obj.output.rstrip("\n"))
 
             test_method = [
                 f"    def {method_name}(self):",
