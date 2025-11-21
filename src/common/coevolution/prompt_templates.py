@@ -11,7 +11,10 @@ _TESTER_ROLE = "You are a software tester."
 _TEST_METHOD_FORMAT_INSTRUCTION = (
     "Return only the code for a single unittest test method in a python code block."
 )
+_STARTER_CODE_NOTE = "Make sure to build upon the provided starter code.\nStarter Code:\n```python\n{starter_code}\n```"
 _CODE_FORMAT_INSTRUCTION = "Return the code in a python code block."
+
+
 # Code generation prompts
 INITIAL_CODE = (
     _CODER_ROLE + "\n\n"
@@ -51,6 +54,8 @@ EDIT_CODE = (
     "And this error/feedback:\n{feedback}\n\n"
     "Utilizing the feedback, generate a new code solution that addresses the issues raised.\n"
     "If no issues are found or if you strongly believe the original code is correct, return a slightly modified version of the original code.\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
     + _CODE_FORMAT_INSTRUCTION
     + "\n"
 )
