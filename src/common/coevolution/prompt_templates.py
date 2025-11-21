@@ -21,7 +21,7 @@ INITIAL_CODE = (
     "Write {population_size} distinct solutions to solve the following problem:\n\n"
     "{question_content}\n\n"
     "Starter Code:\n```python\n{starter_code}\n```\n\n"
-    "Each solution should be in a separate Python code block."
+    "Each solution should be in a separate Python code block following the starter code structure.\n"
 )
 
 CROSSOVER_CODE = (
@@ -31,6 +31,8 @@ CROSSOVER_CODE = (
     "Solution 1:\n```python\n{parent1}\n```\n\n"
     "Solution 2:\n```python\n{parent2}\n```\n\n"
     "Create a new solution that intelligently combines the best aspects of both solutions.\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
     + _CODE_FORMAT_INSTRUCTION
     + "\n"
 )
@@ -43,6 +45,8 @@ MUTATE_CODE = (
     "1. Maintains the same functionality\n"
     "2. Explores a different algorithmic approach or implementation style\n"
     "3. Could potentially be more efficient or clearer\n\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
     + _CODE_FORMAT_INSTRUCTION
     + "\n"
 )
