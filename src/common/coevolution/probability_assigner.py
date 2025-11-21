@@ -134,6 +134,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
         if assigned_prob < initial_prior:
             # TODO: Change back to warning after debugging population degradation issue
+            # FIXME: Investigate why assigned probabilities fall below prior | Solution: clip offspring to prior?
             logger.warning(
                 f"Assigned probability {assigned_prob:.4f} is less than initial prior {initial_prior:.4f}"
             )
