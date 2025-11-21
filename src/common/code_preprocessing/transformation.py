@@ -212,6 +212,57 @@ def extract_test_methods_code(test_code: str) -> List[str]:
     return test_methods_code
 
 
+def extract_first_test_method_code(test_code: str) -> str:
+    """
+    Extract the actual code for the first test method from a unittest test class
+    or just a code string with test methods.
+
+    Args:
+        test_code: String containing a unittest test class definition
+
+    Returns:
+        Code string for the first test method, dedented.
+
+    Raises:
+        CodeParsingError: If test code has syntax errors
+        CodeTransformationError: If no test method is found
+    """
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        logger.error(f"Syntax error parsing test code: {e}")
+        raise CodeParsingError(f"Failed to parse test code: {e}") from e
+
+    target_node = None
+
+    # 1. Priority: Check inside unittest classes
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and is_unittest_class(node):
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
+                    target_node = item
+                    break  # Found method in class
+            if target_node:
+                break  # Found class and method, stop searching classes
+
+    # 2. Fallback: Check for top-level functions (if nothing found in classes)
+    if not target_node:
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                target_node = node
+                break
+
+    if not target_node:
+        logger.error("No test method found in the provided code")
+        raise CodeTransformationError("No test method found in the provided code")
+
+    # Extract method code using ast.unparse
+    method_code = ast.unparse(target_node)
+
+    # Remove indentation (critical if the method came from inside a class)
+    return textwrap.dedent(method_code)
+
+
 def extract_function_with_helpers(code_string: str, target_function_name: str) -> str:
     """
     Extract target function body with helper functions and imports.

@@ -1,6 +1,7 @@
 """Tests for code_preprocessing.transformation module."""
 
 import ast
+import textwrap
 
 import pytest
 
@@ -10,6 +11,7 @@ from common.code_preprocessing.exceptions import (
 )
 from common.code_preprocessing.transformation import (
     extract_class_block,
+    extract_first_test_method_code,
     extract_function_with_helpers,
     extract_test_methods_code,
     extract_unittest_code,
@@ -77,6 +79,146 @@ class TestSolution(unittest.TestCase):
         code = "class TestFoo(\n    invalid"
         with pytest.raises(CodeParsingError):
             extract_test_methods_code(code)
+
+
+class TestExtractFirstTestMethodCode:
+    """
+    Tests for extract_first_test_method_code.
+    Focuses on correctness, indentation handling, and preservation of source formatting.
+    """
+
+    def test_extracts_first_test_method_from_unittest_class_exact_match(self) -> None:
+        """Should extract the method and return it without class indentation."""
+        code = textwrap.dedent("""
+            import unittest
+
+            class TestFoo(unittest.TestCase):
+                def test_bar(self):
+                    self.assertTrue(True)
+                
+                def test_baz(self):
+                    pass
+        """)
+
+        # We expect the indentation to be stripped
+        expected = textwrap.dedent("""
+            def test_bar(self):
+                self.assertTrue(True)
+        """).strip()
+
+        result = extract_first_test_method_code(code)
+        assert result == expected
+
+    def test_preserves_comments_and_formatting(self) -> None:
+        """
+        Test that extract_first_test_method_code works with ast.unparse.
+        Comments are not preserved with ast.unparse, but the function should still work.
+        """
+        code = textwrap.dedent("""
+            import unittest
+
+            class TestStyle(unittest.TestCase):
+                def test_comments(self):
+                    # This checks exact string
+                    x = 'single_quotes' # Inline comment
+        """)
+
+        result = extract_first_test_method_code(code)
+
+        # With ast.unparse, comments are lost but the function structure is preserved
+        assert "def test_comments(self):" in result
+        assert "x = 'single_quotes'" in result
+        # Comments are not preserved with ast.unparse
+        assert "# This checks exact string" not in result
+
+    def test_extracts_first_test_method_from_multiple_classes(self) -> None:
+        """Should stop at the first valid unittest class found."""
+        code = textwrap.dedent("""
+            import unittest
+
+            class TestFirst(unittest.TestCase):
+                def test_one(self):
+                    pass
+
+            class TestSecond(unittest.TestCase):
+                def test_two(self):
+                    pass
+        """)
+
+        result = extract_first_test_method_code(code)
+        assert "def test_one" in result
+        assert "def test_two" not in result
+
+    def test_extracts_first_test_function_fallback(self) -> None:
+        """Should handle files that use pytest style functions instead of classes."""
+        code = textwrap.dedent("""
+            def test_foo():
+                assert True
+
+            def test_bar():
+                assert False
+        """)
+
+        result = extract_first_test_method_code(code)
+        assert "def test_foo" in result
+        assert "def test_bar" not in result
+
+    def test_raises_error_when_class_has_no_test_methods(self) -> None:
+        """Should raise error if a class exists but contains no methods starting with test_."""
+        code = textwrap.dedent("""
+            import unittest
+
+            class TestFoo(unittest.TestCase):
+                def setUp(self):
+                    pass
+                def helper(self):
+                    pass
+        """)
+
+        with pytest.raises(CodeTransformationError, match="No test method found"):
+            extract_first_test_method_code(code)
+
+    def test_raises_error_when_no_test_methods_at_all(self) -> None:
+        """Should raise error if code is valid python but has no tests."""
+        code = textwrap.dedent("""
+            def helper():
+                return 1
+            class Solution:
+                def solve(self):
+                    return 2
+        """)
+
+        with pytest.raises(CodeTransformationError, match="No test method found"):
+            extract_first_test_method_code(code)
+
+    def test_raises_error_on_syntax_error(self) -> None:
+        """Should catch SyntaxError and re-raise as CodeParsingError."""
+        code = "class TestFoo(\n    invalid code here..."
+
+        with pytest.raises(CodeParsingError, match="Failed to parse test code"):
+            extract_first_test_method_code(code)
+
+    def test_skips_non_unittest_classes(self) -> None:
+        """
+        Should ignore classes that don't look like unittest classes.
+        """
+        code = textwrap.dedent("""
+            import unittest
+
+            class FakeClass:
+                def test_fake(self):
+                    pass
+
+            class RealClass(unittest.TestCase):
+                def test_real(self):
+                    pass
+        """)
+
+        result = extract_first_test_method_code(code)
+
+        # Should find the first unittest class and its first test method
+        assert "def test_real" in result
+        assert "def test_fake" not in result
 
 
 class TestExtractFunctionWithHelpers:
@@ -1288,4 +1430,5 @@ class TestSolutionAdvanced(unittest.TestCase):
         assert "def setUp" in result
         assert "def test_example_1" in result
         assert "def test_example_2" in result
+        assert "def test_large_input" in result
         assert "def test_large_input" in result

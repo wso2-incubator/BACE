@@ -329,7 +329,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
 
     def _extract_test_methods(self, test_block: str) -> list[str]:
         """
-        Extract test methods from test code block extracted from LLM response.
+        Extract test methods from unittest test code block extracted from LLM response.
 
         Args:
             test_block: extracted test code block from LLM response
@@ -348,6 +348,17 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
             Code snippet with starter code removed
         """
         return transformation.extract_unittest_code(code)
+
+    def _extract_first_test_method(self, code: str) -> str:
+        """
+        Extract the first test method from a code snippet.
+        The code snippet may contain multiple test methods or a full unittest class.
+        Args:
+            code: Code snippet potentially containing multiple test methods or a full unittest class
+        Returns:
+            Code string of the first test method found
+        """
+        return transformation.extract_first_test_method_code(code)
 
     def _rebuild_unittest_with_methods(
         self, test_block: str, test_methods: list[str]
@@ -453,7 +464,8 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         )
 
         response = self._generate(prompt)
-        child_test = self._extract_code_block(response)
+        extracted_code = self._extract_code_block(response)
+        child_test = self._extract_first_test_method(extracted_code)
         logger.info("Crossover produced a new child test snippet")
         logger.trace(f"Generated child test snippet (Crossover):\n{child_test}")
         return child_test
@@ -482,7 +494,8 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         )
 
         response = self._generate(prompt)
-        mutated_test = self._extract_code_block(response)
+        extracted_code = self._extract_code_block(response)
+        mutated_test = self._extract_first_test_method(extracted_code)
         logger.info("Mutation produced a new test snippet")
         logger.trace(f"Generated mutated test snippet:\n{mutated_test}")
         return mutated_test
@@ -514,7 +527,8 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         )
 
         response = self._generate(prompt)
-        edited_test = self._extract_code_block(response)
+        extracted_code = self._extract_code_block(response)
+        edited_test = self._extract_first_test_method(extracted_code)
         logger.info("Edit produced a new test snippet")
         logger.trace(f"Generated edited test snippet:\n{edited_test}")
         return edited_test
