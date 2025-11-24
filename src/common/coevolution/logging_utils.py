@@ -13,8 +13,12 @@ Functions:
     log_final_survivors: Logs all surviving individuals at evolution end.
 """
 
+import glob
+import json
+import os
 import sys
-from typing import TYPE_CHECKING, Any, Literal
+import zipfile
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import pandas as pd
 from loguru import logger
@@ -25,6 +29,12 @@ if TYPE_CHECKING:
     from common.coevolution.core.individual import CodeIndividual, TestIndividual
     from common.coevolution.core.interfaces import Problem
     from common.coevolution.core.population import CodePopulation, TestPopulation
+
+
+class ParsedLog(TypedDict):
+    gen_stats: pd.DataFrame
+    individuals: pd.DataFrame
+    matrices: dict[str, list[pd.DataFrame]]
 
 
 def get_generation_logger() -> Any:
@@ -565,3 +575,167 @@ def log_problem(problem: "Problem") -> None:
     logger.info(f"Private tests: {len(problem.private_test_cases)}")
     logger.debug(f"Problem content:\n{problem.question_content}")
     logger.debug(f"Starter code:\n{problem.starter_code}")
+
+
+# logging parsing and analysis
+def parse_complete_coevolution_log(
+    log_dir: str, log_filename_pattern: str, target_run_id: str, target_problem_id: str
+) -> ParsedLog:
+    """
+    Performs a SINGLE PASS over all log files to extract:
+    1. Generation Summaries
+    2. Individual Lifecycles
+    3. Observation Matrices (Generated, Public, Private)
+
+    Returns:
+        A dictionary containing:
+        - 'gen_stats': DataFrame
+        - 'individuals': DataFrame
+        - 'matrices': {
+            'generated': list[pd.DataFrame],
+            'public': list[pd.DataFrame],
+            'private': list[pd.DataFrame]
+          }
+    """
+
+    # --- Data Containers ---
+    data_store: dict[str, list[Any]] = {
+        "gen_data": [],
+        "ind_data": [],
+        "mat_generated": [],
+        "mat_public": [],
+        "mat_private": [],
+    }
+
+    # --- File Discovery ---
+    search_path = os.path.join(log_dir, log_filename_pattern)
+    found_files = sorted(glob.glob(search_path))
+
+    if not found_files:
+        logger.error(f"No files found for pattern: {search_path}")
+        return {
+            "gen_stats": pd.DataFrame(),
+            "individuals": pd.DataFrame(),
+            "matrices": {"generated": [], "public": [], "private": []},
+        }
+
+    logger.info(
+        f"Starting unified parse on {len(found_files)} files for Run={target_run_id}"
+    )
+
+    # --- The Logic Processor ---
+    def process_line(line_str: str) -> None:
+        if not line_str.strip():
+            return
+
+        try:
+            # 1. Base JSON Parse
+            log_entry = json.loads(line_str)
+            record = log_entry.get("record", {})
+            extra = record.get("extra", {})
+
+            # 2. Fast Filter (Check IDs immediately)
+            if (
+                extra.get("run_id") != target_run_id
+                or extra.get("problem_id") != target_problem_id
+            ):
+                return
+
+            # 3. Message Extraction
+            message = record.get("message")
+            if not message or not isinstance(message, str):
+                return
+
+            # 4. The Routing Logic
+            # We split by pipe '|'. Maxsplit=2 covers all current cases.
+            # Case A (Stats): KEY | ID | JSON  -> [KEY, ID, JSON]
+            # Case B (Stats): KEY | JSON       -> [KEY, JSON]
+            # Case C (Matrix): KEY | JSON      -> [KEY, JSON]
+            parts = [p.strip() for p in message.split("|", 2)]
+            if not parts:
+                return
+
+            header = parts[0]
+
+            # === ROUTE: GENERATION SUMMARIES ===
+            if header == "GEN_SUMMARY":
+                if len(parts) >= 2:
+                    data_store["gen_data"].append(json.loads(parts[-1]))
+
+            # === ROUTE: INDIVIDUAL LIFECYCLES ===
+            elif header in ("INDIVIDUAL_DIED", "INDIVIDUAL_SURVIVED"):
+                payload_str = parts[-1]
+                data = json.loads(payload_str)
+                data["status"] = header.split("_")[-1]  # DIED or SURVIVED
+
+                # If ID is in the middle token (KEY | ID | JSON), capture it
+                if len(parts) >= 3 and parts[1] and "id" not in data:
+                    data["id"] = parts[1]
+
+                data_store["ind_data"].append(data)
+
+            # === ROUTE: MATRICES ===
+            elif header.endswith(" serialized"):
+                # header is like "GENERATED serialized", "PUBLIC serialized"
+                matrix_type = header.split(" ")[0]  # Grab "GENERATED"
+                payload_str = parts[-1]
+
+                matrix_dict = json.loads(payload_str)
+                df = pd.DataFrame.from_dict(matrix_dict)
+                df.index.name = "Code"
+
+                if matrix_type == "GENERATED":
+                    data_store["mat_generated"].append(df)
+                elif matrix_type == "PUBLIC":
+                    data_store["mat_public"].append(df)
+                elif matrix_type == "PRIVATE":
+                    data_store["mat_private"].append(df)
+
+        except json.JSONDecodeError:
+            pass  # Skip partial lines
+        except Exception:
+            # Optional: Log specific errors if needed, but keep parsing
+            pass
+
+    # --- The File Loop (Single Pass) ---
+    for file_path in found_files:
+        logger.info(f"Scanning: {os.path.basename(file_path)}")
+        try:
+            if file_path.endswith(".zip"):
+                with zipfile.ZipFile(file_path, "r") as z:
+                    for internal_name in z.namelist():
+                        with z.open(internal_name) as binary_f:
+                            for raw_line in binary_f:
+                                process_line(raw_line.decode("utf-8"))
+            else:
+                with open(file_path, "r", encoding="utf-8") as text_f:
+                    for line in text_f:
+                        process_line(line)
+        except Exception:
+            logger.error(f"Failed to read {file_path}")
+
+    # --- Final Formatting ---
+    logger.info("Constructing DataFrames...")
+
+    # 1. Generation Stats
+    gen_df = pd.DataFrame(data_store["gen_data"])
+    if not gen_df.empty and "generation" in gen_df.columns:
+        gen_df = gen_df.set_index("generation").sort_index()
+
+    # 2. Individual Stats
+    ind_df = pd.DataFrame(data_store["ind_data"])
+    if not ind_df.empty:
+        ind_df["run_id"] = target_run_id
+        ind_df["problem_id"] = target_problem_id
+
+    logger.success("Parsing Complete.")
+
+    return {
+        "gen_stats": gen_df,
+        "individuals": ind_df,
+        "matrices": {
+            "generated": data_store["mat_generated"],
+            "public": data_store["mat_public"],
+            "private": data_store["mat_private"],
+        },
+    }
