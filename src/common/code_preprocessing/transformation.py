@@ -478,11 +478,12 @@ def is_unittest_class(node: ast.ClassDef) -> bool:
 
 def extract_unittest_code(full_code: str) -> str:
     """
-    Filters the full code to keep only imports and classes
+    Filters the full code to keep ONLY imports and classes
     that inherit from unittest.TestCase.
 
-    All top-level functions and non-unittest classes are removed.
-    All import statements are preserved.
+    Strict Mode:
+    Any top-level function, variable assignment, or non-unittest class
+    (including 'class Solution') will trigger an error.
 
     Args:
         full_code: Python source code string
@@ -491,23 +492,9 @@ def extract_unittest_code(full_code: str) -> str:
         Filtered code string containing only imports and unittest classes
 
     Raises:
-        CodeParsingError: If the code has syntax errors
-
-    Example:
-        >>> code = '''
-        ... import unittest
-        ... def helper(): return 1
-        ... class Solution: pass
-        ... class TestSolution(unittest.TestCase):
-        ...     def test_foo(self): pass
-        ... '''
-        >>> result = extract_unittest_code(code)
-        >>> "import unittest" in result
-        True
-        >>> "def helper" in result
-        False
-        >>> "class TestSolution" in result
-        True
+        CodeParsingError: If the code has syntax errors.
+        CodeTransformationError: If the code contains forbidden top-level nodes
+                                 (functions, non-test classes, script logic).
     """
     # 1. Parse the full code into an AST
     try:
@@ -518,37 +505,39 @@ def extract_unittest_code(full_code: str) -> str:
 
     # 2. Filter the tree's body to keep only desired nodes
     new_body: list[ast.stmt] = []
+
     for node in full_tree.body:
-        # Keep all import statements
+        # --- ALLOW: Imports ---
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             new_body.append(node)
             logger.trace(f"Keeping import: {ast.unparse(node)}")
 
-        # Keep classes that are unittest classes
-        elif isinstance(node, ast.ClassDef):
-            if is_unittest_class(node):
-                new_body.append(node)
-                logger.trace(f"Keeping unittest class: {node.name}")
-            elif node.name == "Solution":
-                logger.debug("Removing 'Solution' class from unittest extraction")
-            else:
-                logger.debug(
-                    f"Unittest extraction failed: Non-unittest class '{node.name}' found."
-                )
-                logger.debug(f"Offending code:\n{full_code}")
-                raise CodeTransformationError(
-                    f"Non-unittest class '{node.name}' found in code."
-                )
+        # --- ALLOW: Unittest Classes ---
+        elif isinstance(node, ast.ClassDef) and is_unittest_class(node):
+            new_body.append(node)
+            logger.trace(f"Keeping unittest class: {node.name}")
 
-        # Remove all other top-level nodes (functions, other statements)
+        # --- REJECT: Everything Else ---
         else:
-            if isinstance(node, ast.FunctionDef):
-                logger.debug(f"Removing top-level function: {node.name}")
+            # Identify the type of forbidden node for the error message
+            node_type = type(node).__name__
+            details = ""
+
+            if isinstance(node, ast.ClassDef):
+                details = f"Non-unittest class '{node.name}'"
+            elif isinstance(node, ast.FunctionDef):
+                details = f"Top-level function '{node.name}'"
             else:
-                try:
-                    logger.trace(f"Removing other top-level node: {ast.unparse(node)}")
-                except Exception:
-                    logger.trace("Removing other non-code top-level node")
+                details = f"Top-level statement of type '{node_type}'"
+
+            logger.debug(f"Unittest extraction failed: {details} found.")
+            logger.debug(f"Offending code context:\n{ast.unparse(node)}")
+
+            # Raising the error as requested
+            raise CodeTransformationError(
+                f"Strict extraction failed: {details} is not allowed. "
+                "Only imports and unittest classes are permitted."
+            )
 
     # Assign the new, filtered list back to the tree's body
     full_tree.body = new_body
