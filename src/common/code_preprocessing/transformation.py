@@ -529,8 +529,16 @@ def extract_unittest_code(full_code: str) -> str:
             if is_unittest_class(node):
                 new_body.append(node)
                 logger.trace(f"Keeping unittest class: {node.name}")
+            elif node.name == "Solution":
+                logger.debug("Removing 'Solution' class from unittest extraction")
             else:
-                logger.debug(f"Removing non-unittest class: {node.name}")
+                logger.debug(
+                    f"Unittest extraction failed: Non-unittest class '{node.name}' found."
+                )
+                logger.debug(f"Offending code:\n{full_code}")
+                raise CodeTransformationError(
+                    f"Non-unittest class '{node.name}' found in code."
+                )
 
         # Remove all other top-level nodes (functions, other statements)
         else:
