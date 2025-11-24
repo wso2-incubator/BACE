@@ -323,4 +323,7 @@ def contains_starter_code(code_string: str, starter_code: str) -> bool:
         if matches > 0 and matches / len(starter_lines) >= 0.8:  # 80% threshold
             return True
 
+    logger.debug("Starter code not found in complete code.")
+    logger.debug(f"Offending code snippet:\n{code_string}")
+    logger.debug(f"Starter code snippet:\n{starter_code}")
     return False
