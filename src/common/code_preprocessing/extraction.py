@@ -69,6 +69,10 @@ def extract_all_code_blocks_from_response(response: str) -> List[str]:
             "Expected format: ```python\\n<code>\\n```"
         )
 
+    if not all(validate_code_syntax(code) for code in matches):
+        logger.debug(f"One or more extracted code blocks have syntax errors: {matches}")
+        raise CodeParsingError("One or more extracted code blocks have syntax errors.")
+
     return matches
 
 
@@ -95,7 +99,12 @@ def extract_code_block_from_response(response: str) -> str:
     pattern = re.compile(r"```[Pp]ython\s*([\s\S]+?)\s*```")
     match = pattern.search(response)
     if match:
-        return match.group(1)
+        code_block = match.group(1)
+        if validate_code_syntax(code_block):
+            return code_block
+        else:
+            logger.debug(f"Extracted code block has syntax errors: {code_block}")
+            raise CodeParsingError("Extracted code block has syntax errors.")
 
     # Check if the entire response is code (no markdown)
     stripped_response = response.strip()
