@@ -165,6 +165,7 @@ class BaseLLMOperator(ABC):
         return extracted_code
 
 
+# TODO: Refactor mutate, crossover, and edit methods to use a centralized _execute_pipeline method for consistency and maintainability.
 class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
     """Concrete LLM-based genetic operator for code snippets."""
 
@@ -182,7 +183,18 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         """
         return extraction.extract_all_code_blocks_from_response(response)
 
-    def _ensure_starter_code(self, code: str) -> bool:
+    def _validate_code_syntax(self, code: str) -> bool:
+        """
+        Validate the syntax of the given code snippet.
+
+        Args:
+            code: Code string to validate
+        Returns:
+            True if code is syntactically valid, False otherwise
+        """
+        return analysis.validate_code_syntax(code)
+
+    def _contains_starter_code(self, code: str) -> bool:
         """
         Check if the given code contains the problem's starter code.
 
@@ -193,11 +205,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         Raises:
             ValueError: If starter code is not found in the code snippet
         """
-        if analysis.contains_starter_code(code, self.problem.starter_code):
-            return True
-
-        logger.debug(f"Offending code snippet without starter code:\n{code}")
-        raise ValueError("Starter code not found in the provided code snippet.")
+        return analysis.contains_starter_code(code, self.problem.starter_code)
 
     @llm_retry((ValueError, CodeParsingError))
     def create_initial_snippets(self, population_size: int) -> list[str]:
@@ -227,11 +235,18 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
 
         # Validate each code block contains starter code
         for code in code_blocks:
-            try:
-                self._ensure_starter_code(code)
-            except ValueError as e:
-                logger.error("Initial code snippet missing starter code.")
-                raise ValueError("Initial code snippet missing starter code.") from e
+            if not self._validate_code_syntax(code):
+                logger.error("One of the generated code snippets has syntax errors.")
+                raise ValueError(
+                    "One of the generated code snippets has syntax errors."
+                )
+            if not self._contains_starter_code(code):
+                logger.error(
+                    "One of the generated code snippets does not contain starter code."
+                )
+                raise ValueError(
+                    "One of the generated code snippets does not contain starter code."
+                )
 
         # Validate we got the right number of snippets
         if len(code_blocks) != population_size:
@@ -269,13 +284,14 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         response = self._generate(prompt)
         child_code = self._extract_code_block(response)
         logger.info("Crossover produced a new child code snippet")
-        try:
-            self._ensure_starter_code(child_code)
-        except ValueError as e:
+        if not self._validate_code_syntax(child_code):
+            logger.error("Crossover result has syntax errors.")
+            raise ValueError("Crossover result has syntax errors.")
+        if not self._contains_starter_code(child_code):
             logger.error("Crossover result does not contain starter code structure.")
             raise ValueError(
                 "Crossover result does not contain starter code structure."
-            ) from e
+            )
         logger.trace(f"Generated child code snippet (Crossover):\n{child_code}")
         return child_code
 
@@ -298,13 +314,12 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         )
         response = self._generate(prompt)
         mutated_code = self._extract_code_block(response)
-        try:
-            self._ensure_starter_code(mutated_code)
-        except ValueError as e:
+        if not self._validate_code_syntax(mutated_code):
+            logger.error("Mutation result has syntax errors.")
+            raise ValueError("Mutation result has syntax errors.")
+        if not self._contains_starter_code(mutated_code):
             logger.error("Mutation result does not contain starter code structure.")
-            raise ValueError(
-                "Mutation result does not contain starter code structure."
-            ) from e
+            raise ValueError("Mutation result does not contain starter code structure.")
         logger.info("Mutation produced a new code snippet")
         logger.trace(f"Generated mutated code snippet:\n{mutated_code}")
         return mutated_code
@@ -330,13 +345,12 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         )
         response = self._generate(prompt)
         edited_code = self._extract_code_block(response)
-        try:
-            self._ensure_starter_code(edited_code)
-        except ValueError as e:
+        if not self._validate_code_syntax(edited_code):
+            logger.error("Edit result has syntax errors.")
+            raise ValueError("Edit result has syntax errors.")
+        if not self._contains_starter_code(edited_code):
             logger.error("Edit result does not contain starter code structure.")
-            raise ValueError(
-                "Edit result does not contain starter code structure."
-            ) from e
+            raise ValueError("Edit result does not contain starter code structure.")
         logger.info("Edit produced a new code snippet")
         logger.trace(f"Generated edited code snippet:\n{edited_code}")
         return edited_code
