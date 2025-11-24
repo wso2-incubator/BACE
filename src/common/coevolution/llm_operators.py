@@ -23,7 +23,13 @@ from tenacity import (
 
 from common.code_preprocessing.exceptions import CodeTransformationError
 
-from ..code_preprocessing import CodeParsingError, analysis, extraction, transformation
+from ..code_preprocessing import (
+    CodeParsingError,
+    analysis,
+    composition,
+    extraction,
+    transformation,
+)
 from .core.interfaces import ICodeOperator, ITestOperator, Problem
 from .prompt_templates import (
     CROSSOVER_CODE,
@@ -257,6 +263,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             question_content=self.problem.question_content,
             parent1=parent1,
             parent2=parent2,
+            starter_code=self.problem.starter_code,
         )
 
         response = self._generate(prompt)
@@ -287,6 +294,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         prompt = MUTATE_CODE.format(
             question_content=self.problem.question_content,
             individual=individual,
+            starter_code=self.problem.starter_code,
         )
         response = self._generate(prompt)
         mutated_code = self._extract_code_block(response)
@@ -382,7 +390,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         Returns:
             String containing the rebuilt unittest class with new test methods
         """
-        return transformation.replace_test_methods(test_block, test_methods)
+        return composition.rebuild_unittest_with_methods(test_block, test_methods)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:

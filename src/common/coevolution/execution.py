@@ -301,6 +301,4 @@ class ExecutionSystem:
                 # Failures and errors default to 0
 
         logger.debug("Completed generating observation matrix")
-        logger.trace(f"Observation Matrix:\n{observation_matrix}")
-
         return observation_matrix

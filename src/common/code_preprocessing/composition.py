@@ -180,7 +180,6 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         final_code_parts.append("    unittest.main(verbosity=2)")
 
     test_script: str = "\n".join(final_code_parts)
-    logger.trace(f"Composed LCB test script: {test_script}")
     return test_script
 
 

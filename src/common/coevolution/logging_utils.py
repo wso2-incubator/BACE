@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from common.coevolution.core.individual import CodeIndividual, TestIndividual
+    from common.coevolution.core.interfaces import Problem
     from common.coevolution.core.population import CodePopulation, TestPopulation
 
 
@@ -555,3 +556,12 @@ def log_observation_matrix(
 
     _log_observation_matrix_statistics(observation_matrix)
     return
+
+
+def log_problem(problem: "Problem") -> None:
+    logger.info(f"Loaded problem: {problem.question_title}")
+    logger.info(f"Problem ID: {problem.question_id}")
+    logger.info(f"Public tests: {len(problem.public_test_cases)}")
+    logger.info(f"Private tests: {len(problem.private_test_cases)}")
+    logger.debug(f"Problem content:\n{problem.question_content}")
+    logger.debug(f"Starter code:\n{problem.starter_code}")
