@@ -6,6 +6,7 @@ from typing import List
 
 from loguru import logger
 
+from .analysis import is_if_name_main
 from .exceptions import CodeParsingError, CodeTransformationError
 
 
@@ -481,20 +482,22 @@ def extract_unittest_code(full_code: str) -> str:
     Filters the full code to keep ONLY imports and classes
     that inherit from unittest.TestCase.
 
-    Strict Mode:
-    Any top-level function, variable assignment, or non-unittest class
-    (including 'class Solution') will trigger an error.
+    Special Rules:
+    1. 'class Solution': Silently removed (ignored).
+    2. 'if __name__ == "__main__"': Silently removed (ignored).
+    3. Imports: Preserved UNLESS they contain 'Solution' or 'solution'.
+    4. Unittest classes: Preserved.
+    5. Anything else (functions, other classes, vars): Raises CodeTransformationError.
 
     Args:
         full_code: Python source code string
 
     Returns:
-        Filtered code string containing only imports and unittest classes
+        Filtered code string containing only allowed imports and unittest classes
 
     Raises:
         CodeParsingError: If the code has syntax errors.
-        CodeTransformationError: If the code contains forbidden top-level nodes
-                                 (functions, non-test classes, script logic).
+        CodeTransformationError: If forbidden top-level nodes are found.
     """
     # 1. Parse the full code into an AST
     try:
@@ -503,40 +506,85 @@ def extract_unittest_code(full_code: str) -> str:
         logger.debug(f"Offending code with syntax error:\n{full_code}")
         raise CodeParsingError(f"Failed to parse code: {e}") from e
 
-    # 2. Filter the tree's body to keep only desired nodes
+    # 2. Filter the tree's body
     new_body: list[ast.stmt] = []
 
     for node in full_tree.body:
-        # --- ALLOW: Imports ---
+        # --- 1. CHECK: Imports (Filter out 'Solution') ---
         if isinstance(node, (ast.Import, ast.ImportFrom)):
+            has_solution = False
+
+            # Check 'import X' or 'import X as Y'
+            if isinstance(node, ast.Import):
+                for name in node.names:
+                    # Check original name and alias
+                    if "solution" in name.name.lower() or (
+                        name.asname and "solution" in name.asname.lower()
+                    ):
+                        has_solution = True
+                        break
+
+            # Check 'from X import Y'
+            elif isinstance(node, ast.ImportFrom):
+                # Check module name (e.g., 'from solution import...')
+                if node.module and "solution" in node.module.lower():
+                    has_solution = True
+                else:
+                    # Check imported names (e.g., 'from utils import Solution')
+                    for name in node.names:
+                        if "solution" in name.name.lower() or (
+                            name.asname and "solution" in name.asname.lower()
+                        ):
+                            has_solution = True
+                            break
+
+            if has_solution:
+                logger.debug(
+                    f"Silently removing import containing 'Solution': {ast.unparse(node)}"
+                )
+                continue
+
             new_body.append(node)
             logger.trace(f"Keeping import: {ast.unparse(node)}")
 
-        # --- ALLOW: Unittest Classes ---
-        elif isinstance(node, ast.ClassDef) and is_unittest_class(node):
-            new_body.append(node)
-            logger.trace(f"Keeping unittest class: {node.name}")
+        # --- 2. CHECK: Classes ---
+        elif isinstance(node, ast.ClassDef):
+            if is_unittest_class(node):
+                # Keep Unittest Class
+                new_body.append(node)
+                logger.trace(f"Keeping unittest class: {node.name}")
 
-        # --- REJECT: Everything Else ---
-        else:
-            # Identify the type of forbidden node for the error message
-            node_type = type(node).__name__
-            details = ""
+            elif node.name == "Solution":
+                # SILENT REMOVAL: Just ignore it and continue loop
+                logger.debug("Silently removing 'Solution' class.")
+                continue
 
-            if isinstance(node, ast.ClassDef):
-                details = f"Non-unittest class '{node.name}'"
-            elif isinstance(node, ast.FunctionDef):
-                details = f"Top-level function '{node.name}'"
             else:
-                details = f"Top-level statement of type '{node_type}'"
+                # ERROR: Any class that isn't Unittest OR Solution
+                logger.debug(f"Strict mode violation: Unknown class '{node.name}'")
+                logger.debug(f"Offending code:\n{ast.unparse(node)}")
+                raise CodeTransformationError(
+                    f"Unittest extraction failed: Non-unittest class '{node.name}' is not allowed. "
+                    "Only 'Solution' (removed) or unittest classes (kept) are permitted."
+                )
 
-            logger.debug(f"Unittest extraction failed: {details} found.")
-            logger.debug(f"Offending code context:\n{ast.unparse(node)}")
+        # --- 3. SILENT REMOVE: Main Block ---
+        elif is_if_name_main(node):
+            logger.debug("Silently removing 'if __name__ == \"__main__\"' block.")
+            continue
 
-            # Raising the error as requested
+        # --- 4. REJECT: Everything Else ---
+        else:
+            node_type = type(node).__name__
+            details = (
+                f"Top-level function '{node.name}'"
+                if isinstance(node, ast.FunctionDef)
+                else f"Top-level statement '{node_type}'"
+            )
+
+            logger.debug(f"Strict mode violation: {details}")
             raise CodeTransformationError(
-                f"Strict extraction failed: {details} is not allowed. "
-                "Only imports and unittest classes are permitted."
+                f"Unittest extraction failed: {details} is not allowed."
             )
 
     # Assign the new, filtered list back to the tree's body

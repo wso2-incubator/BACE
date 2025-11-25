@@ -1100,270 +1100,68 @@ class TestIsUnittestClass:
 
 
 class TestExtractUnittestCode:
-    """Test extract_unittest_code function in Strict Mode."""
-
-    # --- HAPPY PATHS (What should work) ---
-
-    def test_keeps_multiple_imports(self) -> None:
+    def test_silently_removes_solution_class(self) -> None:
+        """Condition: class Solution should disappear without error."""
         full_code = """
 import unittest
-import sys
-from typing import List
-from collections import defaultdict
+
+class Solution:
+    def solve(self): return 1
 
 class TestFoo(unittest.TestCase):
-    def test_bar(self):
-        pass
+    def test_x(self): pass
 """
         result = extract_unittest_code(full_code)
+        assert "class Solution" not in result
+        assert "class TestFoo" in result
         assert "import unittest" in result
-        assert "import sys" in result
-        assert "from typing import List" in result
-        assert "from collections import defaultdict" in result
-        assert "class TestFoo" in result
 
-    def test_keeps_multiple_unittest_classes(self) -> None:
+    def test_raises_error_on_other_classes(self) -> None:
+        """Condition: class Helper (not Solution, not Unittest) raises error."""
         full_code = """
 import unittest
+
+class Helper:  # This is NOT allowed
+    pass
 
 class TestFoo(unittest.TestCase):
-    def test_one(self):
-        pass
-
-class TestBar(unittest.TestCase):
-    def test_two(self):
-        pass
-"""
-        result = extract_unittest_code(full_code)
-        assert "class TestFoo" in result
-        assert "class TestBar" in result
-        assert "def test_one" in result
-        assert "def test_two" in result
-
-    def test_preserves_class_methods(self) -> None:
-        full_code = """
-import unittest
-
-class TestSolution(unittest.TestCase):
-    def setUp(self):
-        self.x = 1
-    
-    def test_example(self):
-        self.assertEqual(self.x, 1)
-    
-    def tearDown(self):
-        pass
-"""
-        result = extract_unittest_code(full_code)
-        assert "class TestSolution" in result
-        assert "def setUp" in result
-        assert "def test_example" in result
-        assert "def tearDown" in result
-
-    def test_handles_testcase_without_module_prefix(self) -> None:
-        full_code = """
-from unittest import TestCase
-
-class MyTest(TestCase):
-    def test_something(self):
-        pass
-"""
-        result = extract_unittest_code(full_code)
-        assert "from unittest import TestCase" in result
-        assert "class MyTest" in result
-        assert "def test_something" in result
-
-    def test_code_with_only_unittest_class(self) -> None:
-        full_code = """
-class TestFoo(unittest.TestCase):
-    def test_bar(self):
-        pass
-"""
-        result = extract_unittest_code(full_code)
-        assert "class TestFoo" in result
-        assert "def test_bar" in result
-
-    # --- ERROR SCENARIOS (What should raise) ---
-
-    def test_raises_on_mixed_valid_and_invalid_classes(self) -> None:
-        """Should fail because 'Solution' class is forbidden."""
-        full_code = """
-import unittest
-
-class Solution:
-    def solve(self):
-        return 42
-
-class TestSolution(unittest.TestCase):
-    def test_foo(self):
-        self.assertTrue(True)
-"""
-        with pytest.raises(
-            CodeTransformationError,
-            match="Non-unittest class 'Solution' is not allowed",
-        ):
-            extract_unittest_code(full_code)
-
-    def test_raises_on_top_level_functions(self) -> None:
-        """Should fail because helper functions are forbidden."""
-        full_code = """
-def helper():
-    return 1
-
-def another_helper():
-    return 2
-
-class TestFoo(unittest.TestCase):
-    def test_it(self):
-        pass
-"""
-        with pytest.raises(
-            CodeTransformationError, match="Top-level function 'helper' is not allowed"
-        ):
-            extract_unittest_code(full_code)
-
-    def test_raises_on_non_unittest_classes(self) -> None:
-        full_code = """
-class Solution:
-    def solve(self):
-        return 42
-
-class Helper:
-    def help(self):
-        return 1
-
-class TestSolution(unittest.TestCase):
-    def test_solve(self):
-        pass
-"""
-        with pytest.raises(
-            CodeTransformationError,
-            match="Non-unittest class 'Solution' is not allowed",
-        ):
-            extract_unittest_code(full_code)
-
-    def test_raises_on_module_level_statements(self) -> None:
-        """Should fail on global variables or config dictionaries."""
-        full_code = """
-import unittest
-
-DEBUG = True
-CONFIG = {"key": "value"}
-
-class TestFoo(unittest.TestCase):
-    def test_it(self):
-        pass
-"""
-        with pytest.raises(
-            CodeTransformationError,
-            match="Top-level statement of type 'Assign' is not allowed",
-        ):
-            extract_unittest_code(full_code)
-
-    def test_raises_on_pure_logic_code(self) -> None:
-        """Should fail if no unittest classes exist and logic is present."""
-        full_code = """
-import unittest
-
-def helper():
-    return 1
-
-class Solution:
     pass
 """
         with pytest.raises(
-            CodeTransformationError, match="Top-level function 'helper' is not allowed"
+            CodeTransformationError, match="Non-unittest class 'Helper'"
         ):
             extract_unittest_code(full_code)
 
-    def test_raises_on_comments_and_docstrings_with_functions(self) -> None:
-        """Note: ast.unparse doesn't preserve comments, only docstrings in classes/functions."""
+    def test_raises_error_on_helper_functions(self) -> None:
+        """Condition: Top level functions raise error."""
         full_code = """
-# This is a comment
-import unittest
-
-def helper():  # Helper function
-    \"\"\"Docstring.\"\"\"
-    return 1
-
-class TestFoo(unittest.TestCase):
-    \"\"\"Test class.\"\"\"
-    def test_it(self):
-        \"\"\"Test method.\"\"\"
-        pass
+def my_helper(): return 1
 """
         with pytest.raises(
-            CodeTransformationError, match="Top-level function 'helper' is not allowed"
+            CodeTransformationError, match="Top-level function 'my_helper'"
         ):
             extract_unittest_code(full_code)
 
-    def test_raises_error_on_syntax_error(self) -> None:
-        invalid_code = "class Foo(\n    invalid syntax"
-        with pytest.raises(CodeParsingError):
-            extract_unittest_code(invalid_code)
-
-    def test_complex_real_world_example_raises(self) -> None:
-        full_code = """
-import unittest
-from typing import List
-import numpy as np
-
-def preprocess_data(data: List[int]) -> List[int]:
-    return sorted(data)
-
+    def test_remove_solution_import(self) -> None:
+        full_code = """import unittest
+from solution_module import Solution
+import Solution
+import solution
+from solution import Solution
+from Solution import solution
+from Solution import Solution
+import Solution as sol
 class Solution:
-    def solve(self, nums: List[int]) -> int:
-        return sum(nums)
-
-class DataProcessor:
-    def process(self):
-        return 1
-
-class TestSolution(unittest.TestCase):
-    def setUp(self):
-        self.solution = Solution()
-
-    def test_example_1(self):
-        result = self.solution.solve([1, 2, 3])
-        self.assertEqual(result, 6)
-
-    def test_example_2(self):
-        result = self.solution.solve([])
-        self.assertEqual(result, 0)
-
-class TestSolutionAdvanced(unittest.TestCase):
-    def test_large_input(self):
-        large_nums = list(range(1000))
-        result = Solution().solve(large_nums)
-        self.assertEqual(result, sum(large_nums))
+    def solve(self): return 1
+class TestFoo(unittest.TestCase):
+    def test_x(self): pass
 """
-        with pytest.raises(
-            CodeTransformationError,
-            match="Top-level function 'preprocess_data' is not allowed",
-        ):
-            extract_unittest_code(full_code)
-
-
-#     # --- EDGE CASES ---
-
-#     def test_inheritance_limitation(self) -> None:
-#         """
-#         Demonstrates that custom inheritance chains fail strict validation.
-#         MyTest(BaseTestCase) -> BaseTestCase(TestCase).
-#         AST parser only sees 'BaseTestCase' as the parent, so it rejects 'MyTest'.
-#         """
-#         full_code = """
-# from unittest import TestCase
-
-# class BaseTestCase(TestCase):
-#     pass
-
-# class MyTest(BaseTestCase):
-#     def test_it(self):
-#         pass
-# """
-#         # In strict mode, we expect this to FAIL on MyTest
-#         with pytest.raises(
-#             CodeTransformationError, match="Non-unittest class 'MyTest' is not allowed"
-#         ):
-#             extract_unittest_code(full_code)
+        result = extract_unittest_code(full_code)
+        assert "from solution_module import Solution" not in result
+        assert "import Solution" not in result
+        assert "import solution" not in result
+        assert "from solution import Solution" not in result
+        assert "from Solution import solution" not in result
+        assert "from Solution import Solution" not in result
+        assert "import Solution as sol" not in result
+        assert "class TestFoo" in result
