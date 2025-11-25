@@ -52,6 +52,17 @@ class TestSolution(unittest.TestCase):
         script = compose_lcb_test_script(prog, test)
         assert "from solution import Solution" not in script
 
+    def test_removes_capitalized_Solution_imports_from_test(self) -> None:
+        prog = "class Solution:\n    pass"
+        test = """
+from Solution import Solution
+import unittest
+class TestSolution(unittest.TestCase):
+    pass
+"""
+        script = compose_lcb_test_script(prog, test)
+        assert "from Solution import Solution" not in script
+
     def test_adds_unittest_import_if_missing(self) -> None:
         prog = "class Solution:\n    pass"
         test = "class TestSolution:\n    pass"
