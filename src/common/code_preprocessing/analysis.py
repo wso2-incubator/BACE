@@ -327,3 +327,37 @@ def contains_starter_code(code_string: str, starter_code: str) -> bool:
     logger.debug(f"Offending code snippet:\n{code_string}")
     logger.debug(f"Starter code snippet:\n{starter_code}")
     return False
+
+
+def is_if_name_main(node: ast.AST) -> bool:
+    """
+    Checks if an AST node represents: if __name__ == "__main__":
+    """
+    if not isinstance(node, ast.If):
+        return False
+
+    try:
+        # Check condition structure: <left> == <comparator>
+        test = node.test
+        if not isinstance(test, ast.Compare):
+            return False
+
+        # Check left side: __name__
+        if not (isinstance(test.left, ast.Name) and test.left.id == "__name__"):
+            return False
+
+        # Check comparator: "__main__"
+        # Note: We assume standard '==' comparison
+        if len(test.comparators) != 1:
+            return False
+
+        comp = test.comparators[0]
+        # Handle Python 3.8+ ast.Constant vs older ast.Str if necessary
+        # (ast.Constant covers literal strings in modern Python)
+        if isinstance(comp, ast.Constant) and comp.value == "__main__":
+            return True
+
+    except AttributeError:
+        return False
+
+    return False
