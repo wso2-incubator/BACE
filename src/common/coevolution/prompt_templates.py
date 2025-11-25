@@ -116,7 +116,7 @@ MUTATE_TEST = (
     _TESTER_ROLE + "\n\n"
     "PROBLEM:\n{question_content}\n\n"
     "The following test case was identified to be a good test\n```python\n{individual}\n```\n\n"
-    "Your task is to create a mutated version of this test case.\n"
+    "Generate a new test case that explores different input scenarios or edge cases.\n"
     "Ensure it remains a valid unittest test case\n\n"
     + _TEST_METHOD_FORMAT_INSTRUCTION
     + "\n"
