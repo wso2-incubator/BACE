@@ -11,6 +11,7 @@ from common.sandbox import (
     BasicExecutionResult,
     PytestXmlAnalyzer,
     SafeCodeSandbox,
+    TestExecutionResult,
     TestExecutor,
     check_test_execution_status,
     create_safe_test_environment,
@@ -159,7 +160,7 @@ class TestCreateSafeTestEnvironment:
         """Test creating a safe test environment."""
         sandbox = create_safe_test_environment()
         assert isinstance(sandbox, SafeCodeSandbox)
-        assert sandbox.timeout == 30  # Current default timeout
+        assert sandbox.timeout == 300  # Safe environment has longer timeout
         assert sandbox.max_memory_mb == 100
 
         # Test that it can execute code
@@ -253,7 +254,7 @@ if __name__ == '__main__':
     unittest.main()
 """
 
-        result = sandbox.execute_test_script(script)
+        result: TestExecutionResult = sandbox.execute_test_script(script)
         assert result.script_error is False
         assert result.has_failures is True
         assert result.total_tests == 2
@@ -440,6 +441,83 @@ if __name__ == '__main__':
         # With pytest, import errors are treated as test errors, not script errors
         assert "TESTS FAILED" in status_info
 
+    def test_failure_message_is_clean_of_ansi_codes(self) -> None:
+        """
+        Ensure that when a test fails, the error message in 'details'
+        does not contain ANSI color codes (raw \x1b characters).
+        """
+        sandbox = create_safe_test_environment()
+
+        # A script that definitely fails with an assertion error
+        failing_script = """
+import unittest
+class TestFail(unittest.TestCase):
+    def test_failure(self):
+        # Pytest usually colors this comparison red/green
+        self.assertEqual("foo", "bar")
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(failing_script)
+
+        assert result.tests_failed == 1
+        failure_details = result.test_results[0].details
+
+        # 1. Ensure the logic is still there
+        assert (
+            failure_details is not None
+            and "foo" in failure_details
+            and "bar" in failure_details
+        )
+
+        # 2. THE NEW CHECK: Ensure no escape characters exist
+        # \x1b is the ESC character used in ANSI sequences
+        assert failure_details is not None and "\x1b" not in failure_details, (
+            "Failure details contain ANSI escape sequences!"
+        )
+
+    def test_explicit_ansi_sanitization(self) -> None:
+        """
+        Ensure that if a user script explicitly prints or raises errors
+        with ANSI codes, the analyzer strips them out.
+        """
+        sandbox = create_safe_test_environment()
+
+        # A script that uses ANSI codes in the exception message
+        ansi_script = """
+import unittest
+
+# ANSI codes
+RED = '\\033[91m'
+RESET = '\\033[0m'
+
+class TestANSI(unittest.TestCase):
+    def test_ansi_error(self):
+        # We manually inject color codes into the failure message
+        raise ValueError(f"{RED}Critical Failure{RESET}")
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = sandbox.execute_test_script(ansi_script)
+
+        assert (
+            result.tests_failed == 1
+        )  # Raising ValueError in test method is treated as failure
+        details = result.test_results[0].details
+        assert details is not None  # Ensure details exist
+
+        # Assert we can read the text
+        assert "Critical Failure" in details
+
+        # Assert the color codes are GONE
+        assert "[91m" not in details
+        assert "[0m" not in details
+        assert "\x1b" not in details
+        assert "#x1B" not in details
+
     def test_verbose_unittest_output(self) -> None:
         """Test parsing of verbose unittest output."""
         sandbox = SafeCodeSandbox()
@@ -480,6 +558,88 @@ if __name__ == '__main__':
         assert "test_one" in test_names
         assert "test_two" in test_names
         assert "test_three_fails" in test_names
+
+    def test_verbose_unittest_output_details_and_ansi_cleaning(self) -> None:
+        """Test that verbose unittest output details are captured and ANSI-clean."""
+        sandbox = SafeCodeSandbox()
+
+        # Script with verbose output and detailed failure messages
+        script = """
+import unittest
+
+class TestVerboseDetails(unittest.TestCase):
+    def test_passing_with_details(self):
+        '''A passing test with some details'''
+        result = 2 + 2
+        self.assertEqual(result, 4, "Basic math should work")
+    
+    def test_failing_with_detailed_message(self):
+        '''A failing test with detailed assertion message'''
+        actual = "hello world"
+        expected = "goodbye world"
+        self.assertEqual(actual, expected, 
+                        f"Expected '{expected}' but got '{actual}'. "
+                        f"Length check: {len(actual)} vs {len(expected)}")
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
+"""
+
+        result = sandbox.execute_test_script(script)
+        assert result.has_failures is True
+        assert result.script_error is False
+        assert result.total_tests == 2
+        assert result.tests_passed == 1
+        assert result.tests_failed == 1
+        assert result.tests_errors == 0
+
+        # Check that individual test results are captured
+        assert len(result.test_results) == 2
+
+        # Find the failing test
+        failing_test = next(
+            t
+            for t in result.test_results
+            if t.name == "test_failing_with_detailed_message"
+        )
+        assert failing_test is not None
+        assert failing_test.status == "failed"
+
+        # Check that details contain expected verbose output elements
+        details = failing_test.details
+        assert details is not None
+
+        # Should contain the assertion error details
+        assert "AssertionError" in details
+        assert "Expected 'goodbye world' but got 'hello world'" in details
+        assert "Length check:" in details
+
+        # Should contain verbose unittest output indicators
+        # Note: pytest captures unittest output, so we look for test failure indicators
+        assert "AssertionError" in details  # The exception type
+        assert "test_failing_with_detailed_message" in details  # Test name in traceback
+
+        # CRITICAL: Ensure no ANSI escape sequences
+        assert "\x1b" not in details, (
+            f"Found ANSI escape sequences in details: {repr(details)}"
+        )
+        assert "[91m" not in details, (
+            f"Found ANSI color codes in details: {repr(details)}"
+        )
+        assert "[0m" not in details, (
+            f"Found ANSI reset codes in details: {repr(details)}"
+        )
+
+        # Check that the passing test also has clean details
+        passing_test = next(
+            t for t in result.test_results if t.name == "test_passing_with_details"
+        )
+        assert passing_test is not None
+        assert passing_test.status == "passed"
+        if passing_test.details:
+            assert "\x1b" not in passing_test.details
+            assert "[91m" not in passing_test.details
+            assert "[0m" not in passing_test.details
 
     def test_edge_case_empty_script(self) -> None:
         """Test execution of empty or minimal script."""
@@ -787,10 +947,10 @@ class TestPerTestTimeout:
     def test_per_test_timeout_default(self) -> None:
         """Test default per-test timeout values."""
         sandbox = create_safe_test_environment()
-        assert sandbox.test_method_timeout == 5
+        assert sandbox.test_method_timeout == 30  # Default parameter value
 
         executor = create_test_executor()
-        assert executor.sandbox.test_method_timeout == 5
+        assert executor.sandbox.test_method_timeout == 30  # Default parameter value
 
     def test_per_test_timeout_disabled(self) -> None:
         """Test that per-test timeout can be disabled."""

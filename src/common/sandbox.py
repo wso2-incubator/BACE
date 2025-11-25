@@ -6,6 +6,7 @@ with safety restrictions to prevent harm to the local machine.
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -118,9 +119,20 @@ class PytestXmlAnalyzer:
     to provide robust and reliable test result analysis.
     """
 
+    # Regex to identify ANSI escape sequences (both raw and hex-encoded)
+    ANSI_ESCAPE_PATTERN = re.compile(
+        r"(?:\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|#x1B\[[0-?]*[ -/]*[@-~])"
+    )
+
     def __init__(self) -> None:
         """Initialize the pytest XML analyzer."""
         pass
+
+    def _remove_ansi_codes(self, text: Optional[str]) -> Optional[str]:
+        """Strip ANSI escape codes from string."""
+        if not text:
+            return text
+        return self.ANSI_ESCAPE_PATTERN.sub("", text)
 
     def analyze_pytest_xml(
         self, xml_content: Optional[str], basic_result: BasicExecutionResult
@@ -189,13 +201,15 @@ class PytestXmlAnalyzer:
                 failure = testcase.find("failure")
                 if failure is not None:
                     status = "failed"
-                    details = failure.text or failure.get("message", "")
+                    raw_details = failure.text or failure.get("message", "")
+                    details = self._remove_ansi_codes(raw_details)
 
                 # Check for error
                 error = testcase.find("error")
                 if error is not None:
                     status = "error"
-                    details = error.text or error.get("message", "")
+                    raw_details = error.text or error.get("message", "")
+                    details = self._remove_ansi_codes(raw_details)
                     # Check if this is a syntax error (script-level error)
                     if details and (
                         "SyntaxError" in details
@@ -701,6 +715,9 @@ class SafeCodeSandbox:
                 script_file_path,
                 "--junitxml",
                 xml_file_path,
+                "--color=no",  # Force disable ANSI color codes
+                "-o",
+                "console_output_style=classic",  # Use simple output style (no progress bars etc)
             ]
 
             # Add per-test timeout if configured
@@ -856,6 +873,9 @@ class TestExecutor:
                 script_file_path,
                 "--junitxml",
                 xml_file_path,
+                "--color=no",  # Force disable ANSI color codes
+                "-o",
+                "console_output_style=classic",  # Use simple output style (no progress bars etc)
             ]
 
             # Add per-test timeout if configured
