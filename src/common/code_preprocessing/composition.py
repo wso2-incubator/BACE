@@ -91,7 +91,7 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         """Remove imports of Solution class from tester code."""
 
         def visit_ImportFrom(self, node: ast.ImportFrom) -> Optional[ast.AST]:
-            if node.module == "solution":
+            if node.module == "solution" or node.module == "Solution":
                 return None
             return node
 
