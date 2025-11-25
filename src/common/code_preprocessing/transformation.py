@@ -484,10 +484,11 @@ def extract_unittest_code(full_code: str) -> str:
 
     Special Rules:
     1. 'class Solution': Silently removed (ignored).
-    2. 'if __name__ == "__main__"': Silently removed (ignored).
-    3. Imports: Preserved UNLESS they contain 'Solution' or 'solution'.
-    4. Unittest classes: Preserved.
-    5. Anything else (functions, other classes, vars): Raises CodeTransformationError.
+    2. Try blocks: Silently removed (ignored).
+    3. 'if __name__ == "__main__"': Silently removed (ignored).
+    4. Imports: Preserved UNLESS they contain 'Solution' or 'solution'.
+    5. Unittest classes: Preserved.
+    6. Anything else (functions, other classes, vars): Raises CodeTransformationError.
 
     Args:
         full_code: Python source code string
@@ -573,7 +574,12 @@ def extract_unittest_code(full_code: str) -> str:
             logger.debug("Silently removing 'if __name__ == \"__main__\"' block.")
             continue
 
-        # --- 4. REJECT: Everything Else ---
+        # --- 4. SILENT REMOVE: Try Blocks ---
+        elif isinstance(node, ast.Try):
+            logger.debug("Silently removing Try block.")
+            continue
+
+        # --- 5. REJECT: Everything Else ---
         else:
             node_type = type(node).__name__
             details = (

@@ -1165,3 +1165,48 @@ class TestFoo(unittest.TestCase):
         assert "from Solution import Solution" not in result
         assert "import Solution as sol" not in result
         assert "class TestFoo" in result
+
+    def test_silently_removes_try_blocks(self) -> None:
+        """Condition: Try blocks should be silently removed."""
+        full_code = """
+import unittest
+
+try:
+    from solution import Solution
+except ImportError:
+    pass
+
+class TestFoo(unittest.TestCase):
+    def test_x(self): pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "try:" not in result
+        assert "from solution import Solution" not in result
+        assert "except ImportError:" not in result
+        assert "class TestFoo" in result
+        assert "import unittest" in result
+
+    def test_silently_removes_try_blocks_with_else(self) -> None:
+        """Condition: Try blocks with else/finally should also be removed."""
+        full_code = """
+import unittest
+
+try:
+    import solution
+except ImportError:
+    pass
+else:
+    print("imported")
+finally:
+    print("done")
+
+class TestBar(unittest.TestCase):
+    def test_y(self): pass
+"""
+        result = extract_unittest_code(full_code)
+        assert "try:" not in result
+        assert "import solution" not in result
+        assert "except ImportError:" not in result
+        assert "else:" not in result
+        assert "finally:" not in result
+        assert "class TestBar" in result
