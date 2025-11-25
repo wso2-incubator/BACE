@@ -58,22 +58,25 @@ def main(
         "-r",
         help="Unique identifier for this run. If not provided, one will be auto-generated with timestamp.",
     ),
+    problem_ids: Optional[list[str]] = typer.Option(
+        None,
+        "--problem-ids",
+        "-p",
+        help="List of problem IDs to run. If not provided, runs on a default set of problems.",
+    ),
 ) -> None:
     """Run a coevolution experiment on a LiveCodeBench problem."""
     logging_utils.setup_logging(console_level="DEBUG", file_level="TRACE")
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
 
-    # ====================================
-    # Step 1: Load Problem
-    # ====================================
     # Generate run_id if not provided
     if run_id is None:
         run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
     logger.info(f"Run ID: {run_id}")
 
     # ====================================
-    # Step 2: Create LLM and Sandbox
+    # Step 1: Create LLM and Sandbox
     # ====================================
 
     # LLM and Sandbox created outside problem loop to reuse across problems
@@ -87,8 +90,18 @@ def main(
     sandbox = create_safe_test_environment()
     logger.info("Sandbox created")
 
+    # ====================================
+    # Step 2: Load Problems
+    # ====================================
     problems = load_problems()
-    for problem in problems[:10]:
+    if problem_ids is not None:
+        selected_problems = [
+            problem for problem in problems if problem.question_id in problem_ids
+        ]
+    else:
+        selected_problems = problems[10:20]  # Default to first 10 problems
+
+    for problem in selected_problems:
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
             logger.info(f"Running coevolution on problem ID: {problem.question_id}")
             logging_utils.log_problem(problem)
@@ -214,7 +227,6 @@ def main(
             # ====================================
             # Step 6: Display Results
             # ====================================
-            logging_utils.log_section_header("INFO", "COEVOLUTION EXPERIMENT COMPLETED")
             best_code = code_population.get_best_individual()
             best_test = test_population.get_best_individual()
 
