@@ -20,10 +20,6 @@ from common.sandbox import TestResult
 from .core.individual import CodeIndividual, TestIndividual
 from .core.interfaces import BasePopulation, ExecutionResults, IFeedbackGenerator
 
-# --- Constants ---
-_MAX_ERROR_LENGTH = 300
-
-
 # --- Helper Function ---
 
 
@@ -50,7 +46,7 @@ def _format_test_entry(
     # 1. Identifier (Name + Optional Description)
     identifier = test_result.name
     if test_result.description and test_result.description.strip():
-        identifier = f"{test_result.name} ({test_result.description.strip()})"
+        identifier = f"{test_result.name}"
     parts.append(f"{entry_num}. {identifier}")
 
     # 2. Code Block
@@ -62,8 +58,6 @@ def _format_test_entry(
     # 3. Optional Error Details
     if include_error:
         error_info = test_result.details or "No details available"
-        if len(error_info) > _MAX_ERROR_LENGTH:
-            error_info = error_info[:_MAX_ERROR_LENGTH] + "..."
         parts.append(f"Error: {error_info}")
 
     # Add a trailing newline for separation between entries
@@ -209,14 +203,17 @@ class CodeFeedbackGenerator(IFeedbackGenerator[TestIndividual]):
         # --- Assemble Feedback String ---
         feedback_builder: list[str] = []
 
-        total_failed = len(failed_entries)  # Can use this count directly now
+        total_passed: int = len(passed_entries)
         feedback_builder.append(
-            f"This code failed {total_failed} out of {execution_result.total_tests} tests:\n"
+            f"This code passed {total_passed} out of {execution_result.total_tests} tests:\n"
         )
-        feedback_builder.extend(failed_entries)
 
-        if passed_entries:
-            feedback_builder.append(f"\nPassed {len(passed_entries)} test(s):\n")
+        if len(failed_entries) > 0:
+            feedback_builder.append("The following test(s) failed:\n")
+            feedback_builder.extend(failed_entries)
+
+        if len(passed_entries) > 0:
+            feedback_builder.append("\nThe following test(s) passed:\n")
             feedback_builder.extend(passed_entries)
 
         # Use strip() to remove any potential trailing newline added by the last entry
