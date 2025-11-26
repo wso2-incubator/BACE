@@ -35,7 +35,7 @@ from .prompt_templates import (
     CROSSOVER_CODE,
     CROSSOVER_TEST,
     EDIT_CODE_AGENTIC,
-    EDIT_TEST,
+    EDIT_TEST_AGENTIC,
     INITIAL_CODE,
     INITIAL_TEST_AGENT_CODER_STYLE,
     MUTATE_CODE,
@@ -508,7 +508,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         Raises:
             ValueError: If after retries, still can't generate valid test snippet
         """
-        prompt = EDIT_TEST.format(
+        prompt = EDIT_TEST_AGENTIC.format(
             question_content=self.problem.question_content,
             individual=individual,
             feedback=feedback,

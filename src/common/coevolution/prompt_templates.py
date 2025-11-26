@@ -41,6 +41,7 @@ INITIAL_CODE = (
     "<task>\n"
     "Write {population_size} distinct solutions to solve the problem described below.\n"
     "Each solution should implement a different algorithmic approach or technique.\n"
+    "Each code should strictly follow the starter code structure provided in <starter_code>\n"
     "Return each solution in a separate Python code block.\n"
     "</task>\n\n"
     "<problem>\n"
@@ -106,6 +107,7 @@ EDIT_CODE = (
     "</feedback>\n\n"
     "<task>\n"
     "Utilizing the feedback, generate a new code solution that addresses the issues raised.\n"
+    "If no issues are found, try to improve the code slightly in terms of efficiency or clarity.\n"
     "</task>\n\n"
     + _STARTER_CODE_BLOCK
     + "\n"
@@ -122,7 +124,7 @@ You are an expert AI programming assistant specializing in code completion and b
 You do not have access to a file system, compilers, or execution environments. 
 Your input will consist of:
 1. A problem description
-2. A buggy code snippet
+2. A code snippet
 3. Test results, error logs, or stack traces.
 
 Your goal is to analyze the test results, identify the root cause of the bug, and provide the corrected code.
@@ -146,6 +148,7 @@ When providing fixed code, adhere to these standards:
 <analysis_strategy>
 Before generating the code, perform the following internal analysis:
 1. **Analyze Test Results:** Look at the provided failure logs to pinpoint exactly where the code diverges from expected behavior.
+    -- If no issues are found, consider minor improvements for efficiency or clarity.
 2. **Trace Execution:** Mentally simulate the code execution with the failing input to find the logic gap.
 3. **Formulate Fix:** Determine the smallest specific change required to make the tests pass without breaking other functionality.
 </analysis_strategy>
@@ -285,13 +288,74 @@ EDIT_TEST = (
     "<current_test>\n"
     "`python\n{individual}\n`\n"
     "</current_test>\n\n"
-    "<feedback_log>\n"
+    "<feedback>\n"
     "{feedback}\n"
-    "</feedback_log>\n\n"
+    "</feedback>\n\n"
     "<task>\n"
     "Utilize the feedback to generate a new test case that addresses the issues raised.\n"
     "If no issues are found or if you strongly believe the original test case was correct, return a slightly modified version of the original test case.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
+)
+
+
+EDIT_TEST_AGENTIC = (
+    """<system_role>
+You are an expert AI QA engineer and software tester.
+You do not have access to a file system or execution environments.
+Your input will consist of:
+1. A problem description
+2. A current test case (unit test)
+3. Feedback logs showing how various solution candidates (some correct, some incorrect) performed against this test.
+
+Your goal is to analyze the feedback to identify weaknesses or errors in the test case and provide a refined, robust version.
+</system_role>
+
+<personality>
+Your default personality is concise, direct, and critical (in a constructive way).
+- Focus on edge cases and correctness.
+- Act like a senior Test Engineer: rigorous, precise, and logical.
+</personality>
+
+<testing_guidelines>
+When providing the fixed test case, adhere to these standards:
+- **Validity:** The test MUST pass for a correct solution. If valid code failed, the test logic is flawed—fix it.
+- **Discrimination:** The test MUST fail for incorrect solutions. If buggy code passed, the test is too weak—add specific assertions to catch those bugs.
+- **Standard Library:** This test is a unit test method using Python's unittest framework.
+- **Isolation:** Ensure tests are independent and do not rely on external state unless provided.
+- **Complexity:** Avoid unneeded complexity. Simple is better.
+- **Naming:** Use descriptive names for test methods reflecting the scenario being tested.
+</testing_guidelines>
+
+<analysis_strategy>
+Before generating the test code, perform the following internal analysis:
+1. **Analyze Feedback:**
+    -- Did valid solutions fail? -> The test has a logic error or incorrect assumption.
+    -- Did invalid solutions pass? -> The test lacks coverage for specific edge cases.
+    -- Did the test crash (Syntax/Runtime error)? -> The test code is malformed.
+2. **Trace Logic:** Compare the problem requirements against the current test assertions.
+3. **Formulate Fix:** -- If strengthening: Add specific input/output pairs that target the missed edge case.
+    -- If fixing: Correct the expected output values or assertion logic.
+</analysis_strategy>
+
+<output_formatting>
+1. **Brief Explanation:** Start with a concise sentence explaining why the test is being changed (e.g., "Added an assertion for empty list input to catch the breakdown in Solution B" or "Fixed incorrect expected value for input 'xyz'.").
+2. **Code Blocks:** Provide the fixed test method in a Python code block (e.g., ```python ... ```). This should be a single unittest test method.
+3. **Imports:** Ensure necessary imports (like `unittest`) are included.
+</output_formatting>"""
+    + "\n\n"
+    """
+<problem>
+{question_content}
+</problem>
+
+<current_test>
+```python
+{individual}
+```
+</current_test>
+
+<feedback_from_solutions> {feedback} </feedback_from_solutions>
+ """
 )
 
 __all__ = [
@@ -300,8 +364,10 @@ __all__ = [
     "CROSSOVER_CODE",
     "MUTATE_CODE",
     "EDIT_CODE",
+    "EDIT_CODE_AGENTIC",
     "INITIAL_TEST",
     "CROSSOVER_TEST",
     "MUTATE_TEST",
     "EDIT_TEST",
+    "EDIT_TEST_AGENTIC",
 ]
