@@ -34,7 +34,7 @@ from .core.interfaces import ICodeOperator, ITestOperator, Problem
 from .prompt_templates import (
     CROSSOVER_CODE,
     CROSSOVER_TEST,
-    EDIT_CODE,
+    EDIT_CODE_AGENTIC,
     EDIT_TEST,
     INITIAL_CODE,
     INITIAL_TEST_AGENT_CODER_STYLE,
@@ -136,6 +136,7 @@ class BaseLLMOperator(ABC):
             raw_response = self._llm.generate(prompt)
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
+            logger.debug(f"Prompt that caused failure: {prompt}")
             raise LLMGenerationError(f"LLM API call failed: {e}") from e
 
         if not raw_response or not raw_response.strip():
@@ -315,7 +316,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             New edited code snippet
         """
         logger.debug("Performing edit on individual code snippet based on feedback")
-        prompt = EDIT_CODE.format(
+        prompt = EDIT_CODE_AGENTIC.format(
             question_content=self.problem.question_content,
             starter_code=self.problem.starter_code,
             individual=individual,
