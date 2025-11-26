@@ -236,7 +236,7 @@ class OpenAIClient(LLMClient):
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
-        reasoning_effort: str = "minimal",
+        reasoning_effort: str | None = "minimal",
         **kwargs: Any,
     ) -> None:
         super().__init__(model, max_output_tokens, enable_token_limit)
@@ -289,7 +289,7 @@ class OpenAIClient(LLMClient):
         self.reasoning_effort = reasoning_effort
         logger.info(f"Updated reasoning effort: {old_effort} → {reasoning_effort}")
 
-    def get_reasoning_effort(self) -> str:
+    def get_reasoning_effort(self) -> str | None:
         """Get the current reasoning effort level.
 
         Returns:
@@ -381,10 +381,8 @@ def create_llm_client(
     if provider == "openai":
         # OpenAI default: token limits enabled
         limit_enabled = True if enable_token_limit is None else enable_token_limit
-        # Set default reasoning effort if not provided
-        effort = reasoning_effort if reasoning_effort is not None else "minimal"
         client = OpenAIClient(
-            model, max_output_tokens, limit_enabled, effort, **client_kwargs
+            model, max_output_tokens, limit_enabled, reasoning_effort, **client_kwargs
         )
     elif provider == "openai-chat":
         # OpenAI Codex default: token limits enabled
