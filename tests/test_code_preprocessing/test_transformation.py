@@ -79,6 +79,29 @@ class TestSolution(unittest.TestCase):
         with pytest.raises(CodeParsingError):
             extract_test_methods_code(code)
 
+    def test_preserves_comments_and_docstrings(self) -> None:
+        """Ensure that inline comments and docstrings in test methods are preserved."""
+        code = textwrap.dedent('''
+            import unittest
+
+            class TestComments(unittest.TestCase):
+                def test_with_comments(self):
+                    """This is a docstring for the test method."""
+                    # Setup value
+                    x = 1  # inline assignment comment
+                    # Assert something
+                    self.assertEqual(x, 1)
+        ''')
+
+        methods = extract_test_methods_code(code)
+        assert len(methods) == 1
+        method_code = methods[0]
+        # Docstring should be present in the extracted source
+        assert "This is a docstring for the test method." in method_code
+        # Inline comments should be preserved
+        assert "# Setup value" in method_code
+        assert "# inline assignment comment" in method_code
+
 
 class TestExtractFirstTestMethodCode:
     """
@@ -106,7 +129,8 @@ class TestExtractFirstTestMethodCode:
         """).strip()
 
         result = extract_first_test_method_code(code)
-        assert result == expected
+        # Normalize dedentation from the extractor before comparison
+        assert textwrap.dedent(result).strip() == expected
 
     def test_preserves_comments_and_formatting(self) -> None:
         """
@@ -124,11 +148,31 @@ class TestExtractFirstTestMethodCode:
 
         result = extract_first_test_method_code(code)
 
-        # With ast.unparse, comments are lost but the function structure is preserved
+        # With our extractor using source segments, comments may be preserved
         assert "def test_comments(self):" in result
         assert "x = 'single_quotes'" in result
-        # Comments are not preserved with ast.unparse
-        assert "# This checks exact string" not in result
+        # Comments should now be preserved when source segment is available
+        assert "# This checks exact string" in result
+
+    def test_preserves_comments_and_docstrings_in_first_test_method(self) -> None:
+        """Ensure that extracting the first test method preserves comments and docstrings."""
+        code = textwrap.dedent('''
+            import unittest
+
+            class TestCommentsFirst(unittest.TestCase):
+                def test_with_comments(self):
+                    """Docstring for the first test method."""
+                    # Setup value
+                    x = 42  # inline assignment comment
+                    # Assert
+                    self.assertEqual(x, 42)
+        ''')
+
+        result = extract_first_test_method_code(code)
+        # Docstring and comments should be preserved when source segment is available
+        assert "Docstring for the first test method." in result
+        assert "# Setup value" in result
+        assert "# inline assignment comment" in result
 
     def test_extracts_first_test_method_from_multiple_classes(self) -> None:
         """Should stop at the first valid unittest class found."""
@@ -1210,3 +1254,29 @@ class TestBar(unittest.TestCase):
         assert "else:" not in result
         assert "finally:" not in result
         assert "class TestBar" in result
+
+    def test_preserves_comments_and_docstrings_in_unittest_code(self) -> None:
+        """Ensure extract_unittest_code preserves docstrings and inline comments inside kept nodes."""
+        full_code = textwrap.dedent('''
+            import unittest
+
+            # Top-level comment about tests
+
+            class TestInnerComments(unittest.TestCase):
+                """This class has a docstring that should be preserved."""
+                def test_doc_and_comments(self):
+                    """Method docstring should be kept."""
+                    # setup comment
+                    x = 5  # inline comment
+                    self.assertEqual(x, 5)
+
+            # Another comment that may be lost
+        ''')
+
+        result = extract_unittest_code(full_code)
+
+        # Docstrings and inline comments inside the class/method should be preserved
+        assert "This class has a docstring that should be preserved." in result
+        assert "Method docstring should be kept." in result
+        assert "# setup comment" in result
+        assert "# inline comment" in result

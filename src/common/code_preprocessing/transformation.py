@@ -210,8 +210,25 @@ def extract_test_methods_code(test_code: str) -> List[str]:
                 if isinstance(method, ast.FunctionDef) and method.name.startswith(
                     "test_"
                 ):
-                    # Use ast.unparse for robust code generation
-                    method_code = ast.unparse(method)
+                    # Try to extract the original source segment so comments
+                    # and inline formatting are preserved. ast.unparse loses
+                    # comments, so fall back to ast.unparse only if source
+                    # segment extraction fails.
+                    try:
+                        method_code = ast.get_source_segment(test_code, method)
+                    except Exception:
+                        logger.warning(
+                            "Failed to get source segment for method; falling back to ast.unparse"
+                        )
+                        method_code = None
+
+                    if not method_code:
+                        # Fallback to ast.unparse when source segment unavailable
+                        logger.warning(
+                            "Using ast.unparse for method code; comments may be lost"
+                        )
+                        method_code = ast.unparse(method)
+
                     test_methods_code.append(method_code)
 
             # Stop after first class
@@ -265,11 +282,47 @@ def extract_first_test_method_code(test_code: str) -> str:
         logger.error("No test method found in the provided code")
         raise CodeTransformationError("No test method found in the provided code")
 
-    # Extract method code using ast.unparse
-    method_code = ast.unparse(target_node)
+    # Prefer extracting the original source segment so comments and
+    # docstrings are preserved. Fall back to ast.unparse when the
+    # source segment isn't available.
+    try:
+        method_code = ast.get_source_segment(test_code, target_node)
+    except Exception:
+        logger.warning(
+            "Failed to get source segment for method; falling back to ast.unparse"
+        )
+        method_code = None
+
+    if not method_code:
+        # Fallback to ast.unparse when source segment unavailable
+        logger.warning("Using ast.unparse for method code; comments may be lost")
+        method_code = ast.unparse(target_node)
 
     # Remove indentation (critical if the method came from inside a class)
-    return textwrap.dedent(method_code)
+    dedented = textwrap.dedent(method_code)
+
+    # When extracting a method that originally lived inside a class, the
+    # `def` line may have been returned without leading indentation while
+    # the body still carries the full (class + method) indentation. In
+    # that case body lines will start with 8 spaces (or more). We want the
+    # extracted method to have a single level of 4-space indentation for
+    # the body. Only remove the extra 4 spaces when present (preserve
+    # top-level function formatting where body lines start with 4 spaces).
+    lines = dedented.splitlines()
+    if len(lines) > 1:
+        normalized_body = []
+        for line in lines[1:]:
+            if line.startswith("        "):
+                # Reduce 8 -> 4 spaces
+                normalized_body.append(line[4:])
+            else:
+                normalized_body.append(line)
+
+        method_code = "\n".join([lines[0]] + normalized_body)
+    else:
+        method_code = dedented
+
+    return method_code
 
 
 def extract_function_with_helpers(code_string: str, target_function_name: str) -> str:
@@ -593,8 +646,34 @@ def extract_unittest_code(full_code: str) -> str:
                 f"Unittest extraction failed: {details} is not allowed."
             )
 
-    # Assign the new, filtered list back to the tree's body
-    full_tree.body = new_body
+    # Try to reconstruct the source using the original source segments
+    # for each kept node so that comments and formatting inside those
+    # nodes are preserved. If any node's source segment cannot be
+    # recovered, fall back to ast.unparse for the whole tree.
+    try:
+        segments: list[str] = []
+        fallback = False
+        for node in new_body:
+            try:
+                seg = ast.get_source_segment(full_code, node)
+            except Exception:
+                seg = None
 
-    # 3. Convert the modified AST back to a string
+            if not seg:
+                fallback = True
+                break
+
+            segments.append(seg)
+
+        if not fallback:
+            # Preserve top-level spacing by joining with double newlines
+            return "\n\n".join(segments)
+    except Exception:
+        # If any unexpected error happened while extracting segments,
+        # fall back to ast.unparse below.
+        pass
+
+    # Assign the new, filtered list back to the tree's body and
+    # fall back to ast.unparse when source segments are unavailable.
+    full_tree.body = new_body
     return ast.unparse(full_tree)
