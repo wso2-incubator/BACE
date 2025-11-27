@@ -124,6 +124,14 @@ class PytestXmlAnalyzer:
         r"(?:\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|#x1B\[[0-?]*[ -/]*[@-~])"
     )
 
+    # Regex to capture absolute paths to temporary python files (handles Unix and Windows)
+    # Matches examples like: /var/.../tmppjtsol6j.py:425 or C:\Temp\tmppjtsol6j.py:425
+    TEMP_PATH_PATTERN = re.compile(r"(?:(?:[A-Za-z]:\\)|/)[^\s:<>\"]+\.py(?::\d+)?")
+
+    # Regex to capture module-like prefixes in instance/class representations
+    # Example: "<tmppjtsol6j.TestMakeAEqualB testMethod=test_x>" -> "<TestMakeAEqualB testMethod=test_x>"
+    MODULE_PREFIX_PATTERN = re.compile(r"<[A-Za-z0-9_]+\.([A-Za-z_][A-Za-z0-9_]*)")
+
     def __init__(self) -> None:
         """Initialize the pytest XML analyzer."""
         pass
@@ -133,6 +141,36 @@ class PytestXmlAnalyzer:
         if not text:
             return text
         return self.ANSI_ESCAPE_PATTERN.sub("", text)
+
+    def _sanitize_details(self, text: Optional[str]) -> Optional[str]:
+        """
+        Strip ANSI codes AND sanitize temporary file paths/module names.
+
+        Replaces absolute temporary file paths with a generic `test_script.py` while
+        preserving optional line numbers, and removes random module prefixes from
+        class/instance representations.
+        """
+        if not text:
+            return text
+
+        # 1. Remove ANSI codes
+        sanitized = self.ANSI_ESCAPE_PATTERN.sub("", text)
+
+        # 2. Replace full temporary file paths with a generic name, preserving line numbers
+        def _path_repl(m: re.Match[str]) -> str:
+            match_text = m.group(0)
+            # If there's a colon with a line number, preserve it
+            colon_idx = match_text.rfind(":")
+            if colon_idx != -1 and match_text[colon_idx + 1 :].isdigit():
+                return f"test_script.py:{match_text[colon_idx + 1 :]}"
+            return "test_script.py"
+
+        sanitized = self.TEMP_PATH_PATTERN.sub(_path_repl, sanitized)
+
+        # 3. Clean up the class/module instance representation
+        sanitized = self.MODULE_PREFIX_PATTERN.sub(r"<\1", sanitized)
+
+        return sanitized
 
     def analyze_pytest_xml(
         self, xml_content: Optional[str], basic_result: BasicExecutionResult
@@ -202,14 +240,14 @@ class PytestXmlAnalyzer:
                 if failure is not None:
                     status = "failed"
                     raw_details = failure.text or failure.get("message", "")
-                    details = self._remove_ansi_codes(raw_details)
+                    details = self._sanitize_details(raw_details)
 
                 # Check for error
                 error = testcase.find("error")
                 if error is not None:
                     status = "error"
                     raw_details = error.text or error.get("message", "")
-                    details = self._remove_ansi_codes(raw_details)
+                    details = self._sanitize_details(raw_details)
                     # Check if this is a syntax error (script-level error)
                     if details and (
                         "SyntaxError" in details

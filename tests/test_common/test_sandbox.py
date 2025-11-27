@@ -751,6 +751,51 @@ class TestPytestXmlAnalyzer:
         assert "syntax" in result.summary.lower()
         assert result.total_tests == 0
 
+    def test_sanitizes_temp_paths_and_module_prefixes(self) -> None:
+        """Ensure temporary file paths and module prefixes are sanitized."""
+        # Construct XML where failure details include an absolute temp path
+        # and an instance representation with a random module prefix.
+        failure_text = (
+            "Traceback (most recent call last):\n"
+            '  File "/var/folders/bl/ydbmym3d04qb5y3mvth453g40000gp/T/tmppjtsol6j.py", line 425, in test_large_mixed_bits_min_cost\n'
+            "    assert something\n"
+            "AssertionError\n"
+            "&lt;tmppjtsol6j.TestMakeAEqualB testMethod=test_large_mixed_bits_min_cost&gt;\n"
+        )
+
+        xml_content = f"""<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+    <testsuite name="test_module" tests="1" failures="1" errors="0" skipped="0">
+        <testcase name="test_fail" classname="TestClass" time="0.001">
+            <failure message="AssertionError">{failure_text}</failure>
+        </testcase>
+    </testsuite>
+</testsuites>"""
+
+        basic_result = BasicExecutionResult(
+            success=False,
+            output="",
+            error="",
+            execution_time=0.1,
+            timeout=False,
+            return_code=1,
+        )
+
+        result = self.analyzer.analyze_pytest_xml(xml_content, basic_result)
+
+        assert result.tests_failed == 1
+        assert len(result.test_results) == 1
+        details = result.test_results[0].details
+        assert details is not None
+
+        # Ensure absolute temp path is not leaked and replaced with generic name
+        assert "/var/folders" not in details
+        assert "tmppjtsol6j" not in details
+        assert "test_script.py" in details
+
+        # Ensure module prefix was cleaned (we expect <TestMakeAEqualB ...>
+        assert "<TestMakeAEqualB" in details
+
 
 class TestTestExecutor:
     """Test cases for the new TestExecutor class."""
