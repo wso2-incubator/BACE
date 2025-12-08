@@ -7,68 +7,39 @@ from common.coevolution.core.mock import MockPareto, MockTestBlockRebuilder
 from common.coevolution.core.population import CodePopulation, TestPopulation
 from common.coevolution.execution import ExecutionSystem
 from common.coevolution.feedback import CodeFeedbackGenerator
+from common.coevolution.prompt_templates import (
+    _CODE_FORMAT_INSTRUCTION,
+    _CODER_ROLE,
+    _STARTER_CODE_BLOCK,
+    _STARTER_CODE_NOTE,
+)
 from common.llm_client import create_llm_client
 from common.sandbox import create_safe_test_environment
 
-_SYSTEM_PROMPT = """<system_role>
-You are an expert AI programming assistant specializing in code completion and bug fixing. 
-You do not have access to a file system, compilers, or execution environments. 
-Your input will consist of:
-1. A problem description
-2. A buggy code snippet
-3. Test results, error logs, or stack traces.
-
-Your goal is to analyze the test results, identify the root cause of the bug, and provide the corrected code.
-</system_role>
-
-<personality>
-Your default personality is concise, direct, and friendly. 
-- Communicate efficiently; avoid excessively verbose explanations.
-- Prioritize actionable fixes.
-- Act like a senior pair programmer: helpful, precise, and logically sound.
-</personality>
-
-<coding_guidelines>
-When providing fixed code, adhere to these standards:
-- **Fix the Root Cause:** Do not apply surface-level patches if a deeper logic error exists.
-- **Minimal Changes:** Keep changes consistent with the style of the existing code. Avoid reformatting unrelated code.
-- **Complexity:** Avoid unneeded complexity. Simple is better.
-- **Naming:** Do not use one-letter variable names unless standard for the language (e.g., `i` in loops).
-</coding_guidelines>
-
-<analysis_strategy>
-Before generating the code, perform the following internal analysis:
-1. **Analyze Test Results:** Look at the provided failure logs to pinpoint exactly where the code diverges from expected behavior.
-2. **Trace Execution:** Mentally simulate the code execution with the failing input to find the logic gap.
-3. **Formulate Fix:** Determine the smallest specific change required to make the tests pass without breaking other functionality.
-</analysis_strategy>
-
-<output_formatting>
-1. **Brief Explanation:** Start with a concise sentence identifying the bug (e.g., "The off-by-one error in the loop caused the index out of bounds exception.").
-2. **Code Blocks:** Provide the fixed code in Markdown code blocks (e.g., ```python ... ```). 
-3. **Starter code:** ensure your solution adheres to the starter code structure.
-</output_formatting>
-"""
-
-EDIT_CODE = """
-{system_prompt}
-
-<problem>
-{question_content}
-</problem>
-
-<current_solution>
-```python\n{individual}```
-</current_solution>
-
-<feedback>
-{feedback}
-</feedback>
-
-<starter_code>
-```python\n{starter_code}```
-</starter_code>
-"""
+EDIT_CODE = (
+    _CODER_ROLE + "\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n"
+    "<current_solution>\n"
+    "```python\n{individual}\n```\n"
+    "</current_solution>\n\n"
+    "<feedback>\n"
+    "{feedback}\n"
+    "</feedback>\n\n"
+    "<task>\n"
+    "Utilizing the feedback, generate a new code solution that addresses the issues raised.\n"
+    "Your revised solution just have to pass the failing test cases. you do not need to optimize or improve beyond that.\n"
+    "The problem and the code might not align well, so focus on making the code pass the tests rather than fully solving the problem.\n"
+    "Again: only ensure the code passes the failing tests; full problem compliance is not required.\n"
+    "</task>\n\n"
+    + _STARTER_CODE_BLOCK
+    + "\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
+)
 
 
 def main() -> None:
@@ -157,10 +128,10 @@ class Solution:
     exec_system = ExecutionSystem(enable_multiprocessing=True, num_workers=10)
     code_feedback_generator = CodeFeedbackGenerator()
     llm_client = create_llm_client(
-        provider="openai", model="gpt-5-codex", reasoning_effort=None
+        provider="openai", model="gpt-5-mini", reasoning_effort="minimal"
     )
 
-    max_iterations = 2
+    max_iterations = 5
     current_generation = 0
 
     for iteration in range(max_iterations):
@@ -193,7 +164,6 @@ class Solution:
             individual=code_population.individuals[0].snippet,
             feedback=feedback,
             starter_code=problem.starter_code,
-            system_prompt=_SYSTEM_PROMPT,
         )
 
         print(f"LLM Prompt:\n{prompt}\n{'-' * 40}")

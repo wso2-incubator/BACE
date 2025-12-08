@@ -84,7 +84,10 @@ def main(
     logger.info("Creating LLM client and sandbox...")
 
     llm_model = "gpt-5-mini"
-    llm_client = create_llm_client(provider="openai", model=llm_model)
+    llm_provider = "openai"
+    llm_client = create_llm_client(
+        provider=llm_provider, model=llm_model, reasoning_effort="minimal"
+    )
     logger.info(f"Using model: {llm_client.model}")
 
     sandbox = create_safe_test_environment()
@@ -99,7 +102,7 @@ def main(
             problem for problem in problems if problem.question_id in problem_ids
         ]
     else:
-        selected_problems = problems[10:20]  # Default to first 10 problems
+        selected_problems = problems[:10]  # Default to first 10 problems
 
     for problem in selected_problems:
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
@@ -165,7 +168,7 @@ def main(
                     initial_population_size=10,
                     max_population_size=15,
                     elitism_rate=0.5,
-                    offspring_rate=0.5,
+                    offspring_rate=0.75,
                 )
                 # Test population configuration
                 .with_test_population_config(
@@ -175,7 +178,7 @@ def main(
                 # Code operator rates
                 .with_code_operator_rates(
                     crossover_rate=0.2,
-                    mutation_rate=0.1,
+                    mutation_rate=0.2,
                     edit_rate=0.8,
                 )
                 # Test operator rates
