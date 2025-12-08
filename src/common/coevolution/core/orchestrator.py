@@ -200,10 +200,7 @@ class Orchestrator:
             # C. Evolve (Select -> Breed -> Transition) # Only if not last generation
             if gen < self.evo_config.num_generations:
                 code_pop, test_pop = self._produce_next_generation(
-                    code_pop,
-                    test_pop,
-                    interactions.gen_exec_results,
-                    interactions.gen_obs_matrix,
+                    code_pop, test_pop, pub_pop, interactions
                 )
 
             # D. Log
@@ -340,8 +337,8 @@ class Orchestrator:
         self,
         code_pop: CodePopulation,
         test_pop: TestPopulation,
-        gen_exec_results: ExecutionResults,
-        gen_obs_matrix: np.ndarray,
+        pub_pop: TestPopulation,
+        interactions: InteractionData,
     ) -> tuple[CodePopulation, TestPopulation]:
         """
         Handles the full evolution cycle: Selection, Breeding, and Transition.
@@ -350,7 +347,7 @@ class Orchestrator:
         # 1. Select Elites
         logger.debug("Step 3: Selecting elites...")
         code_elites, test_elites = self._select_elites(
-            code_pop, test_pop, gen_obs_matrix
+            code_pop, test_pop, interactions.gen_obs_matrix
         )
         self._notify_elites(code_elites, code_pop.generation)
         self._notify_elites(test_elites, test_pop.generation)
@@ -358,12 +355,20 @@ class Orchestrator:
         # 2. Breed Code
         logger.debug("Step 4: Generating offspring...")
         code_offsprings = self._breed_code(
-            code_pop, test_pop, gen_exec_results, gen_obs_matrix, len(code_elites)
+            code_pop,
+            test_pop,
+            interactions.gen_exec_results,
+            interactions.gen_obs_matrix,
+            len(code_elites),
         )
 
         # 3. Breed Tests
         test_offsprings = self._breed_tests(
-            test_pop, code_pop, gen_exec_results, gen_obs_matrix, len(test_elites)
+            test_pop,
+            code_pop,
+            interactions.gen_exec_results,
+            interactions.gen_obs_matrix,
+            len(test_elites),
         )
 
         # 4. Transition Code Population
