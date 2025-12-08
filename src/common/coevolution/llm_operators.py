@@ -34,8 +34,8 @@ from .core.interfaces import ICodeOperator, ITestOperator, Problem
 from .prompt_templates import (
     CROSSOVER_CODE,
     CROSSOVER_TEST,
-    EDIT_CODE_AGENTIC,
-    EDIT_TEST_AGENTIC,
+    EDIT_CODE_FIX_FAIL_ONLY,
+    EDIT_TEST,
     INITIAL_CODE,
     INITIAL_TEST_AGENT_CODER_STYLE,
     MUTATE_CODE,
@@ -316,7 +316,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
             New edited code snippet
         """
         logger.debug("Performing edit on individual code snippet based on feedback")
-        prompt = EDIT_CODE_AGENTIC.format(
+        prompt = EDIT_CODE_FIX_FAIL_ONLY.format(
             question_content=self.problem.question_content,
             starter_code=self.problem.starter_code,
             individual=individual,
@@ -508,7 +508,7 @@ class TestLLMOperator(BaseLLMOperator, ITestOperator):
         Raises:
             ValueError: If after retries, still can't generate valid test snippet
         """
-        prompt = EDIT_TEST_AGENTIC.format(
+        prompt = EDIT_TEST.format(
             question_content=self.problem.question_content,
             individual=individual,
             feedback=feedback,

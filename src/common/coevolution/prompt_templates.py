@@ -13,6 +13,7 @@ _TESTER_ROLE = "<system_role>You are an expert software tester.</system_role>"
 _TEST_METHOD_FORMAT_INSTRUCTION = (
     "<output_formatting>\n"
     "Return only the code for a single unittest test method in a python code block.\n"
+    "Test method name should be unique and descriptive of the test case.\n"
     "</output_formatting>"
 )
 
@@ -39,10 +40,12 @@ _CODE_FORMAT_INSTRUCTION = (
 INITIAL_CODE = (
     _CODER_ROLE + "\n\n"
     "<task>\n"
-    "Write {population_size} distinct solutions to solve the problem described below.\n"
-    "Each solution should implement a different algorithmic approach or technique.\n"
-    "Each code should strictly follow the starter code structure provided in <starter_code>\n"
-    "Return each solution in a separate Python code block.\n"
+    "- Write {population_size} distinct solutions to solve the problem described below.\n"
+    "- Each solution should implement a different algorithmic approach or technique.\n"
+    "- Each code should strictly follow the starter code structure provided in <starter_code>\n"
+    "- Maintain good code qualities and adhere to coding best practices.\n"
+    "- Write a concise docstring for each solution with a clear explanation of its approach and reasoning.\n"
+    "- Return each solution in a separate Python code block.\n"
     "</task>\n\n"
     "<problem>\n"
     "{question_content}\n"
@@ -52,7 +55,7 @@ INITIAL_CODE = (
 CROSSOVER_CODE = (
     _CODER_ROLE + "\n\n"
     "<task>\n"
-    "Create a new solution that intelligently combines the best aspects of two parent solutions.\n"
+    "Create a new solution that intelligently combines the best aspects of two candidate solutions provided in <candidate_solution_1> and <candidate_solution_2>.\n"
     "</task>\n\n"
     "<problem>\n"
     "{question_content}\n"
@@ -75,16 +78,19 @@ MUTATE_CODE = (
     _CODER_ROLE + "\n\n"
     "<task>\n"
     "Generate a modified version of the provided code solution.\n"
-    "1. Maintain the same functionality.\n"
-    "2. Explore a different algorithmic approach or implementation style.\n"
-    "3. Improve efficiency or clarity where possible.\n"
+    "1. First verify the correctness of the provided solution.\n"
+    "-- If any issues are found, fix them.\n"
+    "-- If no issues are found: "
+    "\ti. Maintain the same functionality.\n"
+    "\tii. Explore a different algorithmic approach or implementation style.\n"
+    "\tiii. Improve efficiency or clarity where possible.\n"
     "</task>\n\n"
     "<problem>\n"
     "{question_content}\n"
     "</problem>\n\n"
-    "<individual_solution>\n"
+    "<candidate_solution>\n"
     "```python\n{individual}\n```\n"
-    "</individual_solution>\n\n"
+    "</candidate_solution>\n\n"
     + _STARTER_CODE_BLOCK
     + "\n"
     + _STARTER_CODE_NOTE
@@ -117,17 +123,51 @@ EDIT_CODE = (
     + "\n"
 )
 
+EDIT_CODE_FIX_FAIL_ONLY = (
+    _CODER_ROLE + "\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n"
+    "<current_solution>\n"
+    "```python\n{individual}\n```\n"
+    "</current_solution>\n\n"
+    "<feedback>\n"
+    "{feedback}\n"
+    "</feedback>\n\n"
+    "<task>\n"
+    "Utilizing the feedback, generate a new code solution that addresses the issues raised.\n"
+    "Your revised solution just have to pass the failing test cases. you do not need to optimize or improve beyond that.\n"
+    "The problem and the code might not align well, so focus on making the code pass the tests rather than fully solving the problem.\n"
+    "Again: only ensure the code passes the failing tests; full problem compliance is not required.\n"
+    "</task>\n\n"
+    + _STARTER_CODE_BLOCK
+    + "\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
+)
+
 
 EDIT_CODE_AGENTIC = (
     """<system_role>
 You are an expert AI programming assistant specializing in code completion and bug fixing. 
-You do not have access to a file system, compilers, or execution environments. 
 Your input will consist of:
-1. A problem description
-2. A code snippet
-3. Test results, error logs, or stack traces.
+1. A problem description in <problem> tag
+2. A code snippet in <current_solution> tag
+3. Candidate test cases and their results in <feedback> tag showing how various test cases passed or failed against this code.
+4. For each test case we provide code, test results, error logs, or stack traces.
 
-Your goal is to analyze the test results, identify the root cause of the bug, and provide the corrected code.
+Your goal is to analyze the test failures and identify the root cause of the error. 
+Re-evaluate the code against the problem statement to find logic gaps or missed edge cases.
+
+Critically, you must verify the validity of the test cases against the problem description. 
+The provided test cases may contain errors or incorrect expected outputs. 
+Treat the <problem> description as the absolute source of truth.
+
+If a test case contradicts the problem description, do not modify the code to satisfy the incorrect test; instead, ensure the code correctly implements the logic defined in the problem description. 
+Once the issue is isolated, fix the <current_solution> with minimal changes.
+
 </system_role>
 
 <personality>
@@ -141,22 +181,31 @@ Your default personality is concise, direct, and friendly.
 When providing fixed code, adhere to these standards:
 - **Fix the Root Cause:** Do not apply surface-level patches if a deeper logic error exists.
 - **Minimal Changes:** Keep changes consistent with the style of the existing code. Avoid reformatting unrelated code.
-- **Complexity:** Avoid unneeded complexity. Simple is better.
-- **Naming:** Do not use one-letter variable names unless standard for the language (e.g., `i` in loops).
 </coding_guidelines>
 
 <analysis_strategy>
-Before generating the code, perform the following internal analysis:
-1. **Analyze Test Results:** Look at the provided failure logs to pinpoint exactly where the code diverges from expected behavior.
-    -- If no issues are found, consider minor improvements for efficiency or clarity.
-2. **Trace Execution:** Mentally simulate the code execution with the failing input to find the logic gap.
-3. **Formulate Fix:** Determine the smallest specific change required to make the tests pass without breaking other functionality.
+1. **Analyze Test Results:** Look at the failure logs to pinpoint where behavior diverges from expectations.
+2. **Verify Tests:** Check if the failing test aligns with the <problem> description. If the test is invalid, note this in your explanation.
+3. **Formulate Fix:** Determine the smallest specific change required.
 </analysis_strategy>
 
 <output_formatting>
-1. **Brief Explanation:** Start with a concise sentence identifying the bug (e.g., "The off-by-one error in the loop caused the index out of bounds exception.").
-2. **Code Blocks:** Provide the fixed code in Markdown code blocks (e.g., ```python ... ```). 
-3. **Starter code:** ensure your solution adheres to the starter code structure.
+You must structure your response in exactly the following order:
+
+1. **## Root cause identification**
+   - Explicitly state the root cause found during the trace (e.g., "The loop terminates one step too early because of `range(n-1)`").
+   - State how the root cause and the ground truth from the problem description in <problem> relate?
+   - State how the root cause explain the test failures observed in <feedback>?
+   - If a test case was invalid/incorrect based on the problem description, explicitly state: "Test case [Input] was ignored because it contradicts the problem statement."
+
+2. **## Explanation of Fix**
+   - A concise summary of how the new code resolves the issue identified above.
+
+3. **## Corrected Code**
+   - Provide the **ENTIRE** fixed script in a single Markdown code block (```python ... ```).
+   - Ensure the solution adheres to the `<starter_code>` function signature.
+   - Include a concise docstring explaining the approach.
+
 </output_formatting>"""
     + "\n\n"
     """
@@ -238,8 +287,10 @@ The solution code is imported in the format:
     - Pay special attention to edge cases as they often reveal hidden bugs.
     - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
     - The format of test cases should be in Python unittest framework in a python code block.
+    - Step by step verify that each expected output is accurate and reflects the function's intended behavior.
     - Do not use the examples given in the problem.
     - Do not write any other top-level functions or classes.
+    - The solution code will be appended to the test cases for execution, do not include it in your response.
     - You should write {population_size} distinct test cases.
 
 </instructions>
@@ -262,6 +313,7 @@ CROSSOVER_TEST = (
     "</test_case_2>\n\n"
     "<task>\n"
     "Create a new test case that covers the gaps in the existing tests.\n"
+    "Step by step verify that the expected output is accurate and reflects the function's intended behavior.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
@@ -271,12 +323,14 @@ MUTATE_TEST = (
     "{question_content}\n"
     "</problem>\n\n"
     "<base_test>\n"
-    "The following test case was identified to be a good test:\n"
+    "The following is a test case candidate:\n"
     "`python\n{individual}\n`\n"
     "</base_test>\n\n"
     "<task>\n"
-    "Generate a new test case that explores different input scenarios or edge cases.\n"
-    "Ensure it remains a valid unittest test case.\n"
+    "1. Verify the correctness of the provided test case.\n"
+    "2. If any issues are found, fix them.\n"
+    "3. Else if no issues are found, generate a new test case that explores different input scenarios or edge cases.\n"
+    "4. Step-by-step verify that the expected output is accurate and reflects the function's intended behavior.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
@@ -303,11 +357,14 @@ EDIT_TEST_AGENTIC = (
 You are an expert AI QA engineer and software tester.
 You do not have access to a file system or execution environments.
 Your input will consist of:
-1. A problem description
-2. A current test case (unit test)
-3. Feedback logs showing how various solution candidates (some correct, some incorrect) performed against this test.
+1. A problem description in <problem> tag
+2. A current test case (unit test) in <current_test> tag
+3. Feedback logs in <feedback_from_solutions> tag showing how various solution candidates (some correct, some incorrect) performed against this test.
 
 Your goal is to analyze the feedback to identify weaknesses or errors in the test case and provide a refined, robust version.
+Critically, you must verify the validity of the solution candidates against the problem description.
+Treat the <problem> description as the absolute source of truth.
+If a solution candidate contradicts the problem description, do not modify the test to satisfy the incorrect solution; instead, ensure the test correctly validates the logic defined in the problem description.
 </system_role>
 
 <personality>
@@ -340,7 +397,8 @@ Before generating the test code, perform the following internal analysis:
 <output_formatting>
 1. **Brief Explanation:** Start with a concise sentence explaining why the test is being changed (e.g., "Added an assertion for empty list input to catch the breakdown in Solution B" or "Fixed incorrect expected value for input 'xyz'.").
 2. **Code Blocks:** Provide the fixed test method in a Python code block (e.g., ```python ... ```). This should be a single unittest test method.
-3. **Imports:** Ensure necessary imports (like `unittest`) are included.
+3. **Test Name**: The test method name should be changed to reflect the specific scenario being tested.
+4. **Helper Functions**: Use helper functions only if absolutely necessary to keep the test clear and focused. Helper functions if used should be within the test method.
 </output_formatting>"""
     + "\n\n"
     """
