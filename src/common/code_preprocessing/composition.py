@@ -180,6 +180,7 @@ def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
         final_code_parts.append("    unittest.main(verbosity=2)")
 
     test_script: str = "\n".join(final_code_parts)
+    logger.trace(f"Composed LCB test script:\n{test_script}")
     return test_script
 
 
@@ -253,7 +254,11 @@ def rebuild_unittest_with_methods(test_code: str, new_test_methods: List[str]) -
                     new_method_nodes.append(node)
                     break
         except SyntaxError as e:
-            logger.warning(f"Skipping invalid test method code: {e}")
+            logger.error(f"SyntaxError: Skipping invalid test method code: {e}")
+            logger.error(
+                "This will cause issues in test execution and ordering the observation matrix"
+            )
+            logger.debug(f"Invalid test method code: {method_code}")
             continue
 
     # Rebuild the class body with non-test members first, then new test methods
