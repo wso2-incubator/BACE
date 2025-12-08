@@ -239,90 +239,74 @@ def extract_test_methods_code(test_code: str) -> List[str]:
 
 def extract_first_test_method_code(test_code: str) -> str:
     """
-    Extract the actual code for the first test method from a unittest test class
-    or just a code string with test methods.
+    Extract the source code for the first test method found in the provided code.
+
+    This function handles methods inside classes or top-level functions.
+    It preserves comments and docstrings.
 
     Args:
-        test_code: String containing a unittest test class definition
+        test_code: String containing python code (a class or functions).
 
     Returns:
-        Code string for the first test method, dedented.
+        The source code of the first found test method, dedented.
 
     Raises:
-        CodeParsingError: If test code has syntax errors
-        CodeTransformationError: If no test method is found
+        CodeParsingError: If the provided code has syntax errors.
+        CodeTransformationError: If no valid test method is found.
     """
     try:
         tree = ast.parse(test_code)
     except SyntaxError as e:
-        logger.debug(f"Test code:\n{test_code}")
-        raise CodeParsingError(f"Failed to parse test code: {e}") from e
+        raise CodeParsingError(f"Failed to parse test code: {e}")
 
-    target_node = None
+    lines = test_code.splitlines(keepends=True)
 
-    # 1. Priority: Check inside unittest classes
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and is_unittest_class(node):
-            for item in node.body:
-                if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
-                    target_node = item
-                    break  # Found method in class
-            if target_node:
-                break  # Found class and method, stop searching classes
+    def is_unittest_class(class_node: ast.ClassDef) -> bool:
+        """Helper to check if a class inherits from unittest.TestCase."""
+        for base in class_node.bases:
+            # Check for 'unittest.TestCase'
+            if isinstance(base, ast.Attribute) and base.attr == "TestCase":
+                if isinstance(base.value, ast.Name) and base.value.id == "unittest":
+                    return True
+            # Check for 'TestCase' (if imported directly)
+            if isinstance(base, ast.Name) and base.id == "TestCase":
+                return True
+        return False
 
-    # 2. Fallback: Check for top-level functions (if nothing found in classes)
-    if not target_node:
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-                target_node = node
-                break
+    def get_node_source(node: ast.FunctionDef) -> str:
+        """Extracts and dedents source code for a function node."""
+        # Determine start line (account for decorators)
+        if node.decorator_list:
+            start_lineno = node.decorator_list[0].lineno
+        else:
+            start_lineno = node.lineno
 
-    if not target_node:
-        logger.debug(f"Test code:\n{test_code}")
-        logger.error("No test method found in the provided code")
-        raise CodeTransformationError("No test method found in the provided code")
+        end_lineno = node.end_lineno
 
-    # Prefer extracting the original source segment so comments and
-    # docstrings are preserved. Fall back to ast.unparse when the
-    # source segment isn't available.
-    try:
-        method_code = ast.get_source_segment(test_code, target_node)
-    except Exception:
-        logger.warning(
-            "Failed to get source segment for method; falling back to ast.unparse"
-        )
-        method_code = None
+        # AST is 1-indexed, list slicing is 0-indexed
+        # We strip empty lines from the extracted block for cleaner output
+        method_lines = lines[start_lineno - 1 : end_lineno]
+        return textwrap.dedent("".join(method_lines))
 
-    if not method_code:
-        # Fallback to ast.unparse when source segment unavailable
-        logger.warning("Using ast.unparse for method code; comments may be lost")
-        method_code = ast.unparse(target_node)
+    # Iterate through top-level nodes to maintain file order precedence
+    for node in ast.iter_child_nodes(tree):
+        # Case 1: It is a Class
+        if isinstance(node, ast.ClassDef):
+            # Constraint: Only look inside classes if they are unittest classes
+            if is_unittest_class(node):
+                for sub_node in node.body:
+                    if isinstance(
+                        sub_node, ast.FunctionDef
+                    ) and sub_node.name.startswith("test_"):
+                        return get_node_source(sub_node)
 
-    # Remove indentation (critical if the method came from inside a class)
-    dedented = textwrap.dedent(method_code)
+        # Case 2: It is a Top-Level Function (pytest style)
+        elif isinstance(node, ast.FunctionDef):
+            if node.name.startswith("test_"):
+                return get_node_source(node)
 
-    # When extracting a method that originally lived inside a class, the
-    # `def` line may have been returned without leading indentation while
-    # the body still carries the full (class + method) indentation. In
-    # that case body lines will start with 8 spaces (or more). We want the
-    # extracted method to have a single level of 4-space indentation for
-    # the body. Only remove the extra 4 spaces when present (preserve
-    # top-level function formatting where body lines start with 4 spaces).
-    lines = dedented.splitlines()
-    if len(lines) > 1:
-        normalized_body = []
-        for line in lines[1:]:
-            if line.startswith("        "):
-                # Reduce 8 -> 4 spaces
-                normalized_body.append(line[4:])
-            else:
-                normalized_body.append(line)
-
-        method_code = "\n".join([lines[0]] + normalized_body)
-    else:
-        method_code = dedented
-
-    return method_code
+    # If we finish the loop without returning, no test method was found
+    raise CodeTransformationError("No test method found")
 
 
 def extract_function_with_helpers(code_string: str, target_function_name: str) -> str:
