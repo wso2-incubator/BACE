@@ -263,6 +263,29 @@ class TestExtractFirstTestMethodCode:
         assert "def test_real" in result
         assert "def test_fake" not in result
 
+    def test_extracts_large_test_method(self) -> None:
+        """Ensure that a large, real-world-looking test method is extracted intact."""
+        code = """
+def test_all_zero_to_all_one_optimal_ascending_costs(self):
+    for c in C:  # ascending order
+        current_sum += c  # that flipped bit now contributes
+        total += current_sum
+
+    expected = str(total)
+    self.assertEqual(Solution().sol(input_str), expected)
+"""
+
+        # ACT
+        # Assuming extract_first_test_method_code handles the parsing correctly
+        # (Note: ast.parse usually requires dedented input if not in a file context,
+        # so we dedent input here to ensure parsing succeeds)
+        result = extract_first_test_method_code(textwrap.dedent(code))
+
+        # ASSERT
+        # We strip both sides to ignore leading/trailing newlines
+        # We dedent 'code' to match the flat structure returned by the function
+        assert textwrap.dedent(code).strip() == result.strip()
+
 
 class TestExtractFunctionWithHelpers:
     """Test extract_function_with_helpers function."""
