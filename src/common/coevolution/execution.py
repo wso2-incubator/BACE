@@ -116,6 +116,41 @@ class ExecutionSystem:
 
         return min(cpu_count, num_codes)
 
+    def _validate_number_of_execution_results(
+        self,
+        execution_results: ExecutionResults,
+        num_codes: int,
+        num_tests: int,
+    ) -> None:
+        """Validate the number of execution results for consistency."""
+
+        if len(execution_results.keys()) != num_codes:
+            logger.error(
+                f"Expected execution results for {num_codes} codes, "
+                f"got {len(execution_results.keys())}"
+            )
+            raise ValueError("Mismatch in number of execution results")
+
+        for code_idx, result in execution_results.items():
+            if not isinstance(result, TestExecutionResult):
+                logger.error(
+                    f"Execution result for code {code_idx} is not a TestExecutionResult"
+                )
+                raise ValueError(f"Invalid execution result type for code {code_idx}")
+
+            if len(result.test_results) == 0:
+                logger.warning(
+                    f"Code {code_idx} has zero test results\n. Likely timeout or execution failure."
+                )
+            elif len(result.test_results) != num_tests:
+                logger.error(
+                    f"Code {code_idx}: Expected {num_tests} test results, "
+                    f"got {len(result.test_results)}"
+                )
+                raise ValueError(
+                    f"Mismatch in number of test results for code {code_idx}"
+                )
+
     def execute_tests(
         self,
         code_population: CodePopulation,
@@ -192,6 +227,10 @@ class ExecutionSystem:
 
         if failed > 0:
             logger.warning(f"Failed execution indices: {failed_indices}")
+
+        self._validate_number_of_execution_results(
+            execution_results_dict, num_codes, num_tests
+        )
 
         # Return dict directly to preserve code_idx mapping
         # This ensures that build_observation_matrix can correctly map results to code indices
