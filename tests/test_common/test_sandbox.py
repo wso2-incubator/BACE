@@ -977,6 +977,51 @@ if __name__ == '__main__':
         assert result.total_tests == 0
         assert "no tests" in result.summary.lower() or result.script_error is False
 
+    def test_duplicate_test_methods(self) -> None:
+        """
+        Test behavior when a script defines two test methods with the same name.
+        Python behavior: The second definition overwrites the first.
+        Expectation: The test suite runs the second definition and reports its status.
+        """
+        script = """
+import unittest
+
+class TestDuplicate(unittest.TestCase):
+    def test_duplicate_name(self):
+        '''First definition - should be overwritten'''
+        self.assertTrue(True)
+        
+    def test_duplicate_name(self):
+        '''Second definition - should execute'''
+        self.fail("The second definition runs and overwrites the first")
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+
+        result = self.sandbox.execute_test_script(script)
+
+        # 1. Verification: The script execution itself was valid (no syntax error)
+        assert result.script_error is False
+
+        # 2. Verification: Python overwrites the first method, so only 1 test actually exists at runtime.
+        # Pytest XML will report 1 test total.
+        assert result.total_tests == 1
+
+        # 3. Verification: The SECOND definition is the one that runs.
+        # Since the second definition calls self.fail(), the test should fail.
+        assert result.tests_failed == 1
+        assert result.tests_passed == 0
+
+        # 4. Verification: The result details should confirm it was the duplicate
+        assert len(result.test_results) >= 1
+        # We check the first available result for the specific name
+        test_result = next(
+            t for t in result.test_results if t.name == "test_duplicate_name"
+        )
+        assert test_result.status == "failed"
+        assert "The second definition runs" in (test_result.details or "")
+
 
 class TestPerTestTimeout:
     """Test cases for per-test timeout functionality."""
