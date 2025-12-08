@@ -349,8 +349,13 @@ class TestFeedbackGenerator(IFeedbackGenerator[CodeIndividual]):
 
                 # We need to write the reason for failure using the test results
                 exec_result = execution_results[code_idx]
-                test_result = exec_result.test_results[individual_idx]
-                error_info = test_result.details or "No details available"
+                try:
+                    test_result = exec_result.test_results[individual_idx]
+                except IndexError:
+                    test_result = None
+                error_info = (
+                    test_result.details if test_result else "No details available"
+                )
                 feedback_builder.append(f"Reason for failure: {error_info}")
                 feedback_builder.append("")
 
