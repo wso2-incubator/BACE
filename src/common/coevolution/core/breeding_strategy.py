@@ -3,6 +3,10 @@ import numpy as np
 from loguru import logger
 
 from .interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_EDIT,
+    OPERATION_MUTATION,
+    OPERATION_REPRODUCTION,
     BaseIndividual,
     BasePopulation,
     ExecutionResults,
@@ -11,7 +15,7 @@ from .interfaces import (
     IIndividualFactory,
     IProbabilityAssigner,
     ISelectionStrategy,
-    Operations,
+    Operation,
     OperatorRatesConfig,
 )
 
@@ -68,7 +72,11 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         parent1 = population[p1_idx]
         parent2 = population[p2_idx]
 
-        new_snippet = self.operator.crossover(parent1.snippet, parent2.snippet)
+        new_snippet = self.operator.apply(
+            operation=OPERATION_CROSSOVER,
+            parent1=parent1.snippet,
+            parent2=parent2.snippet,
+        )
 
         pop_type = self._get_population_type(population)
         logger.trace(
@@ -104,7 +112,11 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
             individual_idx=parent_idx,
         )
 
-        new_snippet = self.operator.edit(parent.snippet, feedback)
+        new_snippet = self.operator.apply(
+            operation=OPERATION_EDIT,
+            parent1=parent.snippet,
+            feedback=feedback,
+        )
 
         pop_type = self._get_population_type(population)
         logger.trace(
@@ -125,20 +137,23 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
         # Return the original snippet, not a copy
         return parent.snippet, [parent]
 
-    def _apply_mutation(self, snippet: str, prev_operation: Operations) -> str:
+    def _apply_mutation(self, snippet: str, prev_operation: Operation) -> str:
         """
         Applies mutation to a snippet based on the mutation rate.
         """
 
         logger.trace("Worker applying mutation")
-        mutated_snippet = self.operator.mutate(snippet)
+        mutated_snippet = self.operator.apply(
+            operation=OPERATION_MUTATION,
+            parent1=snippet,
+        )
         logger.trace(f"Offspring: mutated after {prev_operation}")
         return mutated_snippet
 
     def _notify_parents(
         self,
         parents: list[T_self],
-        operation: Operations,
+        operation: Operation,
         offspring_id: str,
         generation: int,
     ) -> None:
@@ -187,10 +202,10 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
                        or feedback generator to be handled by the parallel executor.
         """
         rand = np.random.random()
-        base_operation: Operations = Operations.REPRODUCTION  # Default
+        base_operation: Operation = OPERATION_REPRODUCTION  # Default
         new_snippet: str = ""
         offspring: T_self
-        final_operation: Operations
+        final_operation: Operation
         final_prob: float
         parents: list[T_self]
         parent_ids: list[str]
@@ -200,11 +215,11 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
         # Step 1: Determine base genetic operation (crossover/edit/reproduction)
         if rand < operation_rates.crossover_rate:
-            base_operation = Operations.CROSSOVER
+            base_operation = OPERATION_CROSSOVER
             new_snippet, parents = self._perform_crossover(population)
 
         elif rand < operation_rates.crossover_rate + operation_rates.edit_rate:
-            base_operation = Operations.EDIT
+            base_operation = OPERATION_EDIT
             new_snippet, parents = self._perform_edit(
                 population,
                 other_population,
@@ -214,7 +229,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
             )
 
         else:
-            base_operation = Operations.REPRODUCTION
+            base_operation = OPERATION_REPRODUCTION
             new_snippet, parents = self._perform_reproduction(population)
 
         parent_ids = [parent.id for parent in parents]
@@ -225,7 +240,7 @@ class BreedingStrategy[T_self: BaseIndividual, T_other: BaseIndividual]:
 
         # Step 3: Determine final operation and snippet
         if will_mutate:
-            final_operation = Operations.MUTATION
+            final_operation = OPERATION_MUTATION
             final_snippet = self._apply_mutation(new_snippet, base_operation)
         else:
             final_operation = base_operation

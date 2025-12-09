@@ -10,7 +10,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import Operations
+from common.coevolution.core.interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_EDIT,
+    OPERATION_INITIAL,
+    OPERATION_MUTATION,
+    OPERATION_REPRODUCTION,
+)
 
 
 class TestBaseIndividualSharedBehavior:
@@ -21,14 +27,14 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet="def foo(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
 
         assert individual.snippet == "def foo(): pass"
         assert individual.probability == 0.5
-        assert individual.creation_op == Operations.INITIAL
+        assert individual.creation_op == OPERATION_INITIAL
         assert individual.generation_born == 0
         assert individual.parent_ids == []
         assert len(individual.lifecycle_log) > 0  # Should have birth log entry
@@ -38,14 +44,14 @@ class TestBaseIndividualSharedBehavior:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.7,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=5,
             parent_ids=["T1"],
         )
 
         assert individual.snippet == "def test_foo(): assert True"
         assert individual.probability == 0.7
-        assert individual.creation_op == Operations.MUTATION
+        assert individual.creation_op == OPERATION_MUTATION
         assert individual.generation_born == 5
         assert individual.parent_ids == ["T1"]
         assert len(individual.lifecycle_log) > 0
@@ -55,7 +61,7 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet="def bar(): return 42",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -69,7 +75,7 @@ class TestBaseIndividualSharedBehavior:
         assert individual.lifecycle_log[0].details["creation_op"] == "initial"
 
         # Test notify_parent_of logging
-        individual.notify_parent_of("C1", Operations.CROSSOVER, generation=1)
+        individual.notify_parent_of("C1", OPERATION_CROSSOVER, generation=1)
         individual.notify_selected_as_elite(generation=2)
 
         assert len(individual.lifecycle_log) == initial_log_length + 2
@@ -82,7 +88,7 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -102,7 +108,7 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -121,7 +127,7 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=10,
             parent_ids=[],
         )
@@ -139,7 +145,7 @@ class TestBaseIndividualSharedBehavior:
         individual = CodeIndividual(
             snippet=snippet_text,
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -148,12 +154,12 @@ class TestBaseIndividualSharedBehavior:
 
     def test_creation_op_property(self) -> None:
         """Test creation_op property with different operations."""
-        operations: list[Operations] = [
-            Operations.INITIAL,
-            Operations.MUTATION,
-            Operations.CROSSOVER,
-            Operations.EDIT,
-            Operations.REPRODUCTION,
+        operations: list[str] = [
+            OPERATION_INITIAL,
+            OPERATION_MUTATION,
+            OPERATION_CROSSOVER,
+            OPERATION_EDIT,
+            OPERATION_REPRODUCTION,
         ]
 
         for op in operations:
@@ -172,7 +178,7 @@ class TestBaseIndividualSharedBehavior:
         individual1 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -182,7 +188,7 @@ class TestBaseIndividualSharedBehavior:
         individual2 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=1,
             parent_ids=["C0"],
         )
@@ -192,7 +198,7 @@ class TestBaseIndividualSharedBehavior:
         individual3 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.CROSSOVER,
+            creation_op=OPERATION_CROSSOVER,
             generation_born=1,
             parent_ids=["C0", "C1"],
         )
@@ -207,7 +213,7 @@ class TestCodeIndividual:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -221,7 +227,7 @@ class TestCodeIndividual:
             CodeIndividual(
                 snippet=f"def test_{i}(): pass",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -236,7 +242,7 @@ class TestCodeIndividual:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -247,7 +253,7 @@ class TestCodeIndividual:
         individual.probability = 0.8
 
         # Trigger lifecycle events
-        individual.notify_parent_of("C1", Operations.CROSSOVER, generation=1)
+        individual.notify_parent_of("C1", OPERATION_CROSSOVER, generation=1)
 
         # ID should remain the same
         assert individual.id == original_id
@@ -257,7 +263,7 @@ class TestCodeIndividual:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.75,
-            creation_op=Operations.CROSSOVER,
+            creation_op=OPERATION_CROSSOVER,
             generation_born=3,
             parent_ids=["C1", "C2"],
         )
@@ -272,11 +278,11 @@ class TestCodeIndividual:
 
     def test_repr_with_different_operations(self) -> None:
         """Test __repr__ correctly shows different operations."""
-        operations: list[Operations] = [
-            Operations.INITIAL,
-            Operations.MUTATION,
-            Operations.EDIT,
-            Operations.REPRODUCTION,
+        operations: list[str] = [
+            OPERATION_INITIAL,
+            OPERATION_MUTATION,
+            OPERATION_EDIT,
+            OPERATION_REPRODUCTION,
         ]
 
         for op in operations:
@@ -284,11 +290,11 @@ class TestCodeIndividual:
                 snippet="def test(): pass",
                 probability=0.5,
                 creation_op=op,
-                generation_born=0,
+                generation_born=1,
                 parent_ids=[],
             )
             repr_str = repr(individual)
-            assert f"op={op.value}" in repr_str
+            assert f"op={op}" in repr_str
 
     @patch("common.coevolution.core.individual.logger")
     def test_creation_logs_debug_message(self, mock_logger: MagicMock) -> None:
@@ -296,7 +302,7 @@ class TestCodeIndividual:
         _ = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -316,7 +322,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -330,7 +336,7 @@ class TestTestIndividual:
             TestIndividual(
                 snippet=f"def test_{i}(): assert True",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -346,7 +352,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -362,7 +368,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -381,7 +387,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -404,7 +410,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -423,7 +429,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.6,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -442,7 +448,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.6,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=2,
             parent_ids=["T0"],
         )
@@ -464,7 +470,7 @@ class TestTestIndividual:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -481,7 +487,7 @@ class TestTestIndividual:
         _ = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -500,7 +506,7 @@ class TestIndividualEquality:
         ind1 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -509,7 +515,7 @@ class TestIndividualEquality:
         ind2 = CodeIndividual(
             snippet="def different(): pass",
             probability=0.8,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=5,
             parent_ids=["C0"],
         )
@@ -522,7 +528,7 @@ class TestIndividualEquality:
         ind1 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -530,7 +536,7 @@ class TestIndividualEquality:
         ind2 = CodeIndividual(
             snippet="def test(): pass",  # Same snippet
             probability=0.5,  # Same probability
-            creation_op=Operations.INITIAL,  # Same operation
+            creation_op=OPERATION_INITIAL,  # Same operation
             generation_born=0,  # Same generation
             parent_ids=[],  # Same parents
         )
@@ -543,7 +549,7 @@ class TestIndividualEquality:
         ind1 = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -551,7 +557,7 @@ class TestIndividualEquality:
         ind2 = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -563,7 +569,7 @@ class TestIndividualEquality:
         code_ind = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -571,7 +577,7 @@ class TestIndividualEquality:
         test_ind = TestIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -583,7 +589,7 @@ class TestIndividualEquality:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -602,7 +608,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -616,7 +622,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet=long_snippet,
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -629,7 +635,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.0,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -641,7 +647,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=1.0,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -653,7 +659,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=999999,
             parent_ids=["C0"],
         )
@@ -666,7 +672,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.CROSSOVER,
+            creation_op=OPERATION_CROSSOVER,
             generation_born=1,
             parent_ids=many_parents,
         )
@@ -680,7 +686,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet=snippet,
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -709,7 +715,7 @@ class TestIndividualEdgeCases:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -737,7 +743,7 @@ class TestIndividualEdgeCases:
             _ = CodeIndividual(
                 snippet="def test(): pass",
                 probability=probability,  # Invalid probability should raise
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -752,7 +758,7 @@ class TestIndividualCounters:
             CodeIndividual(
                 snippet=f"def test_{i}(): pass",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -773,7 +779,7 @@ class TestIndividualCounters:
             TestIndividual(
                 snippet=f"def test_{i}(): assert True",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -792,7 +798,7 @@ class TestIndividualCounters:
         code_ind1 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -800,7 +806,7 @@ class TestIndividualCounters:
         test_ind1 = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -808,7 +814,7 @@ class TestIndividualCounters:
         code_ind2 = CodeIndividual(
             snippet="def test2(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -816,7 +822,7 @@ class TestIndividualCounters:
         test_ind2 = TestIndividual(
             snippet="def test_bar(): assert True",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -843,7 +849,7 @@ class TestLifecycleEvents:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -862,7 +868,7 @@ class TestLifecycleEvents:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.7,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=2,
             parent_ids=["T0"],
         )
@@ -881,15 +887,15 @@ class TestLifecycleEvents:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
 
         # Lifecycle events
-        individual.notify_parent_of("C1", Operations.CROSSOVER, generation=1)
+        individual.notify_parent_of("C1", OPERATION_CROSSOVER, generation=1)
         individual.notify_selected_as_elite(generation=2)
-        individual.notify_parent_of("C2", Operations.MUTATION, generation=3)
+        individual.notify_parent_of("C2", OPERATION_MUTATION, generation=3)
         individual.notify_died(generation=4)
 
         # Verify all events are logged
@@ -912,14 +918,14 @@ class TestLifecycleEvents:
         individual = TestIndividual(
             snippet="def test_bar(): assert True",
             probability=0.6,
-            creation_op=Operations.EDIT,
+            creation_op=OPERATION_EDIT,
             generation_born=1,
             parent_ids=["T0"],
         )
 
         # Lifecycle events
         individual.notify_selected_as_elite(generation=2)
-        individual.notify_parent_of("T1", Operations.REPRODUCTION, generation=3)
+        individual.notify_parent_of("T1", OPERATION_REPRODUCTION, generation=3)
         individual.notify_selected_as_elite(generation=4)
         individual.notify_survived(generation=10)
 
@@ -943,7 +949,7 @@ class TestLifecycleEvents:
         individual1 = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -952,7 +958,7 @@ class TestLifecycleEvents:
         individual2 = CodeIndividual(
             snippet="def test2(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -980,7 +986,7 @@ class TestGetCompleteRecord:
         individual = CodeIndividual(
             snippet="def foo(): return 42",
             probability=0.75,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=3,
             parent_ids=["C0"],
         )
@@ -1000,13 +1006,13 @@ class TestGetCompleteRecord:
         individual = TestIndividual(
             snippet="def test_bar(): assert True",
             probability=0.6,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
 
         # Add lifecycle events
-        individual.notify_parent_of("T1", Operations.CROSSOVER, generation=1)
+        individual.notify_parent_of("T1", OPERATION_CROSSOVER, generation=1)
         individual.notify_selected_as_elite(generation=2)
         individual.notify_died(generation=3)
 
@@ -1033,7 +1039,7 @@ class TestGetCompleteRecord:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.CROSSOVER,
+            creation_op=OPERATION_CROSSOVER,
             generation_born=2,
             parent_ids=["C0", "C1"],
         )
@@ -1058,7 +1064,7 @@ class TestGetCompleteRecord:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1075,18 +1081,18 @@ class TestGetCompleteRecord:
         individual = TestIndividual(
             snippet="def test_complex(): assert True",
             probability=0.7,
-            creation_op=Operations.EDIT,
+            creation_op=OPERATION_EDIT,
             generation_born=1,
             parent_ids=["T0"],
         )
 
         # Simulate complex lifecycle
-        individual.notify_parent_of("T1", Operations.CROSSOVER, generation=2)
+        individual.notify_parent_of("T1", OPERATION_CROSSOVER, generation=2)
         individual.notify_selected_as_elite(generation=3)
-        individual.notify_parent_of("T2", Operations.MUTATION, generation=4)
-        individual.notify_parent_of("T3", Operations.REPRODUCTION, generation=5)
+        individual.notify_parent_of("T2", OPERATION_MUTATION, generation=4)
+        individual.notify_parent_of("T3", OPERATION_REPRODUCTION, generation=5)
         individual.notify_selected_as_elite(generation=6)
-        individual.notify_parent_of("T4", Operations.EDIT, generation=7)
+        individual.notify_parent_of("T4", OPERATION_EDIT, generation=7)
         individual.notify_survived(generation=10)
 
         record = individual.get_complete_record()
@@ -1108,7 +1114,7 @@ class TestGetCompleteRecord:
         individual = TestIndividual(
             snippet="def test_foo(): assert True",
             probability=0.8,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=5,
             parent_ids=["T4"],
         )
@@ -1123,7 +1129,7 @@ class TestGetCompleteRecord:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1144,7 +1150,7 @@ class TestGetCompleteRecord:
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.3,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1172,7 +1178,7 @@ class TestIndividualIntegration:
         initial = CodeIndividual(
             snippet="def solve(n): return n * 2",
             probability=0.3,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1181,7 +1187,7 @@ class TestIndividualIntegration:
         mutated = CodeIndividual(
             snippet="def solve(n): return n * 2 + 1",
             probability=0.35,
-            creation_op=Operations.MUTATION,
+            creation_op=OPERATION_MUTATION,
             generation_born=1,
             parent_ids=[initial.id],
         )
@@ -1190,7 +1196,7 @@ class TestIndividualIntegration:
         another = CodeIndividual(
             snippet="def solve(n): return n ** 2",
             probability=0.4,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1198,7 +1204,7 @@ class TestIndividualIntegration:
         offspring = CodeIndividual(
             snippet="def solve(n): return (n * 2) ** 2",
             probability=0.5,
-            creation_op=Operations.CROSSOVER,
+            creation_op=OPERATION_CROSSOVER,
             generation_born=2,
             parent_ids=[mutated.id, another.id],
         )
@@ -1217,7 +1223,7 @@ class TestIndividualIntegration:
         test1 = TestIndividual(
             snippet="def test_positive(self): assert solve(5) > 0",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -1229,7 +1235,7 @@ class TestIndividualIntegration:
         test2 = TestIndividual(
             snippet="def test_positive(self): assert solve(5) == 10",
             probability=0.6,
-            creation_op=Operations.EDIT,
+            creation_op=OPERATION_EDIT,
             generation_born=1,
             parent_ids=[test1.id],
         )
@@ -1248,7 +1254,7 @@ class TestIndividualIntegration:
         individual = CodeIndividual(
             snippet="def solve(n): return n",
             probability=0.3,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )

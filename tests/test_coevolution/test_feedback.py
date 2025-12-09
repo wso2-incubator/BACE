@@ -9,7 +9,11 @@ import numpy as np
 import pytest
 
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import ExecutionResults, IPareto, Operations
+from common.coevolution.core.interfaces import (
+    OPERATION_INITIAL,
+    ExecutionResults,
+    IPareto,
+)
 from common.coevolution.core.population import CodePopulation, TestPopulation
 from common.coevolution.feedback import (
     CodeFeedbackGenerator,
@@ -60,7 +64,7 @@ def sample_test_population() -> TestPopulation:
         TestIndividual(
             snippet=snippet,
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -89,7 +93,7 @@ def sample_code_population() -> CodePopulation:
         CodeIndividual(
             snippet=snippet,
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -538,6 +542,10 @@ class TestFeedbackGeneratorsIntegration:
         assert hasattr(test_gen, "generate_feedback")
         assert callable(code_gen.generate_feedback)
         assert callable(test_gen.generate_feedback)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
 
 
 if __name__ == "__main__":

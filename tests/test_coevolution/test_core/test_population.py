@@ -11,7 +11,12 @@ import numpy as np
 import pytest
 
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import Operations
+from common.coevolution.core.interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_INITIAL,
+    OPERATION_MUTATION,
+    OPERATION_REPRODUCTION,
+)
 from common.coevolution.core.population import CodePopulation, TestPopulation
 
 # ============================================================================
@@ -26,7 +31,7 @@ def sample_code_individuals() -> list[CodeIndividual]:
         CodeIndividual(
             snippet=f"def func_{i}(): return {i}",
             probability=0.1 * (i + 1),
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -41,7 +46,7 @@ def sample_test_individuals() -> list[TestIndividual]:
         TestIndividual(
             snippet=f"def test_{i}(self): assert True",
             probability=0.1 * (i + 1),
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -337,7 +342,7 @@ class TestBasePopulationSharedBehavior:
             CodeIndividual(
                 snippet="def new(): pass",
                 probability=0.95,
-                creation_op=Operations.MUTATION,
+                creation_op=OPERATION_MUTATION,
                 generation_born=1,
                 parent_ids=["C0"],
             )
@@ -368,14 +373,14 @@ class TestBasePopulationSharedBehavior:
             CodeIndividual(
                 snippet="def new1(): pass",
                 probability=0.6,
-                creation_op=Operations.MUTATION,
+                creation_op=OPERATION_MUTATION,
                 generation_born=1,
                 parent_ids=[],
             ),
             CodeIndividual(
                 snippet="def new2(): pass",
                 probability=0.7,
-                creation_op=Operations.CROSSOVER,
+                creation_op=OPERATION_CROSSOVER,
                 generation_born=1,
                 parent_ids=[],
             ),
@@ -755,7 +760,7 @@ class TestPopulationEdgeCases:
         individual = CodeIndividual(
             snippet="def solo(): pass",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         )
@@ -772,7 +777,7 @@ class TestPopulationEdgeCases:
             CodeIndividual(
                 snippet=f"def func_{i}(): pass",
                 probability=np.random.random(),
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -804,7 +809,7 @@ class TestPopulationEdgeCases:
             CodeIndividual(
                 snippet="",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -823,7 +828,7 @@ class TestPopulationEdgeCases:
             CodeIndividual(
                 snippet=long_snippet,
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -840,14 +845,14 @@ class TestPopulationEdgeCases:
             CodeIndividual(
                 snippet="def a(): pass",
                 probability=0.0,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
             CodeIndividual(
                 snippet="def b(): pass",
                 probability=1.0,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
@@ -905,7 +910,7 @@ class TestPopulationIntegration:
             CodeIndividual(
                 snippet=f"def func_{i}(): return {i}",
                 probability=0.3,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -928,7 +933,7 @@ class TestPopulationIntegration:
                 CodeIndividual(
                     snippet=ind.snippet,
                     probability=ind.probability,
-                    creation_op=Operations.REPRODUCTION,
+                    creation_op=OPERATION_REPRODUCTION,
                     generation_born=gen + 1,
                     parent_ids=[ind.id],
                 )
@@ -1006,7 +1011,7 @@ class TestPopulationIntegration:
             CodeIndividual(
                 snippet=f"def func_{i}(): pass",
                 probability=0.1,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -1167,27 +1172,19 @@ class TestPopulationAdditionalCoverage:
         )
 
     @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
+    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_set_discriminations_accepts_python_list_with_nan(
         self, sample_test_population: TestPopulation
     ) -> None:
         """set_discriminations should accept Python lists containing NaN values."""
-        new_discs = [0.9, float("nan"), 0.7, float("nan"), 0.5]
-        sample_test_population.set_discriminations(new_discs)  # type: ignore[arg-type]
-
-        assert sample_test_population._individuals[0].discrimination == 0.9
-        assert sample_test_population._individuals[1].discrimination is None
-        assert sample_test_population._individuals[2].discrimination == 0.7
-        assert sample_test_population._individuals[3].discrimination is None
-        assert sample_test_population._individuals[4].discrimination == 0.5
+        pytest.skip("Discrimination feature not implemented")
 
     @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
     def test_set_discriminations_raises_on_none_value(
         self, sample_test_population: TestPopulation
     ) -> None:
         """Passing None in discriminations should raise a TypeError via np.isfinite(None)."""
-        new_discs = [0.5, None, 0.7, 0.8, 0.9]
-        with pytest.raises(TypeError):
-            sample_test_population.set_discriminations(new_discs)  # type: ignore[arg-type]
+        pytest.skip("Discrimination feature not implemented")
 
     @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
     def test_rebuild_block_after_shrink_has_correct_snippet_count(

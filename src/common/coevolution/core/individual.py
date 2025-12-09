@@ -3,7 +3,7 @@ import itertools
 
 from loguru import logger
 
-from .interfaces import BaseIndividual, Operations
+from .interfaces import BaseIndividual, Operation
 
 
 class CodeIndividual(BaseIndividual):
@@ -21,7 +21,7 @@ class CodeIndividual(BaseIndividual):
         self,
         snippet: str,
         probability: float,
-        creation_op: Operations,
+        creation_op: Operation,
         generation_born: int,
         parent_ids: list[str],
     ) -> None:
@@ -49,7 +49,7 @@ class CodeIndividual(BaseIndividual):
     def __repr__(self) -> str:
         return (
             f"<CodeIndividual id={self.id} gen={self.generation_born} "
-            f"op={self.creation_op.value} prob={self.probability:.2f}>"
+            f"op={self.creation_op} prob={self.probability:.2f}>"
         )
 
 
@@ -68,7 +68,7 @@ class TestIndividual(BaseIndividual):
         self,
         snippet: str,
         probability: float,
-        creation_op: Operations,
+        creation_op: Operation,
         generation_born: int,
         parent_ids: list[str],
     ) -> None:
@@ -98,5 +98,5 @@ class TestIndividual(BaseIndividual):
     def __repr__(self) -> str:
         return (
             f"<TestIndividual id={self.id} gen={self.generation_born} "
-            f"op={self.creation_op.value} prob={self.probability:.2f}>"
+            f"op={self.creation_op} prob={self.probability:.2f}>"
         )

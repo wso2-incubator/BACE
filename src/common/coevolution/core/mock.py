@@ -7,6 +7,10 @@ from loguru import logger
 from common.coevolution import logging_utils
 
 from .interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_EDIT,
+    OPERATION_INITIAL,
+    OPERATION_MUTATION,
     BaseIndividual,
     BasePopulation,
     BayesianConfig,
@@ -20,7 +24,7 @@ from .interfaces import (
     ISelectionStrategy,
     ITestBlockRebuilder,
     ITestOperator,
-    Operations,
+    Operation,
     ParentProbabilities,
     Problem,
     Sandbox,
@@ -88,18 +92,35 @@ class MockCodeOperator(ICodeOperator):
             for i in range(population_size)
         ]
 
-    def mutate(self, individual: str) -> str:
-        logger.trace("MockCodeOperator.mutate called")
-        return individual + f" # mutated v{np.random.randint(100)}"
+    def apply(
+        self,
+        operation: Operation,
+        parent1: str,
+        parent2: str | None = None,
+        feedback: str | None = None,
+    ) -> str:
+        """Apply a genetic operation to code snippets."""
+        logger.trace(f"MockCodeOperator.apply called with operation={operation}")
 
-    def crossover(self, parent1: str, parent2: str) -> str:
-        logger.trace("MockCodeOperator.crossover called")
-        mid = len(parent1) // 2
-        return parent1[:mid] + parent2[mid:] + f" # crossover v{np.random.randint(100)}"
-
-    def edit(self, individual: str, feedback: str) -> str:
-        logger.trace(f"MockCodeOperator.edit called with feedback: {feedback}")
-        return individual + f" # edited based on feedback v{np.random.randint(100)}"
+        if operation == OPERATION_MUTATION:
+            return parent1 + f" # mutated v{np.random.randint(100)}"
+        elif operation == OPERATION_CROSSOVER:
+            if parent2 is None:
+                raise ValueError("Crossover requires parent2")
+            mid = len(parent1) // 2
+            return (
+                parent1[:mid]
+                + parent2[mid:]
+                + f" # crossover v{np.random.randint(100)}"
+            )
+        elif operation == OPERATION_EDIT:
+            if feedback is None:
+                raise ValueError("Edit requires feedback")
+            logger.trace(f"MockCodeOperator.apply with feedback: {feedback}")
+            return parent1 + f" # edited based on feedback v{np.random.randint(100)}"
+        else:
+            # For any other operation (including custom ones like "det"), just return parent1
+            return parent1 + f" # {operation} v{np.random.randint(100)}"
 
 
 class MockTestOperator(ITestOperator):
@@ -126,24 +147,37 @@ class MockTestOperator(ITestOperator):
 
         return snippets, full_class_block
 
-    def mutate(self, individual: str) -> str:
-        logger.trace("MockTestOperator.mutate called")
-        return individual + f" # mutated test v{np.random.randint(100)}"
+    def apply(
+        self,
+        operation: Operation,
+        parent1: str,
+        parent2: str | None = None,
+        feedback: str | None = None,
+    ) -> str:
+        """Apply a genetic operation to test snippets."""
+        logger.trace(f"MockTestOperator.apply called with operation={operation}")
 
-    def crossover(self, parent1: str, parent2: str) -> str:
-        logger.trace("MockTestOperator.crossover called")
-        mid = len(parent1) // 2
-        return (
-            parent1[:mid]
-            + parent2[mid:]
-            + f" # crossover test v{np.random.randint(100)}"
-        )
-
-    def edit(self, individual: str, feedback: str) -> str:
-        logger.trace(f"MockTestOperator.edit called with feedback: {feedback}")
-        return (
-            individual + f" # edited test based on feedback v{np.random.randint(100)}"
-        )
+        if operation == OPERATION_MUTATION:
+            return parent1 + f" # mutated test v{np.random.randint(100)}"
+        elif operation == OPERATION_CROSSOVER:
+            if parent2 is None:
+                raise ValueError("Crossover requires parent2")
+            mid = len(parent1) // 2
+            return (
+                parent1[:mid]
+                + parent2[mid:]
+                + f" # crossover test v{np.random.randint(100)}"
+            )
+        elif operation == OPERATION_EDIT:
+            if feedback is None:
+                raise ValueError("Edit requires feedback")
+            logger.trace(f"MockTestOperator.apply with feedback: {feedback}")
+            return (
+                parent1 + f" # edited test based on feedback v{np.random.randint(100)}"
+            )
+        else:
+            # For any other operation (including custom ones like "det"), just return parent1
+            return parent1 + f" # {operation} test v{np.random.randint(100)}"
 
 
 # --- Mock Strategies & Helpers ---
@@ -172,11 +206,11 @@ class MockProbabilityAssigner(IProbabilityAssigner):
 
     def assign_probability(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
-        if operation == Operations.INITIAL:
+        if operation == OPERATION_INITIAL:
             return initial_prior
         if not parent_probs:
             return initial_prior
@@ -489,8 +523,8 @@ class MockBayesianSystem(IBayesianSystem):
     # Mask generation helpers
     def get_code_update_mask_generation(
         self,
-        updating_ind_born_generations: list[int],
-        other_ind_born_generations: list[int],
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
         current_generation: int,
     ) -> np.ndarray:
         return self._get_update_mask_generation(
@@ -501,8 +535,8 @@ class MockBayesianSystem(IBayesianSystem):
 
     def get_test_update_mask_generation(
         self,
-        updating_ind_born_generations: list[int],
-        other_ind_born_generations: list[int],
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
         current_generation: int,
     ) -> np.ndarray:
         return self._get_update_mask_generation(
@@ -513,8 +547,8 @@ class MockBayesianSystem(IBayesianSystem):
 
     def _get_update_mask_generation(
         self,
-        updating_ind_born_generations: list[int],
-        other_ind_born_generations: list[int],
+        updating_ind_born_generations: list[int] | np.ndarray,
+        other_ind_born_generations: list[int] | np.ndarray,
         current_generation: int,
     ) -> np.ndarray:
         rows = len(updating_ind_born_generations)

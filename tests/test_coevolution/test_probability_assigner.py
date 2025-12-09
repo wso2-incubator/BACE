@@ -12,7 +12,13 @@ This module tests the ProbabilityAssigner implementation, including:
 import numpy as np
 import pytest
 
-from common.coevolution.core.interfaces import Operations
+from common.coevolution.core.interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_EDIT,
+    OPERATION_INITIAL,
+    OPERATION_MUTATION,
+    OPERATION_REPRODUCTION,
+)
 from common.coevolution.probability_assigner import (
     AssignmentStrategy,
     ProbabilityAssigner,
@@ -72,7 +78,7 @@ class TestInitialPopulationAssignment:
         initial_prior = 0.5
 
         prob = assigner.assign_probability(
-            operation=Operations.INITIAL,
+            operation=OPERATION_INITIAL,
             parent_probs=[],
             initial_prior=initial_prior,
         )
@@ -85,7 +91,7 @@ class TestInitialPopulationAssignment:
 
         for prior in [0.1, 0.3, 0.5, 0.7, 0.9]:
             prob = assigner.assign_probability(
-                operation=Operations.INITIAL,
+                operation=OPERATION_INITIAL,
                 parent_probs=[],
                 initial_prior=prior,
             )
@@ -103,7 +109,7 @@ class TestMeanStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MEAN)
 
         prob = assigner.assign_probability(
-            operation=Operations.MUTATION,
+            operation=OPERATION_MUTATION,
             parent_probs=[0.6],
             initial_prior=0.5,
         )
@@ -115,7 +121,7 @@ class TestMeanStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MEAN)
 
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=[0.4, 0.8],
             initial_prior=0.5,
         )
@@ -129,7 +135,7 @@ class TestMeanStrategy:
 
         parent_probs = [0.3, 0.5, 0.7, 0.9]
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=parent_probs,
             initial_prior=0.5,
         )
@@ -149,7 +155,7 @@ class TestMaxStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MAX)
 
         prob = assigner.assign_probability(
-            operation=Operations.MUTATION,
+            operation=OPERATION_MUTATION,
             parent_probs=[0.7],
             initial_prior=0.5,
         )
@@ -161,7 +167,7 @@ class TestMaxStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MAX)
 
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=[0.3, 0.9],
             initial_prior=0.5,
         )
@@ -174,7 +180,7 @@ class TestMaxStrategy:
 
         parent_probs = [0.2, 0.5, 0.8, 0.6]
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=parent_probs,
             initial_prior=0.5,
         )
@@ -193,7 +199,7 @@ class TestMinStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MIN)
 
         prob = assigner.assign_probability(
-            operation=Operations.MUTATION,
+            operation=OPERATION_MUTATION,
             parent_probs=[0.4],
             initial_prior=0.5,
         )
@@ -205,7 +211,7 @@ class TestMinStrategy:
         assigner = ProbabilityAssigner(AssignmentStrategy.MIN)
 
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=[0.3, 0.9],
             initial_prior=0.5,
         )
@@ -218,7 +224,7 @@ class TestMinStrategy:
 
         parent_probs = [0.7, 0.5, 0.8, 0.6]
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=parent_probs,
             initial_prior=0.5,
         )
@@ -238,7 +244,7 @@ class TestEdgeCases:
 
         with pytest.raises(ValueError, match="no parent probabilities"):
             assigner.assign_probability(
-                operation=Operations.CROSSOVER,
+                operation=OPERATION_CROSSOVER,
                 parent_probs=[],
                 initial_prior=0.5,
             )
@@ -249,7 +255,7 @@ class TestEdgeCases:
 
         # Test with 0.0
         prob = assigner.assign_probability(
-            operation=Operations.MUTATION,
+            operation=OPERATION_MUTATION,
             parent_probs=[0.0],
             initial_prior=0.5,
         )
@@ -257,7 +263,7 @@ class TestEdgeCases:
 
         # Test with 1.0
         prob = assigner.assign_probability(
-            operation=Operations.MUTATION,
+            operation=OPERATION_MUTATION,
             parent_probs=[1.0],
             initial_prior=0.5,
         )
@@ -265,7 +271,7 @@ class TestEdgeCases:
 
         # Test mix
         prob = assigner.assign_probability(
-            operation=Operations.CROSSOVER,
+            operation=OPERATION_CROSSOVER,
             parent_probs=[0.0, 1.0],
             initial_prior=0.5,
         )
@@ -277,10 +283,10 @@ class TestEdgeCases:
 
         # Test all operations except INITIAL
         operations = [
-            Operations.CROSSOVER,
-            Operations.MUTATION,
-            Operations.EDIT,
-            Operations.REPRODUCTION,
+            OPERATION_CROSSOVER,
+            OPERATION_MUTATION,
+            OPERATION_EDIT,
+            OPERATION_REPRODUCTION,
         ]
 
         for op in operations:
@@ -309,13 +315,13 @@ class TestStrategyComparison:
         min_assigner = ProbabilityAssigner(AssignmentStrategy.MIN)
 
         mean_prob = mean_assigner.assign_probability(
-            Operations.CROSSOVER, parent_probs, initial_prior
+            OPERATION_CROSSOVER, parent_probs, initial_prior
         )
         max_prob = max_assigner.assign_probability(
-            Operations.CROSSOVER, parent_probs, initial_prior
+            OPERATION_CROSSOVER, parent_probs, initial_prior
         )
         min_prob = min_assigner.assign_probability(
-            Operations.CROSSOVER, parent_probs, initial_prior
+            OPERATION_CROSSOVER, parent_probs, initial_prior
         )
 
         # All should be different
@@ -338,7 +344,7 @@ class TestStrategyComparison:
 
         probs = [
             ProbabilityAssigner(s).assign_probability(
-                Operations.INITIAL, [], initial_prior
+                OPERATION_INITIAL, [], initial_prior
             )
             for s in strategies
         ]

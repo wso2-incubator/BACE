@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import Operations
+from common.coevolution.core.interfaces import OPERATION_INITIAL
 from common.coevolution.core.population import CodePopulation, TestPopulation
 from common.coevolution.execution import ExecutionSystem, _execute_single_code
 from common.sandbox import SafeCodeSandbox, TestExecutionResult, TestResult
@@ -30,21 +30,21 @@ def simple_code_population() -> CodePopulation:
         CodeIndividual(
             snippet="def add(a, b): return a + b",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         ),
         CodeIndividual(
             snippet="def add(a, b): return a - b",  # Wrong
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         ),
         CodeIndividual(
             snippet="def add(a, b): return a * 2 + b",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         ),
@@ -67,14 +67,14 @@ class TestAdd:
         TestIndividual(
             snippet="test_positive",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         ),
         TestIndividual(
             snippet="test_zero",
             probability=0.5,
-            creation_op=Operations.INITIAL,
+            creation_op=OPERATION_INITIAL,
             generation_born=0,
             parent_ids=[],
         ),
@@ -651,7 +651,7 @@ class TestRealSandboxIntegration:
             CodeIndividual(
                 snippet="class Solution:\n    def add(self, a, b):\n        return a + b",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
@@ -659,7 +659,7 @@ class TestRealSandboxIntegration:
             CodeIndividual(
                 snippet="class Solution:\n    def add(self, a, b):\n        return a - b",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
@@ -667,7 +667,7 @@ class TestRealSandboxIntegration:
             CodeIndividual(
                 snippet="class Solution:\n    def add(self, a, b):\n        # Only works correctly when at least one operand is 0\n        if a == 0:\n            return b\n        if b == 0:\n            return a\n        return 0  # Wrong for non-zero cases",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
@@ -709,21 +709,21 @@ if __name__ == '__main__':
             TestIndividual(
                 snippet="test_positive_numbers",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
             TestIndividual(
                 snippet="test_zero",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
             TestIndividual(
                 snippet="test_negative_numbers",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
@@ -837,7 +837,7 @@ class TestAdditionalEdgeCases:
                 CodeIndividual(
                     snippet="def add(a, b): return a + b",
                     probability=0.5,
-                    creation_op=Operations.INITIAL,
+                    creation_op=OPERATION_INITIAL,
                     generation_born=0,
                     parent_ids=[],
                 )
@@ -971,14 +971,14 @@ class TestAdditionalEdgeCases:
             TestIndividual(
                 snippet="test_alpha",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),
             TestIndividual(
                 snippet="test_beta",
                 probability=0.5,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             ),

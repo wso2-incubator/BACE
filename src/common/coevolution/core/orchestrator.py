@@ -16,6 +16,7 @@ from .individual import CodeIndividual, TestIndividual
 
 # Import all interfaces, configs, and types
 from .interfaces import (
+    OPERATION_INITIAL,
     BasePopulation,
     BayesianConfig,
     CodePopulationConfig,
@@ -31,7 +32,6 @@ from .interfaces import (
     ISelectionStrategy,
     ITestBlockRebuilder,
     ITestOperator,
-    Operations,
     OperatorRatesConfig,
     PopulationConfig,
     Problem,
@@ -431,7 +431,7 @@ class Orchestrator:
             CodeIndividual(
                 snippet=s,
                 probability=self.code_pop_config.initial_prior,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -452,7 +452,7 @@ class Orchestrator:
             TestIndividual(
                 snippet=s,
                 probability=self.test_pop_config.initial_prior,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )
@@ -503,7 +503,7 @@ class Orchestrator:
             TestIndividual(
                 snippet=method,
                 probability=FIXED_TEST_PROBABILITY,
-                creation_op=Operations.INITIAL,
+                creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parent_ids=[],
             )

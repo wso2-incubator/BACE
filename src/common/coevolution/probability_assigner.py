@@ -17,7 +17,8 @@ from typing import Union
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import IProbabilityAssigner, Operations, ParentProbabilities
+from .core.interfaces import (OPERATION_INITIAL, IProbabilityAssigner,
+                              Operation, ParentProbabilities)
 
 
 class AssignmentStrategy(str, Enum):
@@ -95,14 +96,14 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
     def assign_probability(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
         """
         Calculate the probability for a new offspring.
 
-        For initial population members (Operations.INITIAL), returns the initial_prior.
+        For initial population members (OPERATION_INITIAL), returns the initial_prior.
         For offspring created by genetic operations, applies the configured strategy
         to combine parent probabilities.
 
@@ -118,13 +119,13 @@ class ProbabilityAssigner(IProbabilityAssigner):
             ValueError: If parent_probs is empty for non-initial operations
         """
         # Initial population members get the prior
-        if operation == Operations.INITIAL:
+        if operation == OPERATION_INITIAL:
             logger.trace(f"Assigning initial prior: {initial_prior:.4f}")
             return initial_prior
 
         # Validate we have parent probabilities for genetic operations
         if not parent_probs:
-            msg = f"Cannot assign probability for {operation.value}: no parent probabilities provided"
+            msg = f"Cannot assign probability for {operation}: no parent probabilities provided"
             logger.error(msg)
             raise ValueError(msg)
 
@@ -140,7 +141,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
             )
 
         logger.trace(
-            f"Assigned probability {assigned_prob:.4f} for {operation.value} "
+            f"Assigned probability {assigned_prob:.4f} for {operation} "
             f"(strategy={self.strategy.value}, parent_probs={parent_probs})"
         )
 
@@ -150,7 +151,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
     def _assign_mean(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
@@ -172,7 +173,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
     def _assign_max(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
@@ -194,7 +195,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
     def _assign_min(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
@@ -208,6 +209,11 @@ class ProbabilityAssigner(IProbabilityAssigner):
             operation: The genetic operation (unused in this strategy)
             parent_probs: Parent probability values
             initial_prior: Default prior (unused in this strategy)
+
+        Returns:
+            Minimum of parent probabilities
+        """
+        return float(np.min(parent_probs))
 
         Returns:
             Minimum of parent probabilities

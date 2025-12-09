@@ -42,25 +42,25 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Protocol, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
 import numpy as np
 from loguru import logger
 
 if TYPE_CHECKING:
     # We are only importing these for type-hinting, not for runtime logic.
-    # This assumes they are defined in .population and .individual
     from .population import CodePopulation, TestPopulation
 
 
-class Operations(Enum):
-    """Enumeration of genetic operations for creating individuals."""
+# Type alias for genetic operations
+type Operation = str
 
-    INITIAL = "initial"
-    CROSSOVER = "crossover"
-    EDIT = "edit"
-    REPRODUCTION = "reproduction"
-    MUTATION = "mutation"
+# Standard operation names (for convenience, not exhaustive)
+OPERATION_INITIAL: Literal["initial"] = "initial"
+OPERATION_CROSSOVER: Literal["crossover"] = "crossover"
+OPERATION_EDIT: Literal["edit"] = "edit"
+OPERATION_REPRODUCTION: Literal["reproduction"] = "reproduction"
+OPERATION_MUTATION: Literal["mutation"] = "mutation"
 
 
 class LifecycleEvent(Enum):
@@ -230,7 +230,7 @@ class BaseIndividual(ABC):
         self,
         snippet: str,
         probability: float,
-        creation_op: Operations,
+        creation_op: Operation,
         generation_born: int,
         parent_ids: list[str],
     ) -> None:
@@ -265,20 +265,13 @@ class BaseIndividual(ABC):
             event: The type of lifecycle event.
             **details: Additional event-specific information.
         """
-        # Convert Operations enum to string for JSON serialization
-        serializable_details = {
-            k: v.value if isinstance(v, Operations) else v for k, v in details.items()
-        }
-        entry = LogEntry(
-            generation=generation, event=event, details=serializable_details
-        )
+        # Details are already serializable (Operations is now just a string)
+        entry = LogEntry(generation=generation, event=event, details=details)
         self.lifecycle_log.append(entry)
-        logger.trace(
-            f"Lifecycle event: {event.value} at gen {generation} - {serializable_details}"
-        )
+        logger.trace(f"Lifecycle event: {event.value} at gen {generation} - {details}")
 
     def notify_parent_of(
-        self, offspring_id: str, operation: Operations, generation: int
+        self, offspring_id: str, operation: Operation, generation: int
     ) -> None:
         """
         Called when this individual is used as a parent.
@@ -286,7 +279,7 @@ class BaseIndividual(ABC):
 
         Args:
             offspring_id: The ID of the offspring produced.
-            operation: The genetic operation used (crossover, edit, reproduction, mutation).
+            operation: The genetic operation used (e.g., crossover, edit, reproduction, mutation, det).
             generation: The generation number when this parenting occurred.
         """
         self._log_event(
@@ -360,7 +353,7 @@ class BaseIndividual(ABC):
             "id": self.id,
             "type": self.__class__.__name__,
             "snippet": self.snippet,
-            "creation_op": self.creation_op.value,  # Convert enum to string for JSON serialization
+            "creation_op": self.creation_op,  # Already a string
             "generation_born": self.generation_born,
             "probability": self.probability,
             "parent_ids": self.parent_ids,
@@ -423,7 +416,7 @@ class BaseIndividual(ABC):
         self._probability = value
 
     @property
-    def creation_op(self) -> Operations:
+    def creation_op(self) -> Operation:
         """
         The name of the operation that created this individual (immutable).
         """
@@ -654,45 +647,31 @@ class IGeneticOperator(Protocol):
     """
     Abstract interface (Protocol) for genetic operators.
 
-    Defines the contract for any class that creates and evolves
-    individuals.
+    Defines the contract for any class that applies genetic operations
+    to evolve individuals.
     """
 
-    def mutate(self, individual: str) -> str:
+    def apply(
+        self,
+        operation: Operation,
+        parent1: str,
+        parent2: str | None = None,
+        feedback: str | None = None,
+    ) -> str:
         """
-        Apply a mutation to a single code snippet.
+        Apply a genetic operation to one or more code snippets.
 
         Args:
-            individual: The code string to mutate.
+            operation: The operation to apply (e.g., "mutation", "crossover", "edit", "det").
+            parent1: The primary code snippet (or only parent for mutation/edit).
+            parent2: Optional second parent snippet (required for crossover).
+            feedback: Optional feedback string (required for edit operation).
 
         Returns:
-            A new, mutated code snippet string.
-        """
-        ...
+            A new code snippet resulting from the operation.
 
-    def crossover(self, parent1: str, parent2: str) -> str:
-        """
-        Apply crossover to two code snippets.
-
-        Args:
-            parent1: The first parent snippet.
-            parent2: The second parent snippet.
-
-        Returns:
-            A new, child snippet resulting from crossover.
-        """
-        ...
-
-    def edit(self, individual: str, feedback: str) -> str:
-        """
-        Apply an edit to a code snippet based on feedback.
-
-        Args:
-            individual: The code string to edit.
-            feedback: The feedback (e.g., error message) to guide the edit.
-
-        Returns:
-            A new, edited code snippet string.
+        Raises:
+            ValueError: If required parameters for the operation are missing.
         """
         ...
 
@@ -808,7 +787,7 @@ class IProbabilityAssigner(Protocol):
 
     def assign_probability(
         self,
-        operation: Operations,
+        operation: Operation,
         parent_probs: ParentProbabilities,
         initial_prior: float,
     ) -> float:
@@ -816,7 +795,7 @@ class IProbabilityAssigner(Protocol):
         Calculates the probability for a new offspring.
 
         Args:
-            operation: The op that created the child (e.g., "crossover").
+            operation: The op that created the child (e.g., "crossover", "mutation", "det").
             parent_probs: A list of the parent(s)' probabilities.
             initial_prior: The default prior, to be used if the policy dictates.
 
@@ -901,7 +880,7 @@ class IIndividualFactory[T_Individual: BaseIndividual](Protocol):
         self,
         snippet: str,
         probability: float,
-        creation_op: Operations,
+        creation_op: Operation,
         generation_born: int,
         parent_ids: list[str],
     ) -> T_Individual:
