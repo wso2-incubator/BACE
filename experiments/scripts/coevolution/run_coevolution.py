@@ -38,7 +38,7 @@ def load_problems() -> list[LCBCodeGenerationProblem]:
     """Load a problem from LiveCodeBench dataset."""
     logger.info("Loading problem from LiveCodeBench dataset...")
 
-    problems: list[LCBCodeGenerationProblem] = load_code_generation_dataset(
+    problems = load_code_generation_dataset(
         release_version="release_v6",
         start_date="2025-03-01",
         end_date="2025-05-10",
@@ -96,9 +96,9 @@ def main(
     # ====================================
     # Step 2: Load Problems
     # ====================================
-    problems: list[LCBCodeGenerationProblem] = load_problems()
+    problems = load_problems()
     if problem_ids is not None:
-        selected_problems: list[LCBCodeGenerationProblem] = [
+        selected_problems = [
             problem for problem in problems if problem.question_id in problem_ids
         ]
     else:
@@ -158,7 +158,7 @@ def main(
                 OrchestratorBuilder()
                 # Evolution configuration
                 .with_evolution_config(
-                    num_generations=1,  # Small number for quick testing
+                    num_generations=5,  # Small number for quick testing
                     random_seed=42,
                     max_workers=12,
                 )
