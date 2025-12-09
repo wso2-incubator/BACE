@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from openai.types.chat.chat_completion import ChatCompletion
+    from openai.types.responses.response import Response
 
 
 class TokenLimitExceededError(Exception):
@@ -64,16 +68,14 @@ class LLMClient(ABC):
         """
         return len(text) // 4
 
-    def _add_output_tokens(self, response: str) -> None:
+    def _add_output_tokens(self, tokens: int) -> None:
         """Add the estimated tokens from a response to the total count.
 
         Args:
-            response: The generated response text.
-
+            tokens: The number of tokens generated.
         Raises:
             TokenLimitExceededError: If the token limit is enabled and would be exceeded.
         """
-        tokens = self._estimate_tokens(response)
         new_total = self._total_output_tokens + tokens
 
         # Check if adding these tokens would exceed the limit
@@ -206,7 +208,7 @@ class OpenAIChatClient(LLMClient):
         logger.debug(f"OpenAIChatClient generating with model: {self.model}")
         logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
-        response = self.client.chat.completions.create(
+        response: ChatCompletion = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             **kwargs,
@@ -219,7 +221,7 @@ class OpenAIChatClient(LLMClient):
         result = str(content)
         logger.debug(f"Generated {len(result)} characters")
         logger.trace(f"Response (first 200 chars): {result[:200]}...")
-        self._add_output_tokens(result)
+        self._add_output_tokens(self._estimate_tokens(result))
         return result
 
 
@@ -249,6 +251,30 @@ class OpenAIClient(LLMClient):
             f"reasoning_effort: {reasoning_effort}"
         )
 
+    def _add_openai_output_tokens(self, response: "Response") -> None:
+        """Add output tokens from OpenAI Response API response.
+
+        Args:
+            response: The OpenAI Response API response object.
+        """
+        if (
+            hasattr(response, "usage")
+            and response.usage is not None
+            and hasattr(response.usage, "output_tokens")
+        ):
+            output_tokens = response.usage.output_tokens
+            return super()._add_output_tokens(output_tokens)
+        else:
+            logger.warning(
+                "Response object does not have usage.output_tokens; "
+                "cannot track output tokens accurately."
+                "using approximate character-based estimation instead."
+            )
+
+            return super()._add_output_tokens(
+                self._estimate_tokens(response.output_text)
+            )
+
     def generate(self, prompt: str, **kwargs: Any) -> str:
         # Allow overriding reasoning effort for this specific call
         reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
@@ -259,7 +285,7 @@ class OpenAIClient(LLMClient):
         )
         logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
-        response = self.client.responses.create(
+        response: "Response" = self.client.responses.create(
             model=self.model,
             input=prompt,
             reasoning={"effort": reasoning_effort},
@@ -275,7 +301,8 @@ class OpenAIClient(LLMClient):
         result = str(content)
         logger.debug(f"Generated {len(result)} characters")
         logger.trace(f"Response (first 200 chars): {result[:200]}...")
-        self._add_output_tokens(result)
+
+        self._add_openai_output_tokens(response)
         return result
 
     def set_reasoning_effort(self, reasoning_effort: str) -> None:
@@ -331,7 +358,7 @@ class OllamaClient(LLMClient):
 
         logger.debug(f"Generated {len(content)} characters")
         logger.trace(f"Response (first 200 chars): {content[:200]}...")
-        self._add_output_tokens(content)
+        self._add_output_tokens(self._estimate_tokens(content))
         return content
 
 
