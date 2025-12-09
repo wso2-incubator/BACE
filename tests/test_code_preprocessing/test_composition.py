@@ -3,6 +3,7 @@
 import pytest
 
 from common.code_preprocessing.composition import (
+    compose_lcb_output_script,
     compose_lcb_test_script,
     rebuild_unittest_with_methods,
 )
@@ -164,3 +165,530 @@ class TestFoo(unittest.TestCase):
         # Should include valid methods, skip invalid
         assert "test_valid" in result
         assert "test_also_valid" in result
+
+
+class TestComposeLcbOutputScript:
+    """Test compose_lcb_output_script function."""
+
+    def test_basic_solution_class_with_simple_params(self) -> None:
+        """Test generating output script from Solution class with simple parameters."""
+        prog = """
+class Solution:
+    def add(self, a, b):
+        return a + b
+"""
+        input_data = "{'inputdata': {'a': 1, 'b': 2}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "class Solution" in script
+        assert "sol = Solution()" in script
+        assert "sol.add(1, 2)" in script
+        assert "print(sol.add(1, 2))" in script
+
+    def test_execution_of_generated_script_basic(self) -> None:
+        """Test that generated script actually executes and produces correct output."""
+        prog = """
+class Solution:
+    def add(self, a, b):
+        return a + b
+"""
+        input_data = "{'inputdata': {'a': 1, 'b': 2}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        # Capture output
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        assert "3" in captured_output.getvalue()
+
+    def test_wraps_loose_functions_into_solution_class(self) -> None:
+        """Test that standalone functions are wrapped into Solution class."""
+        prog = """
+def multiply(x, y):
+    return x * y
+"""
+        input_data = "{'inputdata': {'x': 3, 'y': 4}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "class Solution" in script
+        assert "def multiply(self, x, y)" in script
+        assert "sol.multiply(3, 4)" in script
+
+    def test_string_parameters(self) -> None:
+        """Test handling of string parameters in input data."""
+        prog = """
+class Solution:
+    def process(self, text, count):
+        return text * count
+"""
+        input_data = "{'inputdata': {'text': 'hello', 'count': 3}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        # repr() produces single quotes for strings
+        assert "process('hello', 3)" in script
+
+    def test_execution_with_string_parameters(self) -> None:
+        """Test execution of generated script with string parameters."""
+        prog = """
+class Solution:
+    def process(self, text, count):
+        return text * count
+"""
+        input_data = "{'inputdata': {'text': 'x', 'count': 5}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        assert "xxxxx" in captured_output.getvalue()
+
+    def test_preserves_imports(self) -> None:
+        """Test that imports from programmer code are preserved."""
+        prog = """
+import math
+
+class Solution:
+    def sqrt_sum(self, a, b):
+        return math.sqrt(a + b)
+"""
+        input_data = "{'inputdata': {'a': 3, 'b': 6}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "import math" in script
+
+    def test_preserves_helper_classes(self) -> None:
+        """Test that helper classes are preserved in the output."""
+        prog = """
+class Helper:
+    def helper_method(self):
+        return 42
+
+class Solution:
+    def solve(self, x):
+        h = Helper()
+        return h.helper_method() + x
+"""
+        input_data = "{'inputdata': {'x': 8}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "class Helper" in script
+        assert "class Solution" in script
+
+    def test_multiple_parameters_in_correct_order(self) -> None:
+        """Test that parameters are passed in the correct order."""
+        prog = """
+class Solution:
+    def concat(self, a, b, c):
+        return a + b + c
+"""
+        input_data = "{'inputdata': {'a': 'x', 'b': 'y', 'c': 'z'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        # The order depends on dict iteration, but all values should be present
+        assert "concat(" in script
+        # repr() produces single quotes for strings
+        assert "'x'" in script
+        assert "'y'" in script
+        assert "'z'" in script
+
+    def test_numeric_types_different_precision(self) -> None:
+        """Test handling of different numeric types (int, float)."""
+        prog = """
+class Solution:
+    def calc(self, a, b):
+        return a + b
+"""
+        input_data = "{'inputdata': {'a': 1.5, 'b': 2.7}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "calc(1.5, 2.7)" in script
+
+    def test_execution_with_numeric_precision(self) -> None:
+        """Test execution with floating point numbers."""
+        prog = """
+class Solution:
+    def calc(self, a, b):
+        return a + b
+"""
+        input_data = "{'inputdata': {'a': 1.5, 'b': 2.5}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        assert "4" in captured_output.getvalue()
+
+    def test_list_as_parameter(self) -> None:
+        """Test handling of list as a parameter."""
+        prog = """
+class Solution:
+    def sum_list(self, nums):
+        return sum(nums)
+"""
+        input_data = "{'inputdata': {'nums': [1, 2, 3, 4, 5]}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "sum_list([1, 2, 3, 4, 5])" in script
+
+    def test_dict_as_parameter(self) -> None:
+        """Test handling of dict as a parameter."""
+        prog = """
+class Solution:
+    def get_value(self, d):
+        return d.get('key', None)
+"""
+        input_data = "{'inputdata': {'d': {'key': 'value'}}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "get_value({'key': 'value'})" in script
+
+    def test_boolean_parameters(self) -> None:
+        """Test handling of boolean parameters."""
+        prog = """
+class Solution:
+    def toggle(self, flag):
+        return not flag
+"""
+        input_data = "{'inputdata': {'flag': True}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "toggle(True)" in script
+
+    def test_none_as_parameter(self) -> None:
+        """Test handling of None as a parameter."""
+        prog = """
+class Solution:
+    def check_none(self, x):
+        return x is None
+"""
+        input_data = "{'inputdata': {'x': None}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "check_none(None)" in script
+
+    def test_single_parameter_function(self) -> None:
+        """Test function with only one parameter."""
+        prog = """
+class Solution:
+    def square(self, x):
+        return x * x
+"""
+        input_data = "{'inputdata': {'x': 5}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "square(5)" in script
+
+    def test_no_parameters_function(self) -> None:
+        """Test function with no parameters (besides self)."""
+        prog = """
+class Solution:
+    def get_answer(self):
+        return 42
+"""
+        input_data = "{'inputdata': {}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "get_answer()" in script
+
+    def test_execution_no_parameters(self) -> None:
+        """Test execution of function with no parameters."""
+        prog = """
+class Solution:
+    def get_answer(self):
+        return 42
+"""
+        input_data = "{'inputdata': {}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        assert "42" in captured_output.getvalue()
+
+    def test_method_name_detection_in_solution_class(self) -> None:
+        """Test that the first non-dunder method is correctly identified."""
+        prog = """
+class Solution:
+    def solve(self, x):
+        return x * 2
+    
+    def other_method(self, y):
+        return y * 3
+"""
+        input_data = "{'inputdata': {'x': 10}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        # Should use the first method (solve)
+        assert "sol.solve(10)" in script
+
+    def test_raises_error_on_invalid_programmer_code(self) -> None:
+        """Test that CodeParsingError is raised for invalid Python code."""
+        prog = "class Solution: invalid syntax here"
+        input_data = "{'inputdata': {}}"
+
+        with pytest.raises(CodeParsingError, match="Failed to parse programmer code"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_raises_error_when_no_solution_found(self) -> None:
+        """Test that CodeTransformationError is raised when Solution class not found."""
+        prog = "x = 1"  # No Solution class or functions
+        input_data = "{'inputdata': {}}"
+
+        with pytest.raises(CodeTransformationError, match="No Solution class"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_raises_error_when_no_method_found(self) -> None:
+        """Test that CodeTransformationError is raised when no callable method found."""
+        prog = "class Solution: pass"  # No methods
+        input_data = "{'inputdata': {}}"
+
+        with pytest.raises(CodeTransformationError, match="No callable method"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_raises_error_missing_inputdata_key(self) -> None:
+        """Test that error is raised when 'inputdata' key is missing."""
+        prog = """
+class Solution:
+    def solve(self, x):
+        return x
+"""
+        input_data = "{'wrongkey': {'x': 1}}"
+
+        with pytest.raises(CodeTransformationError, match="inputdata"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_raises_error_when_inputdata_not_dict(self) -> None:
+        """Test that error is raised when 'inputdata' is not a dictionary."""
+        prog = """
+class Solution:
+    def solve(self, x):
+        return x
+"""
+        input_data = "{'inputdata': 'not a dict'}"
+
+        with pytest.raises(CodeTransformationError, match="dict object"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_raises_error_on_invalid_python_dict(self) -> None:
+        """Test that error is raised for invalid Python dict input."""
+        prog = """
+class Solution:
+    def solve(self, x):
+        return x
+"""
+        input_data = "this is not valid python dict"
+
+        with pytest.raises(CodeTransformationError, match="Failed to parse input data"):
+            compose_lcb_output_script(prog, input_data)
+
+    def test_complex_nested_structure(self) -> None:
+        """Test handling of complex nested data structures."""
+        prog = """
+class Solution:
+    def process(self, data):
+        return data['a']['b'] + len(data['c'])
+"""
+        input_data = "{'inputdata': {'data': {'a': {'b': 10}, 'c': [1, 2, 3]}}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "process(" in script
+
+    def test_execution_complex_nested_structure(self) -> None:
+        """Test execution with complex nested data structures."""
+        prog = """
+class Solution:
+    def process(self, data):
+        return data['a']['b'] + len(data['c'])
+"""
+        input_data = "{'inputdata': {'data': {'a': {'b': 10}, 'c': [1, 2, 3]}}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        assert "13" in captured_output.getvalue()
+
+    def test_special_method_name_solve(self) -> None:
+        """Test common method name 'solve'."""
+        prog = """
+class Solution:
+    def solve(self, n):
+        return n * 2
+"""
+        input_data = "{'inputdata': {'n': 21}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "sol.solve(21)" in script
+
+    def test_special_method_name_lengthOfLongestSubstring(self) -> None:
+        """Test camelCase method names."""
+        prog = """
+class Solution:
+    def lengthOfLongestSubstring(self, s):
+        return len(s)
+"""
+        input_data = "{'inputdata': {'s': 'hello'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "lengthOfLongestSubstring(" in script
+
+    def test_whitespace_handling_in_input_json(self) -> None:
+        """Test that whitespace in JSON is handled correctly."""
+        prog = """
+class Solution:
+    def add(self, a, b):
+        return a + b
+"""
+        input_data = "{ 'inputdata' : { 'a' : 1 , 'b' : 2 } }"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "add(1, 2)" in script
+
+    def test_multiline_string_with_newlines(self) -> None:
+        """Test handling of multi-line string input with escaped newlines."""
+        prog = """
+class Solution:
+    def solve(self, input_str):
+        lines = input_str.split('\\n')
+        return len(lines)
+"""
+        # Multi-line string input with actual newlines preserved as \\n
+        input_data = "{'inputdata': {'input_str': '20\\n1 1 1 1 0 0 1 1 0 0 0 1 0 1 0 1 1 0 1 0\\n0 0 0 1 1 1 0 1 1 0 0 0 0 0 0 1 0 1 0 0\\n52 73 97 72 54 15 79 67 13 55 65 22 36 90 84 46 1 2 27 8'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        # The composed script should contain the string with escaped newlines
+        assert "solve(" in script
+        # Check that newlines are preserved in the generated script
+        assert "\\n" in script
+
+    def test_execution_multiline_string_with_newlines(self) -> None:
+        """Test execution of solution with multi-line string input."""
+        prog = """
+class Solution:
+    def solve(self, input_str):
+        lines = input_str.split('\\n')
+        return len(lines)
+"""
+        input_data = "{'inputdata': {'input_str': 'line1\\nline2\\nline3'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        # Should output 3 (three lines)
+        assert "3" in captured_output.getvalue()
+
+    def test_complex_multiline_input_with_numbers(self) -> None:
+        """Test realistic multi-line input similar to competitive programming."""
+        prog = """
+class Solution:
+    def sol(self, input_str):
+        data = list(map(int, input_str.split()))
+        return len(data)
+"""
+        # Realistic input with multiple lines and numbers
+        input_data = "{'inputdata': {'input_str': '5\\n1 2 3 4 5\\n10 20 30 40 50'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        assert "sol(" in script
+        # Verify the raw string with newlines is in the script
+        assert "\\n" in script
+
+    def test_execution_complex_multiline_input(self) -> None:
+        """Test execution with complex multi-line input parsing."""
+        prog = """
+class Solution:
+    def sol(self, input_str):
+        lines = input_str.strip().split('\\n')
+        n = int(lines[0])
+        arr = list(map(int, lines[1].split()))
+        return n, len(arr)
+"""
+        input_data = "{'inputdata': {'input_str': '3\\n1 2 3'}}"
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        # Should output (3, 3)
+        assert "3" in captured_output.getvalue()
+
+    def test_python_dict_with_string_concatenation(self) -> None:
+        """Test handling of Python dict format with string concatenation operators."""
+        prog = """
+class Solution:
+    def solve(self, input_str):
+        lines = input_str.strip().split('\\n')
+        return len(lines)
+"""
+        # This is the exact format from the original error - Python dict with + operators
+        input_data = """{"inputdata": {"input_str": "21\\n" +
+"1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\\n" +
+"0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1\\n" +
+"100 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"}}"""
+        script = compose_lcb_output_script(prog, input_data)
+
+        # Should successfully parse and generate script
+        assert "class Solution" in script
+        assert "sol = Solution()" in script
+        assert "solve(" in script
+
+    def test_execution_python_dict_with_string_concatenation(self) -> None:
+        """Test execution with Python dict format using string concatenation."""
+        prog = """
+class Solution:
+    def solve(self, input_str):
+        lines = input_str.strip().split('\\n')
+        return len(lines)
+"""
+        input_data = """{"inputdata": {"input_str": "21\\n" +
+"1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\\n" +
+"0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1\\n" +
+"100 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"}}"""
+        script = compose_lcb_output_script(prog, input_data)
+
+        import io
+        import sys
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+        exec(script)
+        sys.stdout = sys.__stdout__
+
+        # Should output 4 (four lines: "21", line of 1s and 0s, line of 0s and 1s, line of 100 and 1s)
+        assert "4" in captured_output.getvalue()
