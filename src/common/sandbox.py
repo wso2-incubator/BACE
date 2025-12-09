@@ -408,8 +408,8 @@ class SafeCodeSandbox:
             "__builtins__",
             "__globals__",
             "__locals__",
-            "globals()",
-            "locals()",
+            # "globals()",
+            # "locals()", # TODO: Consider allowing globals/locals with restrictions
             "vars()",
             "dir()",
             "hasattr(",
