@@ -1,8 +1,8 @@
-# src/common/coevolution/core/breeding_strategy.py
+# src/common/coevolution/breeding_strategy.py
 import numpy as np
 from loguru import logger
 
-from .interfaces import (
+from .core.interfaces import (
     OPERATION_CROSSOVER,
     OPERATION_EDIT,
     OPERATION_MUTATION,

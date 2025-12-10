@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from common.coevolution.core.breeding_strategy import BreedingStrategy
+from common.coevolution.breeding_strategy import BreedingStrategy
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
 from common.coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
