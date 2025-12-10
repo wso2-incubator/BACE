@@ -55,14 +55,6 @@ def sample_test_individuals() -> list[TestIndividual]:
 
 
 @pytest.fixture
-def mock_pareto_calculator() -> MagicMock:
-    """Mock IParetoFrontCalculator that returns first two indices."""
-    mock = MagicMock()
-    mock.return_value = [0, 1]  # Return indices of Pareto front
-    return mock
-
-
-@pytest.fixture
 def mock_test_block_builder() -> MagicMock:
     """Mock ITestBlockBuilder that returns a formatted test class."""
     mock = MagicMock()
@@ -81,13 +73,11 @@ def sample_code_population(
 @pytest.fixture
 def sample_test_population(
     sample_test_individuals: list[TestIndividual],
-    mock_pareto_calculator: MagicMock,
     mock_test_block_builder: MagicMock,
 ) -> TestPopulation:
     """Create a sample TestPopulation with mocked dependencies."""
     return TestPopulation(
         individuals=sample_test_individuals,
-        pareto=mock_pareto_calculator,
         test_block_rebuilder=mock_test_block_builder,
         test_class_block="class TestOriginal:\n    pass",
         generation=0,
@@ -115,13 +105,11 @@ class TestBasePopulationSharedBehavior:
     def test_test_population_initialization(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
         mock_test_block_builder: MagicMock,
     ) -> None:
         """Test TestPopulation initialization with valid individuals."""
         pop = TestPopulation(
             individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
             test_block_rebuilder=mock_test_block_builder,
             test_class_block="class Test:\n    pass",
             generation=3,
@@ -456,7 +444,6 @@ class TestTestPopulation:
     def test_initialization_with_test_class_block(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
         mock_test_block_builder: MagicMock,
     ) -> None:
         """Test TestPopulation initialization requires test_class_block."""
@@ -464,7 +451,6 @@ class TestTestPopulation:
 
         pop = TestPopulation(
             individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
             test_block_rebuilder=mock_test_block_builder,
             test_class_block=test_block,
             generation=2,
@@ -477,14 +463,12 @@ class TestTestPopulation:
     def test_initialization_without_test_class_block(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
         mock_test_block_builder: MagicMock,
     ) -> None:
         """Test initialization without test_class_block raises ValueError."""
         with pytest.raises(ValueError, match="test_class_block is required"):
             TestPopulation(
                 individuals=sample_test_individuals,
-                pareto=mock_pareto_calculator,
                 test_block_rebuilder=mock_test_block_builder,
                 test_class_block="",
                 generation=0,
@@ -493,111 +477,16 @@ class TestTestPopulation:
     def test_initialization_with_whitespace_test_class_block(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
         mock_test_block_builder: MagicMock,
     ) -> None:
         """Test initialization with whitespace-only test_class_block raises ValueError."""
         with pytest.raises(ValueError, match="test_class_block is required"):
             TestPopulation(
                 individuals=sample_test_individuals,
-                pareto=mock_pareto_calculator,
                 test_block_rebuilder=mock_test_block_builder,
                 test_class_block="   \n\t  ",
                 generation=0,
             )
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_discriminations_initially_none(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test discriminations are initialized to None (NaN in array)."""
-        discs = sample_test_population.discriminations
-
-        assert isinstance(discs, np.ndarray)
-        assert len(discs) == 5
-        assert np.all(np.isnan(discs))
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_discriminations_property_with_values(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test discriminations property returns correct values."""
-        # Set some discriminations
-        for i, ind in enumerate(sample_test_population._individuals):
-            ind.discrimination = 0.1 * (i + 1)
-
-        discs = sample_test_population.discriminations
-        np.testing.assert_array_almost_equal(discs, [0.1, 0.2, 0.3, 0.4, 0.5])
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_discriminations_property_with_mixed_values(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test discriminations property with mixed values and None."""
-        sample_test_population._individuals[0].discrimination = 0.5
-        sample_test_population._individuals[1].discrimination = None
-        sample_test_population._individuals[2].discrimination = 0.8
-        sample_test_population._individuals[3].discrimination = None
-        sample_test_population._individuals[4].discrimination = 0.3
-
-        discs = sample_test_population.discriminations
-
-        assert discs[0] == 0.5
-        assert np.isnan(discs[1])
-        assert discs[2] == 0.8
-        assert np.isnan(discs[3])
-        assert discs[4] == 0.3
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_discriminations_valid(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test set_discriminations with valid array."""
-        new_discs = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
-        sample_test_population.set_discriminations(new_discs)
-
-        for i, ind in enumerate(sample_test_population._individuals):
-            assert ind.discrimination == new_discs[i]
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_discriminations_with_nan(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test set_discriminations converts NaN to None."""
-        new_discs = np.array([0.9, np.nan, 0.7, np.nan, 0.5])
-        sample_test_population.set_discriminations(new_discs)
-
-        assert sample_test_population._individuals[0].discrimination == 0.9
-        assert sample_test_population._individuals[1].discrimination is None
-        assert sample_test_population._individuals[2].discrimination == 0.7
-        assert sample_test_population._individuals[3].discrimination is None
-        assert sample_test_population._individuals[4].discrimination == 0.5
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_discriminations_wrong_size(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test set_discriminations with wrong size raises ValueError."""
-        new_discs = np.array([0.9, 0.8, 0.7])  # Only 3 values
-
-        with pytest.raises(ValueError, match="must match population size"):
-            sample_test_population.set_discriminations(new_discs)
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_default_discriminations(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test _set_default_discriminations resets all to None."""
-        # First set some values
-        for i, ind in enumerate(sample_test_population._individuals):
-            ind.discrimination = 0.5 + i * 0.1
-
-        # Reset
-        sample_test_population._set_default_discriminations()
-
-        # All should be None
-        for ind in sample_test_population._individuals:
-            assert ind.discrimination is None
 
     def test_test_class_block_property(
         self, sample_test_population: TestPopulation
@@ -606,136 +495,6 @@ class TestTestPopulation:
         assert (
             sample_test_population.test_class_block == "class TestOriginal:\n    pass"
         )
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_build_test_class_block_calls_rebuild_fn(
-        self, sample_test_population: TestPopulation, mock_test_block_builder: MagicMock
-    ) -> None:
-        """Test _build_test_class_block calls rebuild function."""
-        sample_test_population._build_test_class_block()
-
-        # Verify rebuild function was called
-        mock_test_block_builder.assert_called_once()
-
-        # Check arguments
-        call_args = mock_test_block_builder.call_args
-        assert call_args[0][0] == "class TestOriginal:\n    pass"  # Original block
-        assert len(call_args[0][1]) == 5  # 5 snippets
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_build_test_class_block_updates_block(
-        self, sample_test_population: TestPopulation, mock_test_block_builder: MagicMock
-    ) -> None:
-        """Test _build_test_class_block updates test_class_block."""
-        mock_test_block_builder.return_value = (
-            "class TestNew:\n    def test_new(self): pass"
-        )
-
-        sample_test_population._build_test_class_block()
-
-        assert (
-            sample_test_population.test_class_block
-            == "class TestNew:\n    def test_new(self): pass"
-        )
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_get_pareto_front_calls_pareto_fn(
-        self, sample_test_population: TestPopulation, mock_pareto_calculator: MagicMock
-    ) -> None:
-        """Test get_pareto_front calls pareto function."""
-        # Set some discriminations
-        sample_test_population.set_discriminations(np.array([0.5, 0.6, 0.7, 0.8, 0.9]))
-
-        _ = sample_test_population.get_pareto_front()
-
-        # Verify pareto function was called
-        mock_pareto_calculator.assert_called_once()
-
-        # Check it was called with probabilities and discriminations
-        call_args = mock_pareto_calculator.call_args[0]
-        assert len(call_args) == 2  # probabilities and discriminations
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_get_pareto_front_returns_correct_individuals(
-        self, sample_test_population: TestPopulation, mock_pareto_calculator: MagicMock
-    ) -> None:
-        """Test get_pareto_front returns correct individuals based on indices."""
-        mock_pareto_calculator.return_value = [1, 3]  # Return indices 1 and 3
-
-        result = sample_test_population.get_pareto_front()
-
-        assert len(result) == 2
-        assert result[0] == sample_test_population._individuals[1]
-        assert result[1] == sample_test_population._individuals[3]
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_get_pareto_front_empty_result(
-        self, sample_test_population: TestPopulation, mock_pareto_calculator: MagicMock
-    ) -> None:
-        """Test get_pareto_front with empty Pareto front."""
-        mock_pareto_calculator.return_value = []
-
-        result = sample_test_population.get_pareto_front()
-
-        assert result == []
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_on_generation_advanced_rebuilds_block(
-        self, sample_test_population: TestPopulation, mock_test_block_builder: MagicMock
-    ) -> None:
-        """Test _on_generation_advanced rebuilds test class block."""
-        mock_test_block_builder.reset_mock()
-
-        # Trigger generation advancement
-        sample_test_population._on_generation_advanced()
-
-        # Verify rebuild was called
-        mock_test_block_builder.assert_called_once()
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_on_generation_advanced_resets_discriminations(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test _on_generation_advanced resets discriminations to None."""
-        # Set discriminations
-        sample_test_population.set_discriminations(np.array([0.5, 0.6, 0.7, 0.8, 0.9]))
-
-        # Advance generation (triggers _on_generation_advanced)
-        sample_test_population._on_generation_advanced()
-
-        # All should be None
-        for ind in sample_test_population._individuals:
-            assert ind.discrimination is None
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_set_next_generation_triggers_rebuild(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test set_next_generation triggers rebuild and reset."""
-        pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-            generation=0,
-        )
-
-        # Set discriminations
-        pop.set_discriminations(np.array([0.5, 0.6, 0.7, 0.8, 0.9]))
-
-        mock_test_block_builder.reset_mock()
-
-        # Advance generation
-        new_individuals = sample_test_individuals[:3]
-        pop.set_next_generation(new_individuals)
-
-        # Should have rebuilt and reset discriminations
-        mock_test_block_builder.assert_called_once()
-        for ind in pop._individuals:
-            assert ind.discrimination is None
 
     def test_repr_format(self, sample_test_population: TestPopulation) -> None:
         """Test __repr__ string representation."""
@@ -865,24 +624,6 @@ class TestPopulationEdgeCases:
         assert best_individual.probability == 1.0
         assert pop.compute_average_probability() == 0.5
 
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_discriminations_all_nan(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test TestPopulation with all NaN discriminations."""
-        pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-        )
-
-        discs = pop.discriminations
-        assert np.all(np.isnan(discs))
-
     def test_update_probabilities_with_edge_values(
         self, sample_code_population: CodePopulation
     ) -> None:
@@ -944,48 +685,16 @@ class TestPopulationIntegration:
             assert pop.generation == gen + 1
             assert pop.size == 5
 
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_test_population_with_discriminations_workflow(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test TestPopulation workflow with discrimination updates."""
-        pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-            generation=0,
-        )
-
-        # Set initial discriminations
-        pop.set_discriminations(np.array([0.5, 0.6, 0.7, 0.8, 0.9]))
-
-        # Get Pareto front
-        pareto = pop.get_pareto_front()
-        assert len(pareto) == 2  # Mock returns [0, 1]
-
-        # Advance generation
-        new_individuals = sample_test_individuals[:3]
-        pop.set_next_generation(new_individuals)
-
-        # Discriminations should be reset
-        assert all(ind.discrimination is None for ind in pop._individuals)
-
     def test_code_and_test_populations_together(
         self,
         sample_code_individuals: list[CodeIndividual],
         sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
         mock_test_block_builder: MagicMock,
     ) -> None:
         """Test CodePopulation and TestPopulation working together."""
         code_pop = CodePopulation(sample_code_individuals, generation=0)
         test_pop = TestPopulation(
             individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
             test_block_rebuilder=mock_test_block_builder,
             test_class_block="class Test:\n    pass",
             generation=0,
@@ -1036,85 +745,6 @@ class TestPopulationIntegration:
 
         # Average probability should increase
         assert avg_probs[-1] > avg_probs[0]
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_pareto_front_selection_followed_by_advancement(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test selecting Pareto front and advancing to next generation."""
-        mock_pareto_calculator.return_value = [1, 3, 4]  # Indices on Pareto front
-
-        pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-            generation=0,
-        )
-
-        # Set discriminations
-        pop.set_discriminations(np.array([0.5, 0.8, 0.3, 0.9, 0.7]))
-
-        # Get Pareto front
-        pareto = pop.get_pareto_front()
-        assert len(pareto) == 3
-
-        # Use Pareto front for next generation
-        pop.set_next_generation(pareto)
-
-        assert pop.generation == 1
-        assert pop.size == 3
-        # Discriminations should be reset
-        assert all(ind.discrimination is None for ind in pop._individuals)
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_full_coevolution_cycle(
-        self,
-        sample_code_individuals: list[CodeIndividual],
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test a complete coevolution cycle."""
-        code_pop = CodePopulation(sample_code_individuals, generation=0)
-        test_pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-            generation=0,
-        )
-
-        # Simulate coevolution for 3 generations
-        for gen in range(3):
-            # Update code probabilities
-            code_probs = np.random.uniform(0.3, 0.9, code_pop.size)
-            code_pop.update_probabilities(code_probs)
-
-            # Update test probabilities and discriminations
-            test_probs = np.random.uniform(0.3, 0.9, test_pop.size)
-            test_discs = np.random.uniform(0.0, 1.0, test_pop.size)
-            test_pop.update_probabilities(test_probs)
-            test_pop.set_discriminations(test_discs)
-
-            # Select best from both populations
-            best_code = code_pop.get_top_k_individuals(3)
-            pareto_tests = test_pop.get_pareto_front()
-
-            # Advance both populations
-            code_pop.set_next_generation(best_code)
-
-            # Use pareto front if not empty, otherwise use top k
-            if pareto_tests:
-                test_pop.set_next_generation(pareto_tests)
-            else:
-                test_pop.set_next_generation(test_pop.get_top_k_individuals(3))
-
-            assert code_pop.generation == gen + 1
-            assert test_pop.generation == gen + 1
 
 
 class TestPopulationAdditionalCoverage:
@@ -1170,48 +800,6 @@ class TestPopulationAdditionalCoverage:
         np.testing.assert_array_almost_equal(
             sample_code_population.probabilities, new_probs
         )
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_discriminations_accepts_python_list_with_nan(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """set_discriminations should accept Python lists containing NaN values."""
-        pytest.skip("Discrimination feature not implemented")
-
-    @pytest.mark.skip(reason="Discrimination feature removed from TestIndividual")
-    def test_set_discriminations_raises_on_none_value(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Passing None in discriminations should raise a TypeError via np.isfinite(None)."""
-        pytest.skip("Discrimination feature not implemented")
-
-    @pytest.mark.skip(reason="Uses removed discrimination or rebuild features")
-    def test_rebuild_block_after_shrink_has_correct_snippet_count(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_pareto_calculator: MagicMock,
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """After shrinking the population, rebuild should use exactly that many snippets."""
-        pop = TestPopulation(
-            individuals=sample_test_individuals,
-            pareto=mock_pareto_calculator,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
-            generation=0,
-        )
-
-        mock_test_block_builder.reset_mock()
-
-        # Shrink to 3 and advance generation
-        pop.set_next_generation(sample_test_individuals[:3])
-
-        # Verify builder called with exactly 3 snippets
-        mock_test_block_builder.assert_called_once()
-        args, kwargs = mock_test_block_builder.call_args
-        assert isinstance(args[1], list)
-        assert len(args[1]) == 3
 
 
 if __name__ == "__main__":
