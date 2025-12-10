@@ -27,15 +27,12 @@ from common.coevolution.core.interfaces import (
     Problem,
 )
 from common.coevolution.core.mock import (
-    MockCodeBayesianSystem,
+    MockBayesianSystem,
+    MockBreedingStrategy,
     MockCodeOperator,
     MockDatasetTestBlockBuilder,
+    MockEliteSelector,
     MockExecutionSystem,
-    MockFeedbackGenerator,
-    MockPareto,
-    MockProbabilityAssigner,
-    MockSelectionStrategy,
-    MockTestBayesianSystem,
     MockTestBlockRebuilder,
     MockTestOperator,
     get_mock_problem,
@@ -78,16 +75,14 @@ def create_configurations() -> tuple[
 
     # Code genetic operator rates
     code_op_rates = OperatorRatesConfig(
-        crossover_rate=0.2,
+        operation_rates={"crossover": 0.2, "edit": 0.6},
         mutation_rate=0.2,
-        edit_rate=0.8,
     )
 
     # Test genetic operator rates
     test_op_rates = OperatorRatesConfig(
-        crossover_rate=0.4,
+        operation_rates={"crossover": 0.4, "edit": 0.3},
         mutation_rate=0.3,
-        edit_rate=0.3,
     )
 
     # Bayesian belief update configuration
@@ -115,27 +110,25 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     code_operator = MockCodeOperator(problem)
     test_operator = MockTestOperator(problem)
 
-    # Create strategies (separate for code and test)
-    code_selector = MockSelectionStrategy()
-    test_selector = MockSelectionStrategy()
-    code_prob_assigner = MockProbabilityAssigner()
-    test_prob_assigner = MockProbabilityAssigner()
+    # Create single bayesian system (not separate for code/test)
+    bayesian_system = MockBayesianSystem()
 
-    # Create grouped systems
+    # Create mock breeding strategies
+    code_breeding_strategy = MockBreedingStrategy(individual_type="code")
+    test_breeding_strategy = MockBreedingStrategy(individual_type="test")
+
+    # Create elite selectors
+    code_elite_selector = MockEliteSelector()
+    test_elite_selector = MockEliteSelector()
+
+    # Create execution system
     execution_system = MockExecutionSystem()
-    code_bayesian_system = MockCodeBayesianSystem()
-    test_bayesian_system = MockTestBayesianSystem()
 
     # Create test-specific components
-    pareto = MockPareto()
     test_block_rebuilder = MockTestBlockRebuilder()
 
     # Create dataset test block builder
     dataset_test_block_builder = MockDatasetTestBlockBuilder()
-
-    # Create feedback generators
-    code_feedback_gen = MockFeedbackGenerator()
-    test_feedback_gen = MockFeedbackGenerator()
 
     # Mock sandbox (not used in mock implementation)
     sandbox = None
@@ -143,17 +136,13 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     return {
         "code_operator": code_operator,
         "test_operator": test_operator,
-        "code_selector": code_selector,
-        "test_selector": test_selector,
-        "code_prob_assigner": code_prob_assigner,
-        "test_prob_assigner": test_prob_assigner,
+        "code_breeding_strategy": code_breeding_strategy,
+        "test_breeding_strategy": test_breeding_strategy,
+        "code_elite_selector": code_elite_selector,
+        "test_elite_selector": test_elite_selector,
         "execution_system": execution_system,
-        "code_bayesian_system": code_bayesian_system,
-        "test_bayesian_system": test_bayesian_system,
-        "pareto": pareto,
+        "bayesian_system": bayesian_system,
         "test_block_rebuilder": test_block_rebuilder,
-        "code_feedback_gen": code_feedback_gen,
-        "test_feedback_gen": test_feedback_gen,
         "dataset_test_block_builder": dataset_test_block_builder,
         "sandbox": sandbox,
     }
@@ -290,23 +279,17 @@ def test_orchestrator_full_run(
         # Operators
         code_operator=mock_components["code_operator"],
         test_operator=mock_components["test_operator"],
-        # Strategies (separate for code and test)
-        code_selector=mock_components["code_selector"],
-        test_selector=mock_components["test_selector"],
-        code_prob_assigner=mock_components["code_prob_assigner"],
-        test_prob_assigner=mock_components["test_prob_assigner"],
-        # Grouped systems
+        # Systems
         execution_system=mock_components["execution_system"],
-        code_bayesian_system=mock_components["code_bayesian_system"],
-        test_bayesian_system=mock_components["test_bayesian_system"],
+        bayesian_system=mock_components["bayesian_system"],
         # Test components
-        pareto=mock_components["pareto"],
         test_block_rebuilder=mock_components["test_block_rebuilder"],
-        # Feedback generators
-        code_feedback_gen=mock_components["code_feedback_gen"],
-        test_feedback_gen=mock_components["test_feedback_gen"],
-        # Dataset test block builder
         dataset_test_block_builder=mock_components["dataset_test_block_builder"],
+        # Breeding strategies and elite selectors
+        code_breeding_strategy=mock_components["code_breeding_strategy"],
+        test_breeding_strategy=mock_components["test_breeding_strategy"],
+        code_elite_selector=mock_components["code_elite_selector"],
+        test_elite_selector=mock_components["test_elite_selector"],
     )
 
     # Run coevolution
@@ -407,23 +390,17 @@ def main() -> None:
         # Operators
         code_operator=components["code_operator"],
         test_operator=components["test_operator"],
-        # Strategies (separate for code and test)
-        code_selector=components["code_selector"],
-        test_selector=components["test_selector"],
-        code_prob_assigner=components["code_prob_assigner"],
-        test_prob_assigner=components["test_prob_assigner"],
-        # Grouped systems
+        # Systems
         execution_system=components["execution_system"],
-        code_bayesian_system=components["code_bayesian_system"],
-        test_bayesian_system=components["test_bayesian_system"],
+        bayesian_system=components["bayesian_system"],
         # Test components
-        pareto=components["pareto"],
         test_block_rebuilder=components["test_block_rebuilder"],
-        # Feedback generators
-        code_feedback_gen=components["code_feedback_gen"],
-        test_feedback_gen=components["test_feedback_gen"],
-        # Dataset test block builder
         dataset_test_block_builder=components["dataset_test_block_builder"],
+        # Breeding strategies and elite selectors
+        code_breeding_strategy=components["code_breeding_strategy"],
+        test_breeding_strategy=components["test_breeding_strategy"],
+        code_elite_selector=components["code_elite_selector"],
+        test_elite_selector=components["test_elite_selector"],
     )
 
     # Step 5: Run coevolution

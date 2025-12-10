@@ -12,6 +12,8 @@ from .interfaces import (
     OPERATION_INITIAL,
     OPERATION_MUTATION,
     BayesianConfig,
+    BreedingContext,
+    CoevolutionContext,
     ExecutionResults,
     IBayesianSystem,
     ICodeOperator,
@@ -23,6 +25,7 @@ from .interfaces import (
     Operation,
     OperationContext,
     ParentProbabilities,
+    PopulationConfig,
     Problem,
     Sandbox,
     Test,
@@ -236,6 +239,140 @@ class MockProbabilityAssigner(IProbabilityAssigner):
             return initial_prior
         # New individuals inherit the mean probability of their parents
         return float(np.mean(parent_probs))
+
+
+class MockEliteSelector:
+    """Mock implementation of IEliteSelector for testing."""
+
+    def select_elites(
+        self,
+        coevolution_context: CoevolutionContext,
+        target_population_type: str,
+        population_config: PopulationConfig,
+    ) -> list[int]:
+        """
+        Select elite individuals using simple top-k selection by probability.
+
+        Args:
+            coevolution_context: Complete system state (CoevolutionContext)
+            target_population_type: "code" or test population key
+            population_config: Population configuration
+
+        Returns:
+            Indices of selected elite individuals
+        """
+        # Get the target population
+        if target_population_type == "code":
+            population = coevolution_context.code_population
+            # For code, use elitism_rate from CodePopulationConfig
+            if hasattr(population_config, "elitism_rate"):
+                num_elites = int(population.size * population_config.elitism_rate)
+            else:
+                num_elites = max(1, population.size // 2)  # Default: keep top 50%
+
+            # Simple top-k selection by probability
+            probabilities = population.probabilities
+            sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
+            elite_indices: list[int] = sorted_indices[:num_elites].tolist()
+        else:
+            # Test population
+            test_population = coevolution_context.test_populations.get(
+                target_population_type
+            )
+            if test_population is None:
+                logger.warning(
+                    f"MockEliteSelector: population '{target_population_type}' not found"
+                )
+                return []
+            # For tests, select top 50% by default (could also implement Pareto logic)
+            num_elites = max(1, test_population.size // 2)
+
+            # Simple top-k selection by probability
+            probabilities = test_population.probabilities
+            sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
+            elite_indices = sorted_indices[:num_elites].tolist()
+
+        logger.debug(
+            f"MockEliteSelector: Selected {len(elite_indices)} elites from "
+            f"{target_population_type} population (size={population.size})"
+        )
+        return elite_indices
+
+
+class MockBreedingStrategy:
+    """Mock implementation of IBreedingStrategy for testing."""
+
+    def __init__(self, individual_type: str = "code") -> None:
+        """
+        Initialize mock breeding strategy.
+
+        Args:
+            individual_type: "code" or "test" to determine which individuals to create
+        """
+        self.individual_type = individual_type
+        self.offspring_count = 0
+
+    def generate_offspring(self, context: BreedingContext) -> object:
+        """
+        Generate a mock offspring individual.
+
+        Args:
+            context: BreedingContext containing coevolution state and config
+
+        Returns:
+            A new mock offspring individual
+        """
+        from .individual import CodeIndividual, TestIndividual
+
+        self.offspring_count += 1
+
+        # Select a random parent for probability inheritance
+        if self.individual_type == "code":
+            population = context.coevolution_context.code_population
+            parent_idx = np.random.randint(0, population.size)
+            parent = population[parent_idx]
+
+            # Create new code individual
+            offspring: CodeIndividual | TestIndividual = CodeIndividual(
+                snippet=f"{parent.snippet} # mock offspring {self.offspring_count}",
+                probability=parent.probability * 0.95,  # Slight decrease
+                creation_op="crossover",
+                generation_born=context.coevolution_context.code_population.generation
+                + 1,
+                parent_ids=[parent.id],
+            )
+        else:
+            # Test population - get from context
+            test_pop_key = context.target_population_type
+            test_population = context.coevolution_context.test_populations.get(
+                test_pop_key
+            )
+            if test_population is None or test_population.size == 0:
+                # Fallback: create a new test individual
+                offspring = TestIndividual(
+                    snippet=f"def test_mock_{self.offspring_count}(self): assert True",
+                    probability=0.5,
+                    creation_op="initial",
+                    generation_born=0,
+                    parent_ids=[],
+                )
+            else:
+                parent_idx = np.random.randint(0, test_population.size)
+                test_parent = test_population[parent_idx]
+
+                offspring = TestIndividual(
+                    snippet=f"{test_parent.snippet} # mock offspring {self.offspring_count}",
+                    probability=test_parent.probability * 0.95,
+                    creation_op="mutation",
+                    generation_born=test_population.generation + 1,
+                    parent_ids=[test_parent.id],
+                )
+
+        logger.debug(
+            f"MockBreedingStrategy: Generated {self.individual_type} offspring "
+            f"{offspring.id} (prob={offspring.probability:.3f})"
+        )
+        return offspring
 
 
 # MockPareto has been removed - elite selection now uses IEliteSelector protocol
