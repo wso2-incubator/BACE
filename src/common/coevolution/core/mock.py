@@ -274,6 +274,11 @@ class MockEliteSelector:
             probabilities = population.probabilities
             sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
             elite_indices: list[int] = sorted_indices[:num_elites].tolist()
+
+            logger.debug(
+                f"MockEliteSelector: Selected {len(elite_indices)} elites from "
+                f"{target_population_type} population (size={population.size})"
+            )
         else:
             # Test population
             test_population = coevolution_context.test_populations.get(
@@ -292,10 +297,11 @@ class MockEliteSelector:
             sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
             elite_indices = sorted_indices[:num_elites].tolist()
 
-        logger.debug(
-            f"MockEliteSelector: Selected {len(elite_indices)} elites from "
-            f"{target_population_type} population (size={population.size})"
-        )
+            logger.debug(
+                f"MockEliteSelector: Selected {len(elite_indices)} elites from "
+                f"{target_population_type} population (size={test_population.size})"
+            )
+
         return elite_indices
 
 
