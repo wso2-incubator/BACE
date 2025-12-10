@@ -1,10 +1,9 @@
 # src/common/coevolution/core/population.py
 
-import numpy as np
 from loguru import logger
 
 from .individual import CodeIndividual, TestIndividual
-from .interfaces import BasePopulation, IPareto, ITestBlockRebuilder
+from .interfaces import BasePopulation, ITestBlockRebuilder
 
 
 class CodePopulation(BasePopulation[CodeIndividual]):
@@ -24,18 +23,18 @@ class CodePopulation(BasePopulation[CodeIndividual]):
 
 class TestPopulation(BasePopulation[TestIndividual]):
     """
-    Multi-objective population with Pareto-based selection.
+    Population class for TestIndividuals.
 
-    Unlike CodePopulation, tests are selected based on TWO objectives:
-    1. Probability (belief in correctness)
-    2. Discrimination (ability to distinguish correct/incorrect code)
+    Manages test individuals and rebuilds the test class block when the generation advances.
+
+    Note: Elite selection logic has been moved to IEliteSelector implementations,
+    making this class independent of any specific selection strategy (e.g., Pareto).
     """
 
     def __init__(
         self,
         individuals: list[TestIndividual],
         # injected dependencies
-        pareto: IPareto,
         test_block_rebuilder: ITestBlockRebuilder,
         # default values
         test_class_block: str = "",
@@ -46,8 +45,6 @@ class TestPopulation(BasePopulation[TestIndividual]):
 
         super().__init__(individuals, generation)
         self._test_class_block = test_class_block
-
-        self._pareto = pareto
         self._test_block_rebuilder = test_block_rebuilder
 
         logger.trace(f"Initialized TestPopulation with {self.size} individuals")
@@ -76,23 +73,6 @@ class TestPopulation(BasePopulation[TestIndividual]):
     def test_class_block(self) -> str:
         """Get the full unittest class block."""
         return self._test_class_block
-
-    def get_pareto_front(self, observation_matrix: np.ndarray) -> list[TestIndividual]:
-        """
-        Selects Pareto-optimal individuals based on probabilities and test execution results.
-
-        Args:
-            observation_matrix: Execution results from running this population's tests
-                              against code population (rows=code, cols=tests)
-
-        Returns:
-            List of TestIndividuals that are on the Pareto front.
-        """
-        logger.debug("Computing Pareto front for TestPopulation...")
-        indices: list[int] = self._pareto.get_pareto_indices(
-            self.probabilities, observation_matrix
-        )
-        return [self._individuals[i] for i in indices]
 
     def __repr__(self) -> str:
         return (

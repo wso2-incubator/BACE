@@ -10,6 +10,7 @@ Interface Organization:
 
     1. Data Structures (dataclasses):
        - Configuration classes (BayesianConfig, OperatorRatesConfig, etc.)
+       - Context objects (CoevolutionContext, BreedingContext, OperationContext, InteractionData)
        - Data transfer objects (Test, Problem, LogEntry)
        - Type aliases (Operations, ExecutionResults, etc.)
 
@@ -19,23 +20,32 @@ Interface Organization:
 
     3. Fine-Grained Protocols:
        These are single-responsibility interfaces that can be composed:
-       - IGeneticOperator: mutate, crossover, edit
+       - IGeneticOperator: applies genetic operations using OperationContext
+       - IBreedingStrategy: orchestrates breeding process using BreedingContext
+       - IEliteSelector: selects elite individuals using CoevolutionContext
        - ICodeInitializer / ITestInitializer: create initial populations
-       - ISelectionStrategy: parent selection
+       - ISelectionStrategy: parent selection for breeding
        - IProbabilityAssigner: offspring probability calculation
        - IBeliefInitializer / IBeliefUpdater: Bayesian operations
        - ICodeTestExecutor / IObservationMatrixBuilder: execution operations
        - ITestBlockRebuilder: test class block reconstruction
-       - IFeedbackGenerator: edit operation feedback
        - IIndividualFactory: individual creation
 
     4. Grouped Protocols (Systems):
        These combine related functionality typically implemented together:
        - IBayesianSystem: Belief initialization + updating
        - IExecutionSystem: Code execution + observation matrix building
-       - IPareto: Discrimination calculation + Pareto front selection
        - ICodeOperator: Code initialization + genetic operations
        - ITestOperator: Test initialization + genetic operations
+
+    5. Context-Based Architecture:
+       The system uses immutable context objects to pass state:
+       - CoevolutionContext: Complete system state (all populations + interactions)
+       - BreedingContext: Context for breeding strategies (adds rates config)
+       - OperationContext: Context for operators (adds selected individuals)
+       - InteractionData: Encapsulates code-test interaction (execution + observation)
+
+       This design maximizes flexibility and extensibility while maintaining clean interfaces.
 """
 
 from abc import ABC, abstractmethod
@@ -124,20 +134,42 @@ class BayesianConfig:
 @dataclass
 class OperatorRatesConfig:
     """
-    A data structure to hold the hyperparameters for genetic operations.
+    Configuration for operation selection probabilities.
+
+    Supports flexible operation types - add new operations without changing this class.
+    The breeding strategy samples from operation_rates to select a base operation,
+    then applies mutation with mutation_rate probability.
+
+    Example:
+        OperatorRatesConfig(
+            operation_rates={"crossover": 0.3, "edit": 0.2, "det": 0.1},
+            mutation_rate=0.1
+        )
     """
 
-    crossover_rate: float
-    mutation_rate: float
-    edit_rate: float
+    operation_rates: dict[
+        Operation, float
+    ]  # Maps operation name to selection probability
+    mutation_rate: float  # Probability of applying mutation after base operation
 
     def __post_init__(self) -> None:
-        if not (0.0 <= self.crossover_rate <= 1.0):
-            raise ValueError("crossover_rate must be in the range [0.0, 1.0]")
+        # Validate all operation rates are in [0, 1]
+        for op, rate in self.operation_rates.items():
+            if not (0.0 <= rate <= 1.0):
+                raise ValueError(
+                    f"Rate for operation '{op}' must be in [0.0, 1.0], got {rate}"
+                )
+
         if not (0.0 <= self.mutation_rate <= 1.0):
-            raise ValueError("mutation_rate must be in the range [0.0, 1.0]")
-        if not (0.0 <= self.edit_rate <= 1.0):
-            raise ValueError("edit_rate must be in the range [0.0, 1.0]")
+            raise ValueError("mutation_rate must be in [0.0, 1.0]")
+
+        # Validate that rates sum to at most 1.0
+        total = sum(self.operation_rates.values())
+        if total > 1.0:
+            raise ValueError(
+                f"Operation rates sum to {total:.4f}, must be ≤ 1.0. "
+                f"Remaining probability ({1.0 - total:.4f}) is used for reproduction."
+            )
 
 
 @dataclass
@@ -150,6 +182,7 @@ class PopulationConfig:
 
     initial_prior: float
     initial_population_size: int
+    diversity_selection: bool = False  # Whether to use diversity-based selection
 
     def __post_init__(self) -> None:
         if not (0.0 < self.initial_prior < 1.0):
@@ -165,9 +198,9 @@ class CodePopulationConfig(PopulationConfig):
     Inherits from PopulationConfig.
     """
 
-    max_population_size: int
-    elitism_rate: float
-    offspring_rate: float
+    max_population_size: int = 0
+    elitism_rate: float = 0.0
+    offspring_rate: float = 0.0
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -210,6 +243,117 @@ class Problem:
     starter_code: str
     public_test_cases: list[Test]
     private_test_cases: list[Test]
+
+
+if TYPE_CHECKING:
+    from .individual import CodeIndividual, TestIndividual
+    from .population import CodePopulation, TestPopulation
+
+
+@dataclass(frozen=True)
+class InteractionData:
+    """
+    Captures the interaction between code population and a specific test population.
+
+    This encapsulates execution results and observation matrix for a single
+    code-test population pair, making the data relationship explicit.
+    """
+
+    execution_results: ExecutionResults
+    observation_matrix: np.ndarray
+
+
+@dataclass(frozen=True)
+class CoevolutionContext:
+    """
+    Immutable snapshot of the coevolution system state.
+
+    Contains all populations and their interactions at a specific point in time.
+    This serves as the single source of truth for the system state, passed to
+    breeding strategies and operators.
+
+    Design principles:
+    - One code population (primary population being evolved)
+    - Multiple test populations with different roles/types
+    - Each test population has interaction data with code population
+    - Immutable to prevent accidental state mutations
+
+    Example:
+        context = CoevolutionContext(
+            code_population=code_pop,
+            test_populations={
+                "public": public_tests,
+                "unittest": generated_tests,
+                "differential": diff_tests,
+            },
+            interactions={
+                "public": InteractionData(exec_results_1, obs_matrix_1),
+                "unittest": InteractionData(exec_results_2, obs_matrix_2),
+                "differential": InteractionData(exec_results_3, obs_matrix_3),
+            }
+        )
+
+    Note: current_generation is accessible via code_population.generation
+    """
+
+    code_population: "CodePopulation"
+    test_populations: dict[
+        str, "TestPopulation"
+    ]  # Keys: "public", "unittest", "differential", "property", etc.
+    interactions: dict[str, InteractionData]  # Same keys as test_populations
+
+
+@dataclass(frozen=True)
+class BreedingContext:
+    """
+    Context for breeding strategies with breeding-specific configuration.
+
+    Wraps CoevolutionContext with additional breeding parameters needed to
+    generate offspring. This separation keeps the breeding strategy interface
+    clean and extensible.
+
+    Args:
+        coevolution_context: Complete system state
+        rates_config: Operation selection probabilities
+        target_population_type: Which population to breed - "code" or test population key
+    """
+
+    coevolution_context: CoevolutionContext
+    rates_config: OperatorRatesConfig
+    target_population_type: str  # "code" or key from test_populations like "unittest"
+
+
+@dataclass(frozen=True)
+class OperationContext:
+    """
+    Context object passed to genetic operators with operation-specific inputs.
+
+    This design supports:
+    - Same-population operations (code→code, test→test)
+    - Cross-population operations (code→test for DET, test+code→code for edit)
+    - Access to full system state via coevolution context
+    - Flexible inputs without assuming genetic lineage
+
+    The breeding strategy selects relevant individuals and passes them explicitly.
+    The operator extracts what it needs and ignores the rest.
+
+    Design:
+    - code_individuals/test_individuals: Selected inputs for this specific operation
+    - coevolution_context: Full system state for operators that need more context
+
+    Examples:
+        MUTATION: uses code_individuals[0]
+        CROSSOVER: uses code_individuals[0] and [1]
+        EDIT: uses code_individuals[0], test_individuals[0],
+              accesses coevolution_context.interactions for execution data
+        DET: uses code_individuals[0] and [1],
+             accesses coevolution_context.test_populations for test context
+    """
+
+    operation: Operation
+    code_individuals: list["CodeIndividual"]  # Selected inputs for this operation
+    test_individuals: list["TestIndividual"]  # Selected inputs for this operation
+    coevolution_context: CoevolutionContext  # Full system state
 
 
 class BaseIndividual(ABC):
@@ -648,30 +792,111 @@ class IGeneticOperator(Protocol):
     Abstract interface (Protocol) for genetic operators.
 
     Defines the contract for any class that applies genetic operations
-    to evolve individuals.
+    to evolve individuals using a rich context object.
     """
 
-    def apply(
-        self,
-        operation: Operation,
-        parent1: str,
-        parent2: str | None = None,
-        feedback: str | None = None,
-    ) -> str:
+    def apply(self, context: OperationContext) -> str:
         """
-        Apply a genetic operation to one or more code snippets.
+        Apply a genetic operation using the provided context.
+
+        The operator extracts what it needs from the context:
+        - MUTATION: uses context.code_individuals[0]
+        - CROSSOVER: uses context.code_individuals[0] and [1]
+        - EDIT: uses context.code_individuals[0], context.test_individuals[0],
+                context.execution_results, context.feedback
+        - DET: uses context.code_individuals[0] and [1], context.observation_matrix
+                to generate a test that distinguishes between them
 
         Args:
-            operation: The operation to apply (e.g., "mutation", "crossover", "edit", "det").
-            parent1: The primary code snippet (or only parent for mutation/edit).
-            parent2: Optional second parent snippet (required for crossover).
-            feedback: Optional feedback string (required for edit operation).
+            context: Complete context including operation type, input individuals,
+                    populations, execution results, and other data.
 
         Returns:
-            A new code snippet resulting from the operation.
+            A new code or test snippet resulting from the operation.
 
         Raises:
-            ValueError: If required parameters for the operation are missing.
+            ValueError: If required context for the operation is missing.
+        """
+        ...
+
+
+class IBreedingStrategy[T_self: BaseIndividual](Protocol):
+    """
+    Abstract interface (Protocol) for breeding strategies.
+
+    Defines the contract for any class that orchestrates the genetic algorithm
+    breeding process: selecting parents, applying operators, and creating offspring.
+
+    This is the primary orchestration interface that implementations can customize
+    to define different breeding behaviors.
+
+    The breeding strategy receives a complete BreedingContext with all system state
+    and configuration, allowing maximum flexibility in breeding logic.
+    """
+
+    def generate_offspring(
+        self,
+        context: BreedingContext,
+    ) -> T_self:
+        """
+        Generate a single offspring individual using the provided context.
+
+        Args:
+            context: Complete breeding context with coevolution state and configuration
+
+        Returns:
+            A new offspring individual of type T_self
+        """
+        ...
+
+
+class IEliteSelector(Protocol):
+    """
+    Protocol for selecting elite individuals with access to full system context.
+
+    This interface enables pluggable, sophisticated selection strategies that can consider:
+    - Individual probabilities (belief in correctness)
+    - Test performance (passing rates across multiple test populations for code)
+    - Discrimination ability (for tests - how well they distinguish good/bad code)
+    - Diversity metrics (avoiding redundant individuals)
+    - Any other custom criteria
+
+    The selector receives complete CoevolutionContext, providing maximum flexibility
+    to implement different selection strategies without modifying core architecture.
+
+    Example strategies:
+    - Code selection: Multi-objective (probability + test performance)
+    - Test selection: Pareto front (probability + discrimination)
+    - Simple selection: Top-k by probability only
+    - Diversity-based: Select diverse individuals covering different behaviors
+
+    This replaces hardcoded selection logic (e.g., Pareto in TestPopulation),
+    making the system extensible and experimentable.
+    """
+
+    def select_elites(
+        self,
+        coevolution_context: CoevolutionContext,
+        target_population_type: str,
+        population_config: PopulationConfig,
+    ) -> list[int]:
+        """
+        Select elite individuals from the target population.
+
+        Args:
+            coevolution_context: Complete system state including all populations
+                                and their interactions. Provides full visibility
+                                for sophisticated selection decisions.
+            target_population_type: Population to select from:
+                                   - "code" for code population
+                                   - Test population key like "unittest", "differential", etc.
+            population_config: Population configuration containing selection preferences
+                              (e.g., diversity_selection flag, elitism_rate for code)
+
+        Returns:
+            Indices of selected elite individuals.
+            For code: typically uses elitism_rate from CodePopulationConfig
+            For tests: selector determines size (e.g., Pareto front size)
         """
         ...
 
@@ -805,71 +1030,6 @@ class IProbabilityAssigner(Protocol):
         ...
 
 
-class IPareto(Protocol):
-    """
-    Unified protocol for multi-objective optimization of test populations.
-
-    Combines discrimination calculation and Pareto front selection,
-    which are tightly coupled aspects of multi-objective optimization
-    for coevolutionary test generation.
-
-    Design:
-    - Internal methods (calculate_discrimination, calculate_pareto_front) are
-      independently testable helpers
-    - Public method (get_pareto_indices) provides clean API that orchestrates
-      the full Pareto selection process
-    - Discriminations are NOT stored as state - they're computed on-demand
-    """
-
-    def calculate_discrimination(self, observation_matrix: np.ndarray) -> np.ndarray:
-        """
-        Internal helper: Calculates discrimination scores for each test.
-
-        Args:
-            observation_matrix: A 2D array where rows are code individuals
-                                and columns are tests.
-
-        Returns:
-            A 1D array of discrimination scores for each test.
-        """
-        ...
-
-    def calculate_pareto_front(
-        self, probabilities: np.ndarray, discriminations: np.ndarray
-    ) -> list[int]:
-        """
-        Internal helper: Calculates the Pareto front based on two objectives.
-
-        Args:
-            probabilities: 1D array of probabilities (Objective 1, to maximize).
-            discriminations: 1D array of discriminations (Objective 2, to maximize).
-
-        Returns:
-            A list of integer indices for the individuals on the Pareto front.
-        """
-        ...
-
-    def get_pareto_indices(
-        self, probabilities: np.ndarray, observation_matrix: np.ndarray
-    ) -> list[int]:
-        """
-        Public API: Returns indices of Pareto-optimal individuals.
-
-        Internally computes discriminations from observation_matrix,
-        then finds the Pareto front based on both objectives.
-
-        Args:
-            probabilities: 1D array of probabilities (Objective 1, to maximize).
-            observation_matrix: 2D array where rows are code individuals and
-                              columns are tests. Used to calculate discrimination
-                              scores (Objective 2, to maximize).
-
-        Returns:
-            A list of integer indices for the individuals on the Pareto front.
-        """
-        ...
-
-
 class IIndividualFactory[T_Individual: BaseIndividual](Protocol):
     """
     Protocol defining the contract for an individual factory.
@@ -933,34 +1093,6 @@ class IDatasetTestBlockBuilder(Protocol):
             >>> block = builder.build_test_class_block(tests, "def add(a, b): pass")
             >>> "class" in block and "def test_" in block
             True
-        """
-        ...
-
-
-class IFeedbackGenerator[T_Individual: BaseIndividual](Protocol):
-    """
-    Protocol defining the contract for a feedback generator.
-    """
-
-    def generate_feedback(
-        self,
-        observation_matrix: np.ndarray,
-        execution_results: ExecutionResults,
-        other_population: BasePopulation[T_Individual],
-        individual_idx: int,
-    ) -> str:
-        """
-        Generates a feedback string for the 'edit' operator.
-
-        Args:
-            observation_matrix: The full observation matrix (D).
-            execution_results: The opaque, detailed results from the sandbox.
-            other_population: The opposing population (e.g., TestPopulation
-                              if we are generating feedback for a CodeIndividual).
-            individual_idx: The index of the individual to generate feedback for.
-
-        Returns:
-            A formatted feedback string for the LLM 'edit' prompt.
         """
         ...
 

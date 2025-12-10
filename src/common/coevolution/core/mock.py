@@ -11,20 +11,17 @@ from .interfaces import (
     OPERATION_EDIT,
     OPERATION_INITIAL,
     OPERATION_MUTATION,
-    BaseIndividual,
-    BasePopulation,
     BayesianConfig,
     ExecutionResults,
     IBayesianSystem,
     ICodeOperator,
     IExecutionSystem,
-    IFeedbackGenerator,
-    IPareto,
     IProbabilityAssigner,
     ISelectionStrategy,
     ITestBlockRebuilder,
     ITestOperator,
     Operation,
+    OperationContext,
     ParentProbabilities,
     Problem,
     Sandbox,
@@ -92,35 +89,40 @@ class MockCodeOperator(ICodeOperator):
             for i in range(population_size)
         ]
 
-    def apply(
-        self,
-        operation: Operation,
-        parent1: str,
-        parent2: str | None = None,
-        feedback: str | None = None,
-    ) -> str:
+    def apply(self, context: OperationContext) -> str:
         """Apply a genetic operation to code snippets."""
-        logger.trace(f"MockCodeOperator.apply called with operation={operation}")
+        logger.trace(
+            f"MockCodeOperator.apply called with operation={context.operation}"
+        )
 
-        if operation == OPERATION_MUTATION:
+        if context.operation == OPERATION_MUTATION:
+            parent1 = context.code_individuals[0].snippet
             return parent1 + f" # mutated v{np.random.randint(100)}"
-        elif operation == OPERATION_CROSSOVER:
-            if parent2 is None:
-                raise ValueError("Crossover requires parent2")
+        elif context.operation == OPERATION_CROSSOVER:
+            if len(context.code_individuals) < 2:
+                raise ValueError("Crossover requires 2 code individuals")
+            parent1 = context.code_individuals[0].snippet
+            parent2 = context.code_individuals[1].snippet
             mid = len(parent1) // 2
             return (
                 parent1[:mid]
                 + parent2[mid:]
                 + f" # crossover v{np.random.randint(100)}"
             )
-        elif operation == OPERATION_EDIT:
-            if feedback is None:
-                raise ValueError("Edit requires feedback")
-            logger.trace(f"MockCodeOperator.apply with feedback: {feedback}")
-            return parent1 + f" # edited based on feedback v{np.random.randint(100)}"
+        elif context.operation == OPERATION_EDIT:
+            if not context.code_individuals:
+                raise ValueError("Edit requires at least one code individual")
+            parent1 = context.code_individuals[0].snippet
+            # Can access execution_results, observation_matrix, test_individuals here
+            return parent1 + f" # edited from context v{np.random.randint(100)}"
         else:
-            # For any other operation (including custom ones like "det"), just return parent1
-            return parent1 + f" # {operation} v{np.random.randint(100)}"
+            # For any other operation (including custom ones like "det"), use first individual
+            parent1 = (
+                context.code_individuals[0].snippet
+                if context.code_individuals
+                else "# no input"
+            )
+            return parent1 + f" # {context.operation} v{np.random.randint(100)}"
 
 
 class MockTestOperator(ITestOperator):
@@ -147,37 +149,55 @@ class MockTestOperator(ITestOperator):
 
         return snippets, full_class_block
 
-    def apply(
-        self,
-        operation: Operation,
-        parent1: str,
-        parent2: str | None = None,
-        feedback: str | None = None,
-    ) -> str:
+    def apply(self, context: OperationContext) -> str:
         """Apply a genetic operation to test snippets."""
-        logger.trace(f"MockTestOperator.apply called with operation={operation}")
+        logger.trace(
+            f"MockTestOperator.apply called with operation={context.operation}"
+        )
 
-        if operation == OPERATION_MUTATION:
+        if context.operation == OPERATION_MUTATION:
+            # Tests are stored in test_individuals for test operators
+            parent1 = (
+                context.test_individuals[0].snippet
+                if context.test_individuals
+                else context.code_individuals[0].snippet  # Fallback for flexibility
+            )
             return parent1 + f" # mutated test v{np.random.randint(100)}"
-        elif operation == OPERATION_CROSSOVER:
-            if parent2 is None:
-                raise ValueError("Crossover requires parent2")
+        elif context.operation == OPERATION_CROSSOVER:
+            individuals = (
+                context.test_individuals
+                if context.test_individuals
+                else context.code_individuals
+            )
+            if len(individuals) < 2:
+                raise ValueError("Crossover requires 2 individuals")
+            parent1 = individuals[0].snippet
+            parent2 = individuals[1].snippet
             mid = len(parent1) // 2
             return (
                 parent1[:mid]
                 + parent2[mid:]
                 + f" # crossover test v{np.random.randint(100)}"
             )
-        elif operation == OPERATION_EDIT:
-            if feedback is None:
-                raise ValueError("Edit requires feedback")
-            logger.trace(f"MockTestOperator.apply with feedback: {feedback}")
-            return (
-                parent1 + f" # edited test based on feedback v{np.random.randint(100)}"
+        elif context.operation == OPERATION_EDIT:
+            parent1 = (
+                context.test_individuals[0].snippet
+                if context.test_individuals
+                else context.code_individuals[0].snippet
             )
+            return parent1 + f" # edited test from context v{np.random.randint(100)}"
         else:
-            # For any other operation (including custom ones like "det"), just return parent1
-            return parent1 + f" # {operation} test v{np.random.randint(100)}"
+            # For any other operation (including custom ones like "det"), use first individual
+            parent1 = (
+                context.test_individuals[0].snippet
+                if context.test_individuals
+                else (
+                    context.code_individuals[0].snippet
+                    if context.code_individuals
+                    else "# no input"
+                )
+            )
+            return parent1 + f" # {context.operation} test v{np.random.randint(100)}"
 
 
 # --- Mock Strategies & Helpers ---
@@ -218,54 +238,8 @@ class MockProbabilityAssigner(IProbabilityAssigner):
         return float(np.mean(parent_probs))
 
 
-class MockPareto(IPareto):
-    """
-    Mocks multi-objective optimization for test population.
-
-    This mock implementation calculates simple variance-based discrimination
-    and returns individuals with above-median probability OR discrimination.
-    """
-
-    def calculate_discrimination(self, observation_matrix: np.ndarray) -> np.ndarray:
-        """Calculate variance across code individuals for each test."""
-        logger.trace("MockPareto: Calculating discrimination scores...")
-        # Each column is a test; variance shows how well it distinguishes code
-        discriminations: np.ndarray = np.var(observation_matrix, axis=0)
-        return discriminations
-
-    def calculate_pareto_front(
-        self, probabilities: np.ndarray, discriminations: np.ndarray
-    ) -> list[int]:
-        """Find Pareto front (individuals with good prob OR good discrimination)."""
-        logger.trace("MockPareto: Calculating Pareto front...")
-
-        # Handle NaNs in discrimination (e.g., first generation)
-        if np.all(np.isnan(discriminations)):
-            # Fall back to just probability
-            median_prob = np.median(probabilities)
-            indices = np.where(probabilities >= median_prob)[0]
-            return list(indices)
-
-        median_prob = np.median(probabilities)
-        median_disc = np.nanmedian(discriminations)
-
-        # Get indices for "good" individuals
-        good_prob = set(np.where(probabilities >= median_prob)[0])
-        good_disc = set(
-            np.where(np.nan_to_num(discriminations, nan=-1) >= median_disc)[0]
-        )
-
-        # The "front" is the union of these two sets
-        front_indices = list(good_prob.union(good_disc))
-        logger.trace(f"Mock Pareto front size: {len(front_indices)}")
-        return front_indices
-
-    def get_pareto_indices(
-        self, probabilities: np.ndarray, observation_matrix: np.ndarray
-    ) -> list[int]:
-        """Public API: Calculate discriminations and return Pareto front indices."""
-        discriminations = self.calculate_discrimination(observation_matrix)
-        return self.calculate_pareto_front(probabilities, discriminations)
+# MockPareto has been removed - elite selection now uses IEliteSelector protocol
+# See: IEliteSelector in interfaces.py for the new selection architecture
 
 
 class MockTestBlockRebuilder(ITestBlockRebuilder):
@@ -280,43 +254,6 @@ class MockTestBlockRebuilder(ITestBlockRebuilder):
 
         indented_snippets = "\n\n".join([f"    {s}" for s in new_method_snippets])
         return header + indented_snippets
-
-
-class MockFeedbackGenerator(IFeedbackGenerator[BaseIndividual]):
-    """Mocks generating feedback for the 'edit' operator."""
-
-    def generate_feedback(
-        self,
-        observation_matrix: np.ndarray,
-        execution_results: ExecutionResults,
-        other_population: "BasePopulation[BaseIndividual]",
-        individual_idx: int,
-    ) -> str:
-        # The observation_matrix orientation depends on the caller:
-        # - When generating feedback for a code individual: rows=code, cols=tests
-        #   so individual_idx indexes rows.
-        # - When generating feedback for a test individual: rows=code, cols=tests
-        #   so individual_idx indexes columns.
-        n_rows, n_cols = observation_matrix.shape
-
-        if individual_idx < n_rows:
-            # Code individual: look across tests in this row
-            failures = np.where(observation_matrix[individual_idx] == 0)[0]
-            if len(failures) > 0:
-                failed_test_id = other_population.ids[failures[0]]
-                return f"Your code failed test: {failed_test_id}"
-            return "Your code passed all tests, but try to optimize it."
-
-        # Otherwise treat as a test individual (index into columns)
-        if individual_idx < n_cols:
-            failures = np.where(observation_matrix[:, individual_idx] == 0)[0]
-            if len(failures) > 0:
-                failed_code_id = other_population.ids[failures[0]]
-                return f"Your test failed code: {failed_code_id}"
-            return "Your test passed all current code samples; consider adding harder cases."
-
-        # Index out of bounds: fall back to a neutral message
-        return "No feedback available for the selected individual."
 
 
 # --- Mock Execution & Belief Updaters ---

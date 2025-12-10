@@ -2,7 +2,6 @@
 
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 
 import numpy as np
 from loguru import logger
@@ -11,7 +10,6 @@ from common.code_preprocessing.transformation import extract_test_methods_code
 from common.coevolution import logging_utils
 
 # Import concrete classes
-from .breeding_strategy import BreedingStrategy
 from .individual import CodeIndividual, TestIndividual
 
 # Import all interfaces, configs, and types
@@ -19,17 +17,18 @@ from .interfaces import (
     OPERATION_INITIAL,
     BasePopulation,
     BayesianConfig,
+    BreedingContext,
     CodePopulationConfig,
+    CoevolutionContext,
     EvolutionConfig,
     ExecutionResults,
     IBayesianSystem,
+    IBreedingStrategy,
     ICodeOperator,
     IDatasetTestBlockBuilder,
+    IEliteSelector,
     IExecutionSystem,
-    IFeedbackGenerator,
-    IPareto,
-    IProbabilityAssigner,
-    ISelectionStrategy,
+    InteractionData,
     ITestBlockRebuilder,
     ITestOperator,
     OperatorRatesConfig,
@@ -39,16 +38,6 @@ from .interfaces import (
     Test,
 )
 from .population import CodePopulation, TestPopulation
-
-
-@dataclass
-class InteractionData:
-    """Container for execution results and observation matrices for a generation."""
-
-    gen_exec_results: ExecutionResults
-    pub_exec_results: ExecutionResults
-    gen_obs_matrix: np.ndarray
-    pub_obs_matrix: np.ndarray
 
 
 class Orchestrator:
@@ -80,37 +69,32 @@ class Orchestrator:
         code_op_rates_config: OperatorRatesConfig,
         test_op_rates_config: OperatorRatesConfig,
         bayesian_config: BayesianConfig,
-        # --- Injected Mock Components ---
+        # --- Injected Components ---
         problem: Problem,
         sandbox: Sandbox,
         code_operator: ICodeOperator,
         test_operator: ITestOperator,
-        code_selector: ISelectionStrategy,
-        test_selector: ISelectionStrategy,
-        code_prob_assigner: IProbabilityAssigner,
-        test_prob_assigner: IProbabilityAssigner,
         execution_system: IExecutionSystem,
-        code_bayesian_system: IBayesianSystem,
-        test_bayesian_system: IBayesianSystem,
-        pareto: IPareto,
+        bayesian_system: IBayesianSystem,
         test_block_rebuilder: ITestBlockRebuilder,
-        code_feedback_gen: IFeedbackGenerator[TestIndividual],
-        test_feedback_gen: IFeedbackGenerator[CodeIndividual],
         dataset_test_block_builder: IDatasetTestBlockBuilder,
+        # --- Breeding Strategy & Elite Selection ---
+        code_breeding_strategy: IBreedingStrategy[CodeIndividual],
+        test_breeding_strategy: IBreedingStrategy[TestIndividual],
+        code_elite_selector: IEliteSelector,
+        test_elite_selector: IEliteSelector,
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
 
-        Also sets up:
-        - Concrete breeding strategies for code and test populations (each with its own selector)
-        - Generation logger for tracking evolution progress (via logging_utils)
-        - Random seed for reproducibility
+        Uses dependency injection for all strategies, allowing complete flexibility
+        in breeding, selection, and evolution logic without modifying core orchestrator.
 
         Args:
-            code_selector: Selection strategy for code population
-            test_selector: Selection strategy for test population
-            code_prob_assigner: Probability assigner for code offspring
-            test_prob_assigner: Probability assigner for test offspring
+            code_breeding_strategy: Strategy for generating code offspring
+            test_breeding_strategy: Strategy for generating test offspring
+            code_elite_selector: Strategy for selecting code elites
+            test_elite_selector: Strategy for selecting test elites (e.g., Pareto-based)
             ... (other args documented inline)
         """
         logger.info("Initializing MockOrchestrator...")
@@ -134,49 +118,31 @@ class Orchestrator:
         # --- Store Injected Components ---
         self.code_operator = code_operator
         self.test_operator = test_operator
-        self.code_selector = code_selector
-        self.test_selector = test_selector
-        self.code_prob_assigner = code_prob_assigner
-        self.test_prob_assigner = test_prob_assigner
         self.execution_system = execution_system
+        self.bayesian_system = bayesian_system
 
-        # TODO: These can be the same instance, no need to have two
-        self.code_bayesian_system = code_bayesian_system
-        self.test_bayesian_system = test_bayesian_system
-
-        self.pareto = pareto
         self.test_block_rebuilder = test_block_rebuilder
-        self.code_feedback_gen = code_feedback_gen
-        self.test_feedback_gen = test_feedback_gen
         self.dataset_test_block_builder = dataset_test_block_builder
 
-        # --- Create Concrete Breeding Strategies ---
-        # Each breeding strategy uses its own dedicated selector and probability assigner
-        self.code_breeder = BreedingStrategy[CodeIndividual, TestIndividual](
-            selector=self.code_selector,
-            operator=self.code_operator,
-            individual_factory=CodeIndividual,
-            probability_assigner=self.code_prob_assigner,
-            initial_prior=self.code_pop_config.initial_prior,
-        )
-        self.test_breeder = BreedingStrategy[TestIndividual, CodeIndividual](
-            selector=self.test_selector,
-            operator=self.test_operator,
-            individual_factory=TestIndividual,
-            probability_assigner=self.test_prob_assigner,
-            initial_prior=self.test_pop_config.initial_prior,
-        )
+        # --- Store Breeding Strategies & Elite Selectors ---
+        self.code_breeding_strategy = code_breeding_strategy
+        self.test_breeding_strategy = test_breeding_strategy
+        self.code_elite_selector = code_elite_selector
+        self.test_elite_selector = test_elite_selector
 
         self._set_random_seed(evo_config.random_seed)
 
     def run(self) -> tuple[CodePopulation, TestPopulation]:
         """
-        Runs the main co-evolutionary loop.
+        Runs the main co-evolutionary loop with three test populations:
+        - private: For evaluation only (not passed to context)
+        - public: Ground truth anchoring
+        - unittest: Evolved test population (renamed from 'generated')
         """
         logging_utils.log_section_header("INFO", "STARTING CO-EVOLUTION RUN")
 
         # 1. Initialization
-        code_pop, test_pop, pub_pop, priv_pop = self._initialize_evolution()
+        code_pop, unittest_pop, public_pop, private_pop = self._initialize_evolution()
 
         # 2. Main Loop
         for gen in range(self.evo_config.num_generations + 1):
@@ -186,30 +152,28 @@ class Orchestrator:
             )
 
             # A. Execute
-            interactions = self._execute_all_interactions(code_pop, test_pop, pub_pop)
+            coevolution_context = self._execute_all_interactions(
+                code_pop, unittest_pop, public_pop
+            )
 
             # B. Update Beliefs (Cooperative & Anchored)
-            code_pop, test_pop = self._perform_cooperative_updates(
-                code_pop,
-                test_pop,
-                pub_pop,
-                interactions.gen_obs_matrix,
-                interactions.pub_obs_matrix,
+            code_pop, unittest_pop = self._perform_cooperative_updates(
+                coevolution_context
             )
 
             # C. Evolve (Select -> Breed -> Transition) # Only if not last generation
             if gen < self.evo_config.num_generations:
-                code_pop, test_pop = self._produce_next_generation(
-                    code_pop, test_pop, pub_pop, interactions
+                code_pop, unittest_pop = self._produce_next_generation(
+                    coevolution_context
                 )
 
             # D. Log
-            logging_utils.log_generation_summary(code_pop, test_pop)
+            logging_utils.log_generation_summary(code_pop, unittest_pop)
 
         # 3. Finalization
-        self._finalize_evolution(code_pop, test_pop, pub_pop, priv_pop)
+        self._finalize_evolution(code_pop, unittest_pop, public_pop, private_pop)
 
-        return code_pop, test_pop
+        return code_pop, unittest_pop
 
     # =========================================================================
     # Lifecycle Phase 1: Initialization
@@ -222,22 +186,24 @@ class Orchestrator:
 
         # Create Populations
         code_pop = self._create_initial_code_population()
-        test_pop = self._create_initial_test_populations()
+        unittest_pop = self._create_initial_test_populations()
 
-        pub_pop = self._create_fixed_test_population_from_test_cases(
+        public_pop = self._create_fixed_test_population_from_test_cases(
             self.problem.public_test_cases, self.problem.starter_code
         )
-        priv_pop = self._create_fixed_test_population_from_test_cases(
+        private_pop = self._create_fixed_test_population_from_test_cases(
             self.problem.private_test_cases, self.problem.starter_code
         )
 
         # Initial Private Run (Baseline)
-        _, priv_obs = self._get_exec_results_and_obs_matrix(code_pop, priv_pop)
+        _, private_obs = self._get_exec_results_and_obs_matrix(code_pop, private_pop)
 
-        logging_utils.log_observation_matrix(priv_obs, code_pop, priv_pop, "private")
-        logging_utils.log_generation_summary(code_pop, test_pop)
+        logging_utils.log_observation_matrix(
+            private_obs, code_pop, private_pop, "private"
+        )
+        logging_utils.log_generation_summary(code_pop, unittest_pop)
 
-        return code_pop, test_pop, pub_pop, priv_pop
+        return code_pop, unittest_pop, public_pop, private_pop
 
     # =========================================================================
     # Lifecycle Phase 2A: Execution
@@ -246,19 +212,38 @@ class Orchestrator:
     def _execute_all_interactions(
         self,
         code_pop: CodePopulation,
-        test_pop: TestPopulation,
-        pub_pop: TestPopulation,
-    ) -> InteractionData:
-        """Executes code against both generated and public tests."""
-        logger.debug("Step 1: Executing gen and public test sets...")
+        unittest_pop: TestPopulation,
+        public_pop: TestPopulation,
+    ) -> CoevolutionContext:
+        """Executes code against unittest and public tests, returns CoevolutionContext."""
+        logger.debug("Step 1: Executing unittest and public test sets...")
 
-        gen_exec, gen_obs = self._get_exec_results_and_obs_matrix(code_pop, test_pop)
-        pub_exec, pub_obs = self._get_exec_results_and_obs_matrix(code_pop, pub_pop)
+        unittest_exec, unittest_obs = self._get_exec_results_and_obs_matrix(
+            code_pop, unittest_pop
+        )
+        public_exec, public_obs = self._get_exec_results_and_obs_matrix(
+            code_pop, public_pop
+        )
 
-        logging_utils.log_observation_matrix(gen_obs, code_pop, test_pop, "generated")
-        logging_utils.log_observation_matrix(pub_obs, code_pop, pub_pop, "public")
+        logging_utils.log_observation_matrix(
+            unittest_obs, code_pop, unittest_pop, "unittest"
+        )
+        logging_utils.log_observation_matrix(public_obs, code_pop, public_pop, "public")
 
-        return InteractionData(gen_exec, pub_exec, gen_obs, pub_obs)
+        # Build CoevolutionContext
+        context = CoevolutionContext(
+            code_population=code_pop,
+            test_populations={
+                "public": public_pop,
+                "unittest": unittest_pop,
+            },
+            interactions={
+                "public": InteractionData(public_exec, public_obs),
+                "unittest": InteractionData(unittest_exec, unittest_obs),
+            },
+        )
+
+        return context
 
     # =========================================================================
     # Lifecycle Phase 2B: Belief Updates (The Core Logic)
@@ -266,11 +251,7 @@ class Orchestrator:
 
     def _perform_cooperative_updates(
         self,
-        code_pop: CodePopulation,
-        test_pop: TestPopulation,
-        pub_pop: TestPopulation,
-        gen_obs_matrix: np.ndarray,
-        pub_obs_matrix: np.ndarray,
+        context: CoevolutionContext,
     ) -> tuple[CodePopulation, TestPopulation]:
         """
         Performs the Bayesian belief updates in a specific order to prevent
@@ -280,54 +261,61 @@ class Orchestrator:
         1. Masking: Determine which individuals should be updated based on their
            generation born and the current generation.
         2. Anchor: Update Code using Public Tests (Ground Truth).
-        3. Calculate: Compute updates for both populations using the generated observations.
+        3. Calculate: Compute updates for both populations using the unittest observations.
            - Tests judge Code (that has seen Public tests).
            - Code judges Tests (using Test Priors).
         4. Apply: Apply updates simultaneously.
         """
         logger.debug("Step 2: Updating beliefs...")
 
+        # Extract populations and interactions
+        code_pop = context.code_population
+        unittest_pop = context.test_populations["unittest"]
+        public_pop = context.test_populations["public"]
+        unittest_obs_matrix = context.interactions["unittest"].observation_matrix
+        public_obs_matrix = context.interactions["public"].observation_matrix
+
         # 1. Get Masks
         logger.debug("Getting mask matrices for updates...")
-        code_mask_gen, code_mask_pub, test_mask = self._get_mask_matrices(
-            code_pop, test_pop, pub_pop
+        code_mask_unittest, code_mask_public, test_mask = self._get_mask_matrices(
+            code_pop, unittest_pop, public_pop
         )
 
         # 2. ANCHOR: Update Code based on Public Tests first
         logger.debug("Anchoring code beliefs with public tests...")
-        code_post_public = self.code_bayesian_system.update_code_beliefs(
+        code_post_public = self.bayesian_system.update_code_beliefs(
             prior_code_probs=code_pop.probabilities,
-            prior_test_probs=pub_pop.probabilities,
-            observation_matrix=pub_obs_matrix,
-            code_update_mask_matrix=code_mask_pub,
+            prior_test_probs=public_pop.probabilities,
+            observation_matrix=public_obs_matrix,
+            code_update_mask_matrix=code_mask_public,
             config=self.bayesian_config,
         )
         code_pop.update_probabilities(code_post_public)
 
-        # 3. CALCULATE: Compute updates for both populations using the generated observations.
+        # 3. CALCULATE: Compute updates for both populations using the unittest observations.
         logger.debug("Calculating test updates based on updated code beliefs...")
-        test_post_generated = self.test_bayesian_system.update_test_beliefs(
+        test_post_unittest = self.bayesian_system.update_test_beliefs(
             prior_code_probs=code_pop.probabilities,
-            prior_test_probs=test_pop.probabilities,
-            observation_matrix=gen_obs_matrix,
+            prior_test_probs=unittest_pop.probabilities,
+            observation_matrix=unittest_obs_matrix,
             test_update_mask_matrix=test_mask,
             config=self.bayesian_config,
         )
         logger.debug("Calculating code updates based on test priors...")
-        code_post_generated = self.code_bayesian_system.update_code_beliefs(
+        code_post_unittest = self.bayesian_system.update_code_beliefs(
             prior_code_probs=code_pop.probabilities,
-            prior_test_probs=test_pop.probabilities,
-            observation_matrix=gen_obs_matrix,
-            code_update_mask_matrix=code_mask_gen,
+            prior_test_probs=unittest_pop.probabilities,
+            observation_matrix=unittest_obs_matrix,
+            code_update_mask_matrix=code_mask_unittest,
             config=self.bayesian_config,
         )
 
         # 4. APPLY: Apply simultaneous updates
         logger.debug("Applying simultaneous updates...")
-        test_pop.update_probabilities(test_post_generated)
-        code_pop.update_probabilities(code_post_generated)
+        unittest_pop.update_probabilities(test_post_unittest)
+        code_pop.update_probabilities(code_post_unittest)
 
-        return code_pop, test_pop
+        return code_pop, unittest_pop
 
     # =========================================================================
     # Lifecycle Phase 2C: Evolution (Selection & Breeding)
@@ -335,41 +323,27 @@ class Orchestrator:
 
     def _produce_next_generation(
         self,
-        code_pop: CodePopulation,
-        test_pop: TestPopulation,
-        pub_pop: TestPopulation,
-        interactions: InteractionData,
+        context: CoevolutionContext,
     ) -> tuple[CodePopulation, TestPopulation]:
         """
         Handles the full evolution cycle: Selection, Breeding, and Transition.
         Mutates the population objects in-place.
         """
+        code_pop = context.code_population
+        unittest_pop = context.test_populations["unittest"]
+
         # 1. Select Elites
         logger.debug("Step 3: Selecting elites...")
-        code_elites, test_elites = self._select_elites(
-            code_pop, test_pop, interactions.gen_obs_matrix
-        )
+        code_elites, test_elites = self._select_elites(context)
         self._notify_elites(code_elites, code_pop.generation)
-        self._notify_elites(test_elites, test_pop.generation)
+        self._notify_elites(test_elites, unittest_pop.generation)
 
         # 2. Breed Code
         logger.debug("Step 4: Generating offspring...")
-        code_offsprings = self._breed_code(
-            code_pop,
-            test_pop,
-            interactions.gen_exec_results,
-            interactions.gen_obs_matrix,
-            len(code_elites),
-        )
+        code_offsprings = self._breed_code(context, len(code_elites))
 
         # 3. Breed Tests
-        test_offsprings = self._breed_tests(
-            test_pop,
-            code_pop,
-            interactions.gen_exec_results,
-            interactions.gen_obs_matrix,
-            len(test_elites),
-        )
+        test_offsprings = self._breed_tests(context, len(test_elites))
 
         # 4. Transition Code Population
         logger.debug("Step 5: Setting next generation...")
@@ -379,10 +353,10 @@ class Orchestrator:
 
         # 5. Transition Test Population
         new_test_gen = test_elites + test_offsprings
-        self._notify_removed_individuals(test_pop, new_test_gen)
-        test_pop.set_next_generation(new_test_gen)
+        self._notify_removed_individuals(unittest_pop, new_test_gen)
+        unittest_pop.set_next_generation(new_test_gen)
 
-        return code_pop, test_pop
+        return code_pop, unittest_pop
 
     # =========================================================================
     # Lifecycle Phase 3: Finalization
@@ -391,18 +365,20 @@ class Orchestrator:
     def _finalize_evolution(
         self,
         code_pop: CodePopulation,
-        test_pop: TestPopulation,
-        pub_pop: TestPopulation,
-        priv_pop: TestPopulation,
+        unittest_pop: TestPopulation,
+        public_pop: TestPopulation,
+        private_pop: TestPopulation,
     ) -> None:
         """Runs final private evaluation and logs closing stats."""
         # Run final private tests
-        _, priv_obs = self._get_exec_results_and_obs_matrix(code_pop, priv_pop)
+        _, private_obs = self._get_exec_results_and_obs_matrix(code_pop, private_pop)
 
-        logging_utils.log_observation_matrix(priv_obs, code_pop, priv_pop, "private")
+        logging_utils.log_observation_matrix(
+            private_obs, code_pop, private_pop, "private"
+        )
 
         # Log final survivors
-        logging_utils.log_final_survivors(code_pop, test_pop)
+        logging_utils.log_final_survivors(code_pop, unittest_pop)
         logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
 
     # =========================================================================
@@ -460,7 +436,6 @@ class Orchestrator:
         ]
         test_population = TestPopulation(
             individuals=test_individuals,
-            pareto=self.pareto,
             test_block_rebuilder=self.test_block_rebuilder,
             test_class_block=test_block,
             generation=0,
@@ -513,7 +488,6 @@ class Orchestrator:
         # Create and return the test population
         test_population = TestPopulation(
             individuals=test_individuals,
-            pareto=self.pareto,
             test_block_rebuilder=self.test_block_rebuilder,
             test_class_block=test_class_block,
             generation=0,
@@ -526,24 +500,37 @@ class Orchestrator:
 
     def _select_elites(
         self,
-        code_population: CodePopulation,
-        test_population: TestPopulation,
-        observation_matrix: np.ndarray,
+        context: CoevolutionContext,
     ) -> tuple[list[CodeIndividual], list[TestIndividual]]:
         """
-        Helper to select elite individuals from code and test populations.
+        Helper to select elite individuals using injected elite selectors.
 
-        Args:
-            observation_matrix: Execution results needed for Pareto front selection
+        Uses:
+        - code_elite_selector for code population (e.g., top-k by probability)
+        - test_elite_selector for unittest population (e.g., Pareto-based selection)
         """
-        # --- Code Elites ---
-        num_code_elites = int(code_population.size * self.code_pop_config.elitism_rate)
-        code_elites = code_population.get_top_k_individuals(num_code_elites)
+        code_pop = context.code_population
+        unittest_pop = context.test_populations["unittest"]
 
-        # --- Test Elites (Pareto Front) ---
-        test_elites = test_population.get_pareto_front(observation_matrix)
+        # --- Code Elites ---
+        code_elite_indices = self.code_elite_selector.select_elites(
+            coevolution_context=context,
+            target_population_type="code",
+            population_config=self.code_pop_config,
+        )
+        code_elites = [code_pop[i] for i in code_elite_indices]
+
+        # --- Test Elites ---
+        # Selector determines size (e.g., Pareto front size for tests)
+        test_elite_indices = self.test_elite_selector.select_elites(
+            coevolution_context=context,
+            target_population_type="unittest",
+            population_config=self.test_pop_config,
+        )
+        test_elites = [unittest_pop[i] for i in test_elite_indices]
+
         logger.info(
-            f"Selected {len(code_elites)} code elites and {len(test_elites)} test elites (Pareto)."
+            f"Selected {len(code_elites)} code elites and {len(test_elites)} test elites."
         )
 
         return code_elites, test_elites
@@ -590,14 +577,11 @@ class Orchestrator:
 
     def _breed_code(
         self,
-        code_population: CodePopulation,
-        test_population: TestPopulation,
-        exec_results: ExecutionResults,
-        observation_matrix: np.ndarray,
+        context: CoevolutionContext,
         num_elites: int = 0,
     ) -> list[CodeIndividual]:
         """
-        Helper to breed code offspring using the code breeder.
+        Helper to breed code offspring using the injected code breeding strategy.
 
         Uses ThreadPoolExecutor for parallel breeding when max_workers > 1.
         With max_workers=1, falls back to sequential execution automatically.
@@ -610,16 +594,16 @@ class Orchestrator:
             self.code_pop_config.max_population_size - num_elites,
         )
 
+        # Create BreedingContext for code breeding
+        breeding_context = BreedingContext(
+            coevolution_context=context,
+            rates_config=self.code_op_rates_config,
+            target_population_type="code",
+        )
+
         def breed_single_offspring() -> CodeIndividual:
             """Helper function to breed a single offspring."""
-            return self.code_breeder.generate_single_offspring(
-                population=code_population,
-                other_population=test_population,
-                execution_results=exec_results,
-                feedback_generator=self.code_feedback_gen,
-                observation_matrix=observation_matrix,
-                operation_rates=self.code_op_rates_config,
-            )
+            return self.code_breeding_strategy.generate_offspring(breeding_context)
 
         code_offspring: list[CodeIndividual] = []
 
@@ -645,30 +629,27 @@ class Orchestrator:
 
     def _breed_tests(
         self,
-        test_population: TestPopulation,
-        code_population: CodePopulation,
-        gen_exec_results: ExecutionResults,
-        gen_observation_matrix: np.ndarray,
+        context: CoevolutionContext,
         num_elites: int = 0,
     ) -> list[TestIndividual]:
         """
-        Helper to breed test offspring using the test breeder.
+        Helper to breed test offspring using the injected test breeding strategy.
 
         Uses ThreadPoolExecutor for parallel breeding when max_workers > 1.
         With max_workers=1, falls back to sequential execution automatically.
         """
         num_test_offspring = self.test_pop_config.initial_population_size - num_elites
 
+        # Create BreedingContext for test breeding
+        breeding_context = BreedingContext(
+            coevolution_context=context,
+            rates_config=self.test_op_rates_config,
+            target_population_type="unittest",
+        )
+
         def breed_single_offspring() -> TestIndividual:
             """Helper function to breed a single offspring."""
-            return self.test_breeder.generate_single_offspring(
-                population=test_population,
-                other_population=code_population,
-                execution_results=gen_exec_results,
-                feedback_generator=self.test_feedback_gen,
-                observation_matrix=gen_observation_matrix,
-                operation_rates=self.test_op_rates_config,
-            )
+            return self.test_breeding_strategy.generate_offspring(breeding_context)
 
         test_offsprings: list[TestIndividual] = []
 
@@ -712,7 +693,7 @@ class Orchestrator:
     def _get_mask_matrices(
         self,
         code_population: CodePopulation,
-        test_population: TestPopulation,
+        unittest_population: TestPopulation,
         public_test_population: TestPopulation,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -721,45 +702,43 @@ class Orchestrator:
 
         Args:
             code_population: The current code population
-            test_population: The current test population
-            public_test_population: The public test population
+            unittest_population: The current unittest population (evolved tests)
+            public_test_population: The public test population (ground truth)
         Returns:
-            Tuple of (code_mask_matrix_generated, code_mask_matrix_public, test_mask_matrix)
+            Tuple of (code_mask_matrix_unittest, code_mask_matrix_public, test_mask_matrix)
         """
-        code_mask_matrix_generated = (
-            self.code_bayesian_system.get_code_update_mask_generation(
+        code_mask_matrix_unittest = (
+            self.bayesian_system.get_code_update_mask_generation(
                 updating_ind_born_generations=[
                     ind.generation_born for ind in code_population
                 ],
                 other_ind_born_generations=[
-                    ind.generation_born for ind in test_population
+                    ind.generation_born for ind in unittest_population
                 ],
                 current_generation=code_population.generation,
             )
         )
 
-        code_mask_matrix_public = (
-            self.code_bayesian_system.get_code_update_mask_generation(
-                updating_ind_born_generations=[
-                    ind.generation_born for ind in code_population
-                ],
-                other_ind_born_generations=[
-                    ind.generation_born for ind in public_test_population
-                ],
-                current_generation=code_population.generation,
-            )
-        )
-
-        test_mask_matrix = self.test_bayesian_system.get_test_update_mask_generation(
+        code_mask_matrix_public = self.bayesian_system.get_code_update_mask_generation(
             updating_ind_born_generations=[
-                ind.generation_born for ind in test_population
+                ind.generation_born for ind in code_population
+            ],
+            other_ind_born_generations=[
+                ind.generation_born for ind in public_test_population
+            ],
+            current_generation=code_population.generation,
+        )
+
+        test_mask_matrix = self.bayesian_system.get_test_update_mask_generation(
+            updating_ind_born_generations=[
+                ind.generation_born for ind in unittest_population
             ],
             other_ind_born_generations=[ind.generation_born for ind in code_population],
-            current_generation=test_population.generation,
+            current_generation=unittest_population.generation,
         )
 
         return (
-            code_mask_matrix_generated,
+            code_mask_matrix_unittest,
             code_mask_matrix_public,
             test_mask_matrix,
         )

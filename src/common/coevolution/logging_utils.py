@@ -542,7 +542,7 @@ def log_observation_matrix(
     observation_matrix: "np.ndarray",
     code_population: "CodePopulation",
     test_population: "TestPopulation",
-    test_type: Literal["generated", "public", "private"] = "generated",
+    test_type: Literal["unittest", "public", "private"] = "unittest",
 ) -> None:
     code_ids = [ind.id for ind in code_population]
     test_ids = [ind.id for ind in test_population]
