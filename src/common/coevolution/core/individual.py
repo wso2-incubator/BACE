@@ -1,5 +1,6 @@
 # src/common/coevolution/core/individual.py
 import itertools
+from typing import Any, Literal
 
 from loguru import logger
 
@@ -23,7 +24,8 @@ class CodeIndividual(BaseIndividual):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parent_ids: list[str],
+        parents: dict[str, Literal["code", "test"]] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes the individual by passing all state
@@ -35,7 +37,8 @@ class CodeIndividual(BaseIndividual):
             probability,
             creation_op,
             generation_born,
-            parent_ids,
+            parents,
+            metadata,
         )
 
         self._id = f"C{next(CodeIndividual._code_counter)}"
@@ -70,7 +73,8 @@ class TestIndividual(BaseIndividual):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parent_ids: list[str],
+        parents: dict[str, Literal["code", "test"]] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes the individual by passing all state
@@ -82,7 +86,8 @@ class TestIndividual(BaseIndividual):
             probability,
             creation_op,
             generation_born,
-            parent_ids,
+            parents,
+            metadata,
         )
 
         self._id = f"T{next(TestIndividual._core_test_counter)}"

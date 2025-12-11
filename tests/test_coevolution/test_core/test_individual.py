@@ -29,14 +29,14 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.snippet == "def foo(): pass"
         assert individual.probability == 0.5
         assert individual.creation_op == OPERATION_INITIAL
         assert individual.generation_born == 0
-        assert individual.parent_ids == []
+        assert individual.parents == {}
         assert len(individual.lifecycle_log) > 0  # Should have birth log entry
 
     def test_test_individual_initialization(self) -> None:
@@ -46,14 +46,14 @@ class TestBaseIndividualSharedBehavior:
             probability=0.7,
             creation_op=OPERATION_MUTATION,
             generation_born=5,
-            parent_ids=["T1"],
+            parents={"T1": "test"},
         )
 
         assert individual.snippet == "def test_foo(): assert True"
         assert individual.probability == 0.7
         assert individual.creation_op == OPERATION_MUTATION
         assert individual.generation_born == 5
-        assert individual.parent_ids == ["T1"]
+        assert individual.parents == {"T1": "test"}
         assert len(individual.lifecycle_log) > 0
 
     def test_add_to_log(self) -> None:
@@ -63,7 +63,7 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         initial_log_length = len(individual.lifecycle_log)
@@ -90,7 +90,7 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Test valid probability updates
@@ -110,7 +110,7 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         with pytest.raises(ValueError, match="Probability must be between 0.0 and 1.0"):
@@ -129,7 +129,7 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=10,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.generation_born == 10
@@ -147,7 +147,7 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.snippet == snippet_text
@@ -168,7 +168,7 @@ class TestBaseIndividualSharedBehavior:
                 probability=0.5,
                 creation_op=op,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             assert individual.creation_op == op
 
@@ -180,9 +180,9 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
-        assert individual1.parent_ids == []
+        assert individual1.parents == {}
 
         # Mutation - one parent
         individual2 = CodeIndividual(
@@ -190,9 +190,9 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_MUTATION,
             generation_born=1,
-            parent_ids=["C0"],
+            parents={"C0": "code"},
         )
-        assert individual2.parent_ids == ["C0"]
+        assert individual2.parents == {"C0": "code"}
 
         # Crossover - two parents
         individual3 = CodeIndividual(
@@ -200,9 +200,9 @@ class TestBaseIndividualSharedBehavior:
             probability=0.5,
             creation_op=OPERATION_CROSSOVER,
             generation_born=1,
-            parent_ids=["C0", "C1"],
+            parents={"C0": "code", "C1": "code"},
         )
-        assert individual3.parent_ids == ["C0", "C1"]
+        assert individual3.parents == {"C0": "code", "C1": "code"}
 
 
 class TestCodeIndividual:
@@ -215,7 +215,7 @@ class TestCodeIndividual:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.id.startswith("C")
@@ -229,7 +229,7 @@ class TestCodeIndividual:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(10)
         ]
@@ -244,7 +244,7 @@ class TestCodeIndividual:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         original_id = individual.id
@@ -265,7 +265,7 @@ class TestCodeIndividual:
             probability=0.75,
             creation_op=OPERATION_CROSSOVER,
             generation_born=3,
-            parent_ids=["C1", "C2"],
+            parents={"C1": "code", "C2": "code"},
         )
 
         repr_str = repr(individual)
@@ -291,7 +291,7 @@ class TestCodeIndividual:
                 probability=0.5,
                 creation_op=op,
                 generation_born=1,
-                parent_ids=[],
+                parents={},
             )
             repr_str = repr(individual)
             assert f"op={op}" in repr_str
@@ -304,7 +304,7 @@ class TestCodeIndividual:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Verify debug was called
@@ -324,7 +324,7 @@ class TestTestIndividual:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.id.startswith("T")
@@ -338,7 +338,7 @@ class TestTestIndividual:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(10)
         ]
@@ -354,7 +354,7 @@ class TestTestIndividual:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Verify debug was called
@@ -373,7 +373,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Manually set same ID for testing (normally wouldn't do this)
@@ -382,7 +382,7 @@ class TestIndividualEquality:
             probability=0.8,
             creation_op=OPERATION_MUTATION,
             generation_born=5,
-            parent_ids=["C0"],
+            parents={"C0": "code"},
         )
         ind2._id = ind1.id  # Force same ID
 
@@ -395,7 +395,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         ind2 = CodeIndividual(
@@ -403,7 +403,7 @@ class TestIndividualEquality:
             probability=0.5,  # Same probability
             creation_op=OPERATION_INITIAL,  # Same operation
             generation_born=0,  # Same generation
-            parent_ids=[],  # Same parents
+            parents={},  # Same parents
         )
 
         # Despite everything else being the same, different IDs mean not equal
@@ -416,7 +416,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         ind2 = TestIndividual(
@@ -424,7 +424,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert ind1 != ind2
@@ -436,7 +436,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         test_ind = TestIndividual(
@@ -444,7 +444,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert code_ind != test_ind
@@ -456,7 +456,7 @@ class TestIndividualEquality:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual != "C0"
@@ -475,7 +475,7 @@ class TestIndividualEdgeCases:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.snippet == ""
@@ -489,7 +489,7 @@ class TestIndividualEdgeCases:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.snippet == long_snippet
@@ -502,7 +502,7 @@ class TestIndividualEdgeCases:
             probability=0.0,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.probability == 0.0
@@ -514,7 +514,7 @@ class TestIndividualEdgeCases:
             probability=1.0,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.probability == 1.0
@@ -526,24 +526,24 @@ class TestIndividualEdgeCases:
             probability=0.5,
             creation_op=OPERATION_MUTATION,
             generation_born=999999,
-            parent_ids=["C0"],
+            parents={"C0": "code"},
         )
 
         assert individual.generation_born == 999999
 
     def test_many_parent_ids(self) -> None:
         """Test individual with many parent IDs (unusual but valid)."""
-        many_parents = [f"C{i}" for i in range(100)]
+        many_parents = {f"C{i}": "code" for i in range(100)}
         individual = CodeIndividual(
             snippet="def test(): pass",
             probability=0.5,
             creation_op=OPERATION_CROSSOVER,
             generation_born=1,
-            parent_ids=many_parents,
+            parents=many_parents,
         )
 
-        assert len(individual.parent_ids) == 100
-        assert individual.parent_ids == many_parents
+        assert len(individual.parents) == 100
+        assert individual.parents == many_parents
 
     def test_special_characters_in_snippet(self) -> None:
         """Test snippet with special characters."""
@@ -553,7 +553,7 @@ class TestIndividualEdgeCases:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         assert individual.snippet == snippet
@@ -582,7 +582,7 @@ class TestIndividualEdgeCases:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         if should_raise:
@@ -610,7 +610,7 @@ class TestIndividualEdgeCases:
                 probability=probability,  # Invalid probability should raise
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
 
 
@@ -625,7 +625,7 @@ class TestIndividualCounters:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(5)
         ]
@@ -646,7 +646,7 @@ class TestIndividualCounters:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(5)
         ]
@@ -665,7 +665,7 @@ class TestIndividualCounters:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         test_ind1 = TestIndividual(
@@ -673,7 +673,7 @@ class TestIndividualCounters:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         code_ind2 = CodeIndividual(
@@ -681,7 +681,7 @@ class TestIndividualCounters:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         test_ind2 = TestIndividual(
@@ -689,7 +689,7 @@ class TestIndividualCounters:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Extract numeric IDs
@@ -716,7 +716,7 @@ class TestLifecycleEvents:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         initial_log_length = len(individual.lifecycle_log)
@@ -735,7 +735,7 @@ class TestLifecycleEvents:
             probability=0.7,
             creation_op=OPERATION_MUTATION,
             generation_born=2,
-            parent_ids=["T0"],
+            parents={"T0": "test"},
         )
 
         initial_log_length = len(individual.lifecycle_log)
@@ -754,7 +754,7 @@ class TestLifecycleEvents:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Lifecycle events
@@ -785,7 +785,7 @@ class TestLifecycleEvents:
             probability=0.6,
             creation_op=OPERATION_EDIT,
             generation_born=1,
-            parent_ids=["T0"],
+            parents={"T0": "test"},
         )
 
         # Lifecycle events
@@ -816,7 +816,7 @@ class TestLifecycleEvents:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
         individual1.notify_died(generation=5)
 
@@ -825,7 +825,7 @@ class TestLifecycleEvents:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
         individual2.notify_survived(generation=10)
 
@@ -853,7 +853,7 @@ class TestGetCompleteRecord:
             probability=0.75,
             creation_op=OPERATION_MUTATION,
             generation_born=3,
-            parent_ids=["C0"],
+            parents={"C0": "code"},
         )
 
         record = individual.get_complete_record()
@@ -864,7 +864,7 @@ class TestGetCompleteRecord:
         assert record["creation_op"] == "mutation"
         assert record["generation_born"] == 3
         assert record["probability"] == 0.75
-        assert record["parent_ids"] == ["C0"]
+        assert record["parents"] == {"C0": "code"}
 
     def test_get_complete_record_with_lifecycle_events(self) -> None:
         """Test get_complete_record includes all lifecycle events."""
@@ -873,7 +873,7 @@ class TestGetCompleteRecord:
             probability=0.6,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Add lifecycle events
@@ -906,7 +906,7 @@ class TestGetCompleteRecord:
             probability=0.5,
             creation_op=OPERATION_CROSSOVER,
             generation_born=2,
-            parent_ids=["C0", "C1"],
+            parents={"C0": "code", "C1": "code"},
         )
 
         individual.notify_selected_as_elite(generation=3)
@@ -931,7 +931,7 @@ class TestGetCompleteRecord:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         record = individual.get_complete_record()
@@ -948,7 +948,7 @@ class TestGetCompleteRecord:
             probability=0.7,
             creation_op=OPERATION_EDIT,
             generation_born=1,
-            parent_ids=["T0"],
+            parents={"T0": "test"},
         )
 
         # Simulate complex lifecycle
@@ -981,7 +981,7 @@ class TestGetCompleteRecord:
             probability=0.8,
             creation_op=OPERATION_MUTATION,
             generation_born=5,
-            parent_ids=["T4"],
+            parents={"T4": "test"},
         )
 
         record = individual.get_complete_record()
@@ -996,7 +996,7 @@ class TestGetCompleteRecord:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         record = individual.get_complete_record()
@@ -1017,7 +1017,7 @@ class TestGetCompleteRecord:
             probability=0.3,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Update probability multiple times
@@ -1045,7 +1045,7 @@ class TestIndividualIntegration:
             probability=0.3,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Mutation
@@ -1054,7 +1054,7 @@ class TestIndividualIntegration:
             probability=0.35,
             creation_op=OPERATION_MUTATION,
             generation_born=1,
-            parent_ids=[initial.id],
+            parents={initial.id: "code"},
         )
 
         # Crossover
@@ -1063,7 +1063,7 @@ class TestIndividualIntegration:
             probability=0.4,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         offspring = CodeIndividual(
@@ -1071,15 +1071,15 @@ class TestIndividualIntegration:
             probability=0.5,
             creation_op=OPERATION_CROSSOVER,
             generation_born=2,
-            parent_ids=[mutated.id, another.id],
+            parents={mutated.id: "code", another.id: "code"},
         )
 
         # Verify relationships
         assert initial.generation_born == 0
         assert mutated.generation_born == 1
         assert offspring.generation_born == 2
-        assert mutated.parent_ids == [initial.id]
-        assert offspring.parent_ids == [mutated.id, another.id]
+        assert mutated.parents == {initial.id: "code"}
+        assert offspring.parents == {mutated.id: "code", another.id: "code"}
 
     def test_probability_updates_through_evolution(self) -> None:
         """Test probability updates throughout evolution."""
@@ -1088,7 +1088,7 @@ class TestIndividualIntegration:
             probability=0.3,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         # Simulate probability updates through generations

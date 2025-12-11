@@ -33,7 +33,7 @@ def sample_code_individuals() -> list[CodeIndividual]:
             probability=0.1 * (i + 1),
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
         for i in range(5)
     ]
@@ -48,7 +48,7 @@ def sample_test_individuals() -> list[TestIndividual]:
             probability=0.1 * (i + 1),
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
         for i in range(5)
     ]
@@ -332,7 +332,7 @@ class TestBasePopulationSharedBehavior:
                 probability=0.95,
                 creation_op=OPERATION_MUTATION,
                 generation_born=1,
-                parent_ids=["C0"],
+                parents={"C0": "code"},
             )
         ]
 
@@ -363,14 +363,14 @@ class TestBasePopulationSharedBehavior:
                 probability=0.6,
                 creation_op=OPERATION_MUTATION,
                 generation_born=1,
-                parent_ids=[],
+                parents={},
             ),
             CodeIndividual(
                 snippet="def new2(): pass",
                 probability=0.7,
                 creation_op=OPERATION_CROSSOVER,
                 generation_born=1,
-                parent_ids=[],
+                parents={},
             ),
         ]
 
@@ -521,7 +521,7 @@ class TestPopulationEdgeCases:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={},
         )
 
         pop = CodePopulation([individual], generation=0)
@@ -538,7 +538,7 @@ class TestPopulationEdgeCases:
                 probability=np.random.random(),
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(100)
         ]
@@ -570,7 +570,7 @@ class TestPopulationEdgeCases:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for _ in range(3)
         ]
@@ -589,7 +589,7 @@ class TestPopulationEdgeCases:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
         ]
 
@@ -606,14 +606,14 @@ class TestPopulationEdgeCases:
                 probability=0.0,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             ),
             CodeIndividual(
                 snippet="def b(): pass",
                 probability=1.0,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             ),
         ]
 
@@ -653,7 +653,7 @@ class TestPopulationIntegration:
                 probability=0.3,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(10)
         ]
@@ -676,7 +676,7 @@ class TestPopulationIntegration:
                     probability=ind.probability,
                     creation_op=OPERATION_REPRODUCTION,
                     generation_born=gen + 1,
-                    parent_ids=[ind.id],
+                    parents={ind.id: "code"},
                 )
                 for ind in top_5
             ]
@@ -722,7 +722,7 @@ class TestPopulationIntegration:
                 probability=0.1,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for i in range(5)
         ]

@@ -407,16 +407,26 @@ class BaseIndividual(ABC):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parent_ids: list[str],
+        parents: dict[str, Literal["code", "test"]] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes the shared state for all individuals.
+
+        Args:
+            snippet: The code or test content
+            probability: Initial probability value
+            creation_op: The genetic operation that created this individual
+            generation_born: Generation when this individual was created
+            parents: Parent individuals {parent_id: parent_type}, supports cross-species
+            metadata: Additional operation-specific metadata
         """
         self.lifecycle_log: list[LogEntry] = []
         self._snippet = snippet
         self._creation_op = creation_op
         self._generation_born = generation_born
-        self._parent_ids = parent_ids
+        self._parents = parents if parents is not None else {}
+        self._metadata = metadata if metadata is not None else {}
 
         BaseIndividual._validate_probability(probability)
         self._probability = probability
@@ -531,7 +541,8 @@ class BaseIndividual(ABC):
             "creation_op": self.creation_op,  # Already a string
             "generation_born": self.generation_born,
             "probability": self.probability,
-            "parent_ids": self.parent_ids,
+            "parents": self.parents,  # New dict format with types
+            "metadata": self.metadata,  # Operation-specific metadata
             "lifecycle_events": [
                 {
                     "generation": entry.generation,
@@ -598,9 +609,33 @@ class BaseIndividual(ABC):
         return self._creation_op
 
     @property
-    def parent_ids(self) -> list[str]:
-        """A list of parent IDs from which this individual was derived."""
-        return self._parent_ids
+    def parents(self) -> dict[str, Literal["code", "test"]]:
+        """
+        Dictionary mapping parent IDs to their types.
+
+        This allows tracking cross-species parents (e.g., DET operator
+        takes code parents to create test offspring).
+
+        Returns:
+            Dict mapping parent IDs to "code" or "test".
+        """
+        return self._parents
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """
+        Operation-specific metadata for this individual.
+
+        This can store additional information such as:
+        - LLM prompts and responses
+        - Reasoning chains
+        - Execution traces
+        - Operation parameters
+
+        Returns:
+            Dict containing operation-specific metadata.
+        """
+        return self._metadata
 
     @property
     def generation_born(self) -> int:

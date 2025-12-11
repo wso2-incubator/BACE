@@ -567,7 +567,7 @@ class Orchestrator:
                 probability=self.code_pop_config.initial_prior,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for s in code_snippets
         ]
@@ -594,7 +594,7 @@ class Orchestrator:
                 probability=test_pop_config.initial_prior,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for s in test_snippets
         ]
@@ -644,7 +644,7 @@ class Orchestrator:
                 probability=FIXED_TEST_PROBABILITY,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={},
             )
             for method in test_methods
         ]

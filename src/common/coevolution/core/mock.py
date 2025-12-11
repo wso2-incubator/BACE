@@ -353,7 +353,7 @@ class MockBreedingStrategy:
                 creation_op="crossover",
                 generation_born=context.coevolution_context.code_population.generation
                 + 1,
-                parent_ids=[parent.id],
+                parents={parent.id: "code"},
             )
         else:
             # Test population - get from context
@@ -368,7 +368,7 @@ class MockBreedingStrategy:
                     probability=0.5,
                     creation_op="initial",
                     generation_born=0,
-                    parent_ids=[],
+                    parents={},
                 )
             else:
                 parent_idx = np.random.randint(0, test_population.size)
@@ -379,7 +379,7 @@ class MockBreedingStrategy:
                     probability=test_parent.probability * 0.95,
                     creation_op="mutation",
                     generation_born=test_population.generation + 1,
-                    parent_ids=[test_parent.id],
+                    parents={test_parent.id: "test"},
                 )
 
         logger.debug(
