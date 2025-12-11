@@ -171,6 +171,37 @@ class OperatorRatesConfig:
                 f"Remaining probability ({1.0 - total:.4f}) is used for reproduction."
             )
 
+    def validate_against_operator(
+        self, operator: "IGeneticOperator", operator_name: str = "operator"
+    ) -> None:
+        """
+        Validate that all operations in this config are supported by the operator.
+
+        Args:
+            operator: The genetic operator to validate against.
+            operator_name: Descriptive name for error messages (e.g., "code_operator").
+
+        Raises:
+            ValueError: If any operation in operation_rates is not supported by the operator.
+
+        Example:
+            >>> config = OperatorRatesConfig(
+            ...     operation_rates={"crossover": 0.3, "edit": 0.2, "invalid_op": 0.1},
+            ...     mutation_rate=0.1
+            ... )
+            >>> config.validate_against_operator(code_operator, "code_operator")
+            # Raises: ValueError: code_operator does not support operations: {'invalid_op'}
+        """
+        supported_ops = operator.supported_operations()
+        configured_ops = set(self.operation_rates.keys())
+        unsupported_ops = configured_ops - supported_ops
+
+        if unsupported_ops:
+            raise ValueError(
+                f"{operator_name} does not support operations: {unsupported_ops}. "
+                f"Supported operations: {supported_ops}"
+            )
+
 
 @dataclass
 class PopulationConfig:
@@ -794,6 +825,21 @@ class IGeneticOperator(Protocol):
     Defines the contract for any class that applies genetic operations
     to evolve individuals using a rich context object.
     """
+
+    def supported_operations(self) -> set[Operation]:
+        """
+        Return the set of operations this operator can handle.
+
+        This method enables validation that OperatorRatesConfig only
+        references operations that the operator actually implements.
+
+        Returns:
+            Set of operation names (strings) that this operator supports.
+
+        Example:
+            {"mutation", "crossover", "edit", "det"}
+        """
+        ...
 
     def apply(self, context: OperationContext) -> str:
         """
