@@ -44,9 +44,9 @@ from common.coevolution.core.population import CodePopulation, TestPopulation
 def create_configurations() -> tuple[
     EvolutionConfig,
     CodePopulationConfig,
-    PopulationConfig,
     OperatorRatesConfig,
-    OperatorRatesConfig,
+    dict[str, PopulationConfig],
+    dict[str, OperatorRatesConfig],
     BayesianConfig,
 ]:
     """Create all configuration objects for the experiment."""
@@ -63,14 +63,8 @@ def create_configurations() -> tuple[
         initial_prior=0.5,
         initial_population_size=10,
         max_population_size=15,
-        elitism_rate=0.5,  # Keep top 40% as elites
-        offspring_rate=0.5,  # Generate 60% new offspring
-    )
-
-    # Test population configuration
-    test_pop_config = PopulationConfig(
-        initial_prior=0.5,
-        initial_population_size=20,
+        elitism_rate=0.5,  # Keep top 50% as elites
+        offspring_rate=0.5,  # Generate 50% new offspring
     )
 
     # Code genetic operator rates
@@ -79,11 +73,20 @@ def create_configurations() -> tuple[
         mutation_rate=0.2,
     )
 
-    # Test genetic operator rates
-    test_op_rates = OperatorRatesConfig(
-        operation_rates={"crossover": 0.4, "edit": 0.3},
-        mutation_rate=0.3,
-    )
+    # Per-test-type configurations (only unittest for this test)
+    test_pop_configs = {
+        "unittest": PopulationConfig(
+            initial_prior=0.5,
+            initial_population_size=20,
+        )
+    }
+
+    test_op_rates_configs = {
+        "unittest": OperatorRatesConfig(
+            operation_rates={"crossover": 0.4, "edit": 0.3},
+            mutation_rate=0.3,
+        )
+    }
 
     # Bayesian belief update configuration
     bayesian_config = BayesianConfig(
@@ -96,9 +99,9 @@ def create_configurations() -> tuple[
     return (
         evo_config,
         code_pop_config,
-        test_pop_config,
         code_op_rates,
-        test_op_rates,
+        test_pop_configs,
+        test_op_rates_configs,
         bayesian_config,
     )
 
@@ -106,20 +109,24 @@ def create_configurations() -> tuple[
 def create_mock_components(problem: Problem) -> dict[str, Any]:
     """Create all mock component instances."""
 
-    # Create operators
+    # Create code operator
     code_operator = MockCodeOperator(problem)
-    test_operator = MockTestOperator(problem)
 
     # Create single bayesian system (not separate for code/test)
     bayesian_system = MockBayesianSystem()
 
-    # Create mock breeding strategies
+    # Create code breeding strategy and elite selector
     code_breeding_strategy = MockBreedingStrategy(individual_type="code")
-    test_breeding_strategy = MockBreedingStrategy(individual_type="test")
-
-    # Create elite selectors
     code_elite_selector = MockEliteSelector()
-    test_elite_selector = MockEliteSelector()
+
+    # Create per-test-type components (only unittest for this test)
+    test_operators = {"unittest": MockTestOperator(problem)}
+
+    test_breeding_strategies = {
+        "unittest": MockBreedingStrategy(individual_type="test")
+    }
+
+    test_elite_selectors = {"unittest": MockEliteSelector()}
 
     # Create execution system
     execution_system = MockExecutionSystem()
@@ -135,11 +142,11 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
 
     return {
         "code_operator": code_operator,
-        "test_operator": test_operator,
+        "test_operators": test_operators,
         "code_breeding_strategy": code_breeding_strategy,
-        "test_breeding_strategy": test_breeding_strategy,
+        "test_breeding_strategies": test_breeding_strategies,
         "code_elite_selector": code_elite_selector,
-        "test_elite_selector": test_elite_selector,
+        "test_elite_selectors": test_elite_selectors,
         "execution_system": execution_system,
         "bayesian_system": bayesian_system,
         "test_block_rebuilder": test_block_rebuilder,
@@ -158,9 +165,9 @@ def mock_problem() -> Problem:
 def configurations() -> tuple[
     EvolutionConfig,
     CodePopulationConfig,
-    PopulationConfig,
     OperatorRatesConfig,
-    OperatorRatesConfig,
+    dict[str, PopulationConfig],
+    dict[str, OperatorRatesConfig],
     BayesianConfig,
 ]:
     """Fixture to provide test configurations."""
@@ -174,7 +181,7 @@ def mock_components(mock_problem: Problem) -> dict[str, Any]:
 
 
 def log_results(
-    code_population: CodePopulation, test_population: TestPopulation
+    code_population: CodePopulation, test_populations: dict[str, TestPopulation]
 ) -> None:
     """Display the final results of the coevolution run."""
 
@@ -191,18 +198,24 @@ def log_results(
             f"Best Code Individual: {best_code.id} (prob={best_code.probability:.4f})"
         )
 
-    # Test population statistics
-    best_test = test_population.get_best_individual()
-    avg_test_prob = test_population.compute_average_probability()
+    # Test population statistics (for each type)
+    for test_type, test_population in test_populations.items():
+        best_test = test_population.get_best_individual()
+        avg_test_prob = test_population.compute_average_probability()
+
+        logger.info(
+            f"\n{test_type.upper()} Test Population Size: {test_population.size}"
+        )
+        logger.info(
+            f"{test_type.upper()} Test Average Probability: {avg_test_prob:.4f}"
+        )
+        if best_test:
+            logger.info(
+                f"Best {test_type.upper()} Test Individual: {best_test.id} (prob={best_test.probability:.4f})"
+            )
+
     # Note: get_pareto_front() requires observation_matrix, which is not available in this context
     # pareto_front = test_population.get_pareto_front(observation_matrix)
-
-    logger.info(f"Test Population Size: {test_population.size}")
-    logger.info(f"Test Average Probability: {avg_test_prob:.4f}")
-    if best_test:
-        logger.info(
-            f"Best Test Individual: {best_test.id} (prob={best_test.probability:.4f})"
-        )
     # logger.info(f"Pareto Front Size: {len(pareto_front)}")
 
     # Display generation history
@@ -216,13 +229,15 @@ def log_results(
         logger.info(f"  Generation {gen}: {gen_counts[gen]} individuals")
 
     logging_utils.log_section_header("INFO", "TEST POPULATION GENERATION DISTRIBUTION")
-    gen_counts = {}
-    for test_ind in test_population:
-        gen_counts[test_ind.generation_born] = (
-            gen_counts.get(test_ind.generation_born, 0) + 1
-        )
-    for gen in sorted(gen_counts.keys()):
-        logger.info(f"  Generation {gen}: {gen_counts[gen]} individuals")
+    for test_type, test_population in test_populations.items():
+        logger.info(f"\n{test_type.upper()} Test Population:")
+        gen_counts = {}
+        for test_ind in test_population:
+            gen_counts[test_ind.generation_born] = (
+                gen_counts.get(test_ind.generation_born, 0) + 1
+            )
+        for gen in sorted(gen_counts.keys()):
+            logger.info(f"  Generation {gen}: {gen_counts[gen]} individuals")
 
 
 def test_orchestrator_full_run(
@@ -230,9 +245,9 @@ def test_orchestrator_full_run(
     configurations: tuple[
         EvolutionConfig,
         CodePopulationConfig,
-        PopulationConfig,
         OperatorRatesConfig,
-        OperatorRatesConfig,
+        dict[str, PopulationConfig],
+        dict[str, OperatorRatesConfig],
         BayesianConfig,
     ],
     mock_components: dict[str, Any],
@@ -245,7 +260,6 @@ def test_orchestrator_full_run(
     - Both code and test populations are created and evolved
     - Final populations contain individuals
     - Best individuals can be identified
-    - Pareto front is computed for test population
     """
     # Setup logging for test
     logging_utils.setup_logging(
@@ -258,9 +272,9 @@ def test_orchestrator_full_run(
     (
         evo_config,
         code_pop_config,
-        test_pop_config,
         code_op_rates,
-        test_op_rates,
+        test_pop_configs,
+        test_op_rates_configs,
         bayesian_config,
     ) = configurations
 
@@ -269,36 +283,41 @@ def test_orchestrator_full_run(
         # Configurations
         evo_config=evo_config,
         code_pop_config=code_pop_config,
-        test_pop_config=test_pop_config,
         code_op_rates_config=code_op_rates,
-        test_op_rates_config=test_op_rates,
         bayesian_config=bayesian_config,
+        test_pop_configs=test_pop_configs,
+        test_op_rates_configs=test_op_rates_configs,
         # Problem and sandbox
         problem=mock_problem,
         sandbox=mock_components["sandbox"],
-        # Operators
+        # Code operator and systems
         code_operator=mock_components["code_operator"],
-        test_operator=mock_components["test_operator"],
-        # Systems
         execution_system=mock_components["execution_system"],
         bayesian_system=mock_components["bayesian_system"],
         # Test components
         test_block_rebuilder=mock_components["test_block_rebuilder"],
         dataset_test_block_builder=mock_components["dataset_test_block_builder"],
-        # Breeding strategies and elite selectors
+        # Code breeding strategy and elite selector
         code_breeding_strategy=mock_components["code_breeding_strategy"],
-        test_breeding_strategy=mock_components["test_breeding_strategy"],
         code_elite_selector=mock_components["code_elite_selector"],
-        test_elite_selector=mock_components["test_elite_selector"],
+        # Per-test-type components
+        test_operators=mock_components["test_operators"],
+        test_breeding_strategies=mock_components["test_breeding_strategies"],
+        test_elite_selectors=mock_components["test_elite_selectors"],
     )
 
     # Run coevolution
     with logger.contextualize(run_id="test_run", problem_id=mock_problem.question_id):
-        code_population, test_population = orchestrator.run()
+        code_population, evolved_test_pops = orchestrator.run()
 
     # Assertions to verify the run was successful
     assert code_population is not None, "Code population should not be None"
-    assert test_population is not None, "Test population should not be None"
+    assert evolved_test_pops is not None, "Evolved test populations should not be None"
+    assert "unittest" in evolved_test_pops, (
+        "unittest population should be in evolved_test_pops"
+    )
+
+    test_population = evolved_test_pops["unittest"]
 
     # Verify populations have individuals
     assert code_population.size > 0, "Code population should have individuals"
@@ -355,9 +374,9 @@ def main() -> None:
     (
         evo_config,
         code_pop_config,
-        test_pop_config,
         code_op_rates,
-        test_op_rates,
+        test_pop_configs,
+        test_op_rates_configs,
         bayesian_config,
     ) = create_configurations()
 
@@ -365,9 +384,11 @@ def main() -> None:
     logger.info(
         f"Code Population: {code_pop_config.initial_population_size} → {code_pop_config.max_population_size} individuals"
     )
-    logger.info(
-        f"Test Population: {test_pop_config.initial_population_size} individuals"
-    )
+    # Log test population configs
+    for test_type, test_config in test_pop_configs.items():
+        logger.info(
+            f"{test_type.upper()} Test Population: {test_config.initial_population_size} individuals"
+        )
 
     # Step 3: Create mock components
     logger.info("\nCreating mock components...")
@@ -380,16 +401,16 @@ def main() -> None:
         # Configurations
         evo_config=evo_config,
         code_pop_config=code_pop_config,
-        test_pop_config=test_pop_config,
+        test_pop_configs=test_pop_configs,
         code_op_rates_config=code_op_rates,
-        test_op_rates_config=test_op_rates,
+        test_op_rates_configs=test_op_rates_configs,
         bayesian_config=bayesian_config,
         # Problem and sandbox
         problem=problem,
         sandbox=components["sandbox"],
         # Operators
         code_operator=components["code_operator"],
-        test_operator=components["test_operator"],
+        test_operators=components["test_operators"],
         # Systems
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
@@ -398,9 +419,9 @@ def main() -> None:
         dataset_test_block_builder=components["dataset_test_block_builder"],
         # Breeding strategies and elite selectors
         code_breeding_strategy=components["code_breeding_strategy"],
-        test_breeding_strategy=components["test_breeding_strategy"],
+        test_breeding_strategies=components["test_breeding_strategies"],
         code_elite_selector=components["code_elite_selector"],
-        test_elite_selector=components["test_elite_selector"],
+        test_elite_selectors=components["test_elite_selectors"],
     )
 
     # Step 5: Run coevolution
@@ -408,10 +429,10 @@ def main() -> None:
 
     try:
         with logger.contextualize(run_id="mock_run", problem_id=problem.question_id):
-            code_population, test_population = orchestrator.run()
+            code_population, test_populations = orchestrator.run()
 
         # Step 6: Display results
-        log_results(code_population, test_population)
+        log_results(code_population, test_populations)
 
         logger.info("\n" + "=" * 80)
         logger.info("INTEGRATION TEST COMPLETED SUCCESSFULLY!")

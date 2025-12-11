@@ -8,7 +8,7 @@ Functions:
     setup_logging: Configures console and file logging with context support.
     log_section_header: Logs a prominent "==== SECTION ====" style header.
     log_subsection_header: Logs a "---- Subsection ----" style header.
-    log_generation_summary: Logs lightweight generation statistics.
+    log_generation_summary: Logs lightweight generation statistics for code and test populations.
     log_individual_complete: Logs a single individual's complete lifecycle.
     log_final_survivors: Logs all surviving individuals at evolution end.
 """
@@ -18,7 +18,7 @@ import json
 import os
 import sys
 import zipfile
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import pandas as pd
 from loguru import logger
@@ -151,7 +151,7 @@ def log_subsection_header(level: str, message: str) -> None:
 
 def log_generation_summary(
     code_population: "CodePopulation",
-    test_population: "TestPopulation",
+    test_populations: dict[str, "TestPopulation"],
 ) -> None:
     """
     Logs lightweight summary statistics for the current generation.
@@ -160,7 +160,7 @@ def log_generation_summary(
 
     Args:
         code_population: The current code population
-        test_population: The current test population
+        test_populations: Dictionary mapping test type to test population (e.g., {"unittest": pop, "differential": pop})
     """
     import json
 
@@ -168,27 +168,31 @@ def log_generation_summary(
 
     # Collect newly born individuals (created this generation)
     new_code_ids = [ind.id for ind in code_population if ind.generation_born == gen_num]
-    new_test_ids = [ind.id for ind in test_population if ind.generation_born == gen_num]
 
-    # Calculate statistics
+    # Calculate code statistics
     code_probs = [ind.probability for ind in code_population]
-    test_probs = [ind.probability for ind in test_population]
 
     summary = {
         "generation": gen_num,
         "code_pop_size": len(code_population),
-        "test_pop_size": len(test_population),
         "avg_code_prob": round(sum(code_probs) / len(code_probs), 4),
-        "avg_test_prob": round(sum(test_probs) / len(test_probs), 4),
         "min_code_prob": round(min(code_probs), 4),
         "max_code_prob": round(max(code_probs), 4),
-        "min_test_prob": round(min(test_probs), 4),
-        "max_test_prob": round(max(test_probs), 4),
         "new_code_count": len(new_code_ids),
-        "new_test_count": len(new_test_ids),
         "new_code_ids": new_code_ids,
-        "new_test_ids": new_test_ids,
     }
+
+    # Add statistics for each test population type
+    for test_type, test_pop in test_populations.items():
+        new_test_ids = [ind.id for ind in test_pop if ind.generation_born == gen_num]
+        test_probs = [ind.probability for ind in test_pop]
+
+        summary[f"{test_type}_pop_size"] = len(test_pop)
+        summary[f"{test_type}_avg_prob"] = round(sum(test_probs) / len(test_probs), 4)
+        summary[f"{test_type}_min_prob"] = round(min(test_probs), 4)
+        summary[f"{test_type}_max_prob"] = round(max(test_probs), 4)
+        summary[f"{test_type}_new_count"] = len(new_test_ids)
+        summary[f"{test_type}_new_ids"] = new_test_ids
 
     log_subsection_header("INFO", f"--- Generation {gen_num} Summary ---")
     logger.info(f"GEN_SUMMARY|{gen_num}|{json.dumps(summary)}")
@@ -542,7 +546,7 @@ def log_observation_matrix(
     observation_matrix: "np.ndarray",
     code_population: "CodePopulation",
     test_population: "TestPopulation",
-    test_type: Literal["unittest", "public", "private"] = "unittest",
+    test_type: str,
 ) -> None:
     code_ids = [ind.id for ind in code_population]
     test_ids = [ind.id for ind in test_population]

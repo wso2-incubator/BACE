@@ -85,6 +85,10 @@ class MockCodeOperator(ICodeOperator):
     def __init__(self, problem: Problem) -> None:
         self.problem = problem
 
+    def supported_operations(self) -> set[str]:
+        """Return the set of operations this operator supports."""
+        return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
+
     def create_initial_snippets(self, population_size: int) -> list[str]:
         logger.debug(f"MockCodeOperator: Creating {population_size} code snippets...")
         return [
@@ -133,6 +137,10 @@ class MockTestOperator(ITestOperator):
 
     def __init__(self, problem: Problem) -> None:
         self.problem = problem
+
+    def supported_operations(self) -> set[str]:
+        """Return the set of operations this operator supports."""
+        return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
     def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
         logger.debug(
