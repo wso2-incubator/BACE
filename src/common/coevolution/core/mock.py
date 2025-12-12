@@ -1,5 +1,6 @@
 # /path/to/your/project/mock.py
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -11,26 +12,28 @@ from .interfaces import (
     OPERATION_EDIT,
     OPERATION_INITIAL,
     OPERATION_MUTATION,
+    BaseIndividual,
+    BasePopulation,
     BayesianConfig,
-    BreedingContext,
     CoevolutionContext,
     ExecutionResults,
     IBayesianSystem,
-    ICodeOperator,
+    IEliteSelectionStrategy,
     IExecutionSystem,
+    IOperator,
+    IParentSelectionStrategy,
     IProbabilityAssigner,
-    ISelectionStrategy,
     ITestBlockRebuilder,
-    ITestOperator,
     Operation,
-    OperationContext,
     ParentProbabilities,
     PopulationConfig,
     Problem,
-    Sandbox,
     Test,
 )
 from .population import CodePopulation, TestPopulation
+
+if TYPE_CHECKING:
+    from .individual import CodeIndividual, TestIndividual
 
 
 @dataclass
@@ -79,157 +82,332 @@ def get_mock_problem() -> Problem:
 # --- Mock Operators ---
 
 
-class MockCodeOperator(ICodeOperator):
+class MockCodeOperator(IOperator["CodeIndividual"]):
     """Combines mock code initialization and genetic operations."""
 
-    def __init__(self, problem: Problem) -> None:
-        self.problem = problem
+    def __init__(self, initial_prior: float = 0.5) -> None:
+        self.initial_prior = initial_prior
 
     def supported_operations(self) -> set[str]:
         """Return the set of operations this operator supports."""
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
-    def create_initial_snippets(self, population_size: int) -> list[str]:
-        logger.debug(f"MockCodeOperator: Creating {population_size} code snippets...")
-        return [
-            self.problem.starter_code + f"    pass # mock code {i}"
-            for i in range(population_size)
-        ]
+    def create_initial_individuals(
+        self, population_size: int, initial_prior: float, problem: Problem
+    ) -> tuple[list["CodeIndividual"], None]:
+        """Create initial code individuals (generation 0). Returns (individuals, None) for code."""
+        from .individual import CodeIndividual
 
-    def apply(self, context: OperationContext) -> str:
-        """Apply a genetic operation to code snippets."""
-        logger.trace(
-            f"MockCodeOperator.apply called with operation={context.operation}"
+        logger.debug(
+            f"MockCodeOperator: Creating {population_size} code individuals..."
         )
 
-        if context.operation == OPERATION_MUTATION:
-            parent1 = context.code_individuals[0].snippet
-            return parent1 + f" # mutated v{np.random.randint(100)}"
-        elif context.operation == OPERATION_CROSSOVER:
-            if len(context.code_individuals) < 2:
-                raise ValueError("Crossover requires 2 code individuals")
-            parent1 = context.code_individuals[0].snippet
-            parent2 = context.code_individuals[1].snippet
-            mid = len(parent1) // 2
-            return (
-                parent1[:mid]
-                + parent2[mid:]
+        individuals = []
+        for i in range(population_size):
+            snippet = problem.starter_code + f"    pass # mock code {i}"
+            individual = CodeIndividual(
+                snippet=snippet,
+                probability=initial_prior,
+                creation_op=OPERATION_INITIAL,
+                generation_born=0,
+                parents={},
+                metadata={"mock_index": i},
+            )
+            individuals.append(individual)
+
+        return individuals, None
+
+    def apply(
+        self,
+        operation: Operation,
+        code_parents: list["CodeIndividual"],
+        test_parents: list["TestIndividual"],
+        coevolution_context: CoevolutionContext,
+    ) -> list["CodeIndividual"]:
+        """Apply a genetic operation and return code individuals."""
+        from .individual import CodeIndividual
+
+        logger.trace(f"MockCodeOperator.apply called with operation={operation}")
+
+        # Determine generation for offspring
+        generation = (
+            coevolution_context.code_population.generation + 1
+            if coevolution_context
+            else 1
+        )
+
+        if operation == OPERATION_MUTATION:
+            parent = code_parents[0]
+            new_snippet = parent.snippet + f" # mutated v{np.random.randint(100)}"
+            offspring = CodeIndividual(
+                snippet=new_snippet,
+                probability=parent.probability * 0.95,  # Slight decrease
+                creation_op=OPERATION_MUTATION,
+                generation_born=generation,
+                parents={parent.id: "code"},
+                metadata={"operation": "mutation", "parent_prob": parent.probability},
+            )
+            return [offspring]
+
+        elif operation == OPERATION_CROSSOVER:
+            if len(code_parents) < 2:
+                raise ValueError("Crossover requires 2 parents")
+            parent1 = code_parents[0]
+            parent2 = code_parents[1]
+            mid = len(parent1.snippet) // 2
+            new_snippet = (
+                parent1.snippet[:mid]
+                + parent2.snippet[mid:]
                 + f" # crossover v{np.random.randint(100)}"
             )
-        elif context.operation == OPERATION_EDIT:
-            if not context.code_individuals:
-                raise ValueError("Edit requires at least one code individual")
-            parent1 = context.code_individuals[0].snippet
-            # Can access execution_results, observation_matrix, test_individuals here
-            return parent1 + f" # edited from context v{np.random.randint(100)}"
-        else:
-            # For any other operation (including custom ones like "det"), use first individual
-            parent1 = (
-                context.code_individuals[0].snippet
-                if context.code_individuals
-                else "# no input"
+            # Average parent probabilities
+            offspring_prob = (parent1.probability + parent2.probability) / 2
+            offspring = CodeIndividual(
+                snippet=new_snippet,
+                probability=offspring_prob,
+                creation_op=OPERATION_CROSSOVER,
+                generation_born=generation,
+                parents={parent1.id: "code", parent2.id: "code"},
+                metadata={
+                    "operation": "crossover",
+                    "parent1_prob": parent1.probability,
+                    "parent2_prob": parent2.probability,
+                },
             )
-            return parent1 + f" # {context.operation} v{np.random.randint(100)}"
+            return [offspring]
+
+        elif operation == OPERATION_EDIT:
+            if not code_parents:
+                raise ValueError("Edit requires at least one code individual")
+            parent = code_parents[0]
+            new_snippet = (
+                parent.snippet + f" # edited from context v{np.random.randint(100)}"
+            )
+            offspring = CodeIndividual(
+                snippet=new_snippet,
+                probability=parent.probability * 0.98,
+                creation_op=OPERATION_EDIT,
+                generation_born=generation,
+                parents={parent.id: "code"},
+                metadata={
+                    "operation": "edit",
+                    "has_test_context": bool(test_parents),
+                },
+            )
+            return [offspring]
+
+        else:
+            # For any other operation (including custom ones like "det")
+            if not code_parents:
+                raise ValueError(
+                    f"Operation {operation} requires at least one code individual"
+                )
+
+            parent = code_parents[0]
+            new_snippet = parent.snippet + f" # {operation} v{np.random.randint(100)}"
+            offspring = CodeIndividual(
+                snippet=new_snippet,
+                probability=parent.probability * 0.9,
+                creation_op=operation,
+                generation_born=generation,
+                parents={parent.id: "code"},
+                metadata={"operation": operation},
+            )
+            return [offspring]
 
 
-class MockTestOperator(ITestOperator):
+class MockTestOperator(IOperator["TestIndividual"]):
     """Mocks test genetic operations."""
 
-    def __init__(self, problem: Problem) -> None:
-        self.problem = problem
+    def __init__(self, initial_prior: float = 0.5) -> None:
+        self.initial_prior = initial_prior
 
     def supported_operations(self) -> set[str]:
         """Return the set of operations this operator supports."""
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
-    def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
+    def create_initial_individuals(
+        self, population_size: int, initial_prior: float, problem: Problem
+    ) -> tuple[list["TestIndividual"], str]:
+        """Create initial test individuals (generation 0) with test class block (context_code)."""
+        from .individual import TestIndividual
+
         logger.debug(
-            f"MockTestInitializer: Creating {population_size} test snippets..."
+            f"MockTestOperator: Creating {population_size} test individuals..."
         )
 
-        snippets = []
+        individuals = []
         for i in range(population_size):
             test_name = f"test_mock_case_{i}"
             snippet = f"def {test_name}(self):\n        assert sort_array([{i}, {i - 1}]) == [{i - 1}, {i}]"
-            snippets.append(snippet)
+            individual = TestIndividual(
+                snippet=snippet,
+                probability=initial_prior,
+                creation_op=OPERATION_INITIAL,
+                generation_born=0,
+                parents={},
+                metadata={"mock_index": i, "test_name": test_name},
+            )
+            individuals.append(individual)
 
-        # Create a mock class block
+        # Create a mock test class block (context_code for tests)
         class_header = "import unittest\nfrom a_mock_solution import sort_array\n\nclass GeneratedTests(unittest.TestCase):\n"
-        indented_snippets = "\n\n".join([f"    {s}" for s in snippets])
-        full_class_block = class_header + indented_snippets
+        indented_snippets = "\n\n".join([f"    {ind.snippet}" for ind in individuals])
+        context_code = class_header + indented_snippets
 
-        return snippets, full_class_block
+        return individuals, context_code
 
-    def apply(self, context: OperationContext) -> str:
-        """Apply a genetic operation to test snippets."""
-        logger.trace(
-            f"MockTestOperator.apply called with operation={context.operation}"
-        )
+    def apply(
+        self,
+        operation: Operation,
+        code_parents: list["CodeIndividual"],
+        test_parents: list["TestIndividual"],
+        coevolution_context: CoevolutionContext,
+    ) -> list["TestIndividual"]:
+        """Apply a genetic operation and return test individuals."""
+        from .individual import TestIndividual
 
-        if context.operation == OPERATION_MUTATION:
-            # Tests are stored in test_individuals for test operators
-            parent1 = (
-                context.test_individuals[0].snippet
-                if context.test_individuals
-                else context.code_individuals[0].snippet  # Fallback for flexibility
+        logger.trace(f"MockTestOperator.apply called with operation={operation}")
+
+        # Determine generation for offspring
+        generation = 1
+        if coevolution_context:
+            # Get generation from test population if available
+            test_pops = coevolution_context.test_populations
+            if test_pops:
+                first_test_pop = next(iter(test_pops.values()))
+                generation = first_test_pop.generation + 1
+
+        if operation == OPERATION_MUTATION:
+            # Tests are stored in test_parents for test operators
+            parent = (
+                test_parents[0] if test_parents else code_parents[0]  # Fallback
             )
-            return parent1 + f" # mutated test v{np.random.randint(100)}"
-        elif context.operation == OPERATION_CROSSOVER:
-            individuals = (
-                context.test_individuals
-                if context.test_individuals
-                else context.code_individuals
+            new_snippet = parent.snippet + f" # mutated test v{np.random.randint(100)}"
+            offspring = TestIndividual(
+                snippet=new_snippet,
+                probability=parent.probability * 0.95,
+                creation_op=OPERATION_MUTATION,
+                generation_born=generation,
+                parents={parent.id: "test"},
+                metadata={"operation": "mutation"},
             )
-            if len(individuals) < 2:
+            return [offspring]
+
+        elif operation == OPERATION_CROSSOVER:
+            parents = test_parents if test_parents else code_parents
+            if len(parents) < 2:
                 raise ValueError("Crossover requires 2 individuals")
-            parent1 = individuals[0].snippet
-            parent2 = individuals[1].snippet
-            mid = len(parent1) // 2
-            return (
-                parent1[:mid]
-                + parent2[mid:]
+            parent1 = parents[0]
+            parent2 = parents[1]
+            mid = len(parent1.snippet) // 2
+            new_snippet = (
+                parent1.snippet[:mid]
+                + parent2.snippet[mid:]
                 + f" # crossover test v{np.random.randint(100)}"
             )
-        elif context.operation == OPERATION_EDIT:
-            parent1 = (
-                context.test_individuals[0].snippet
-                if context.test_individuals
-                else context.code_individuals[0].snippet
+            offspring_prob = (parent1.probability + parent2.probability) / 2
+            offspring = TestIndividual(
+                snippet=new_snippet,
+                probability=offspring_prob,
+                creation_op=OPERATION_CROSSOVER,
+                generation_born=generation,
+                parents={parent1.id: "test", parent2.id: "test"},
+                metadata={"operation": "crossover"},
             )
-            return parent1 + f" # edited test from context v{np.random.randint(100)}"
+            return [offspring]
+
+        elif operation == OPERATION_EDIT:
+            parent = test_parents[0] if test_parents else code_parents[0]
+            new_snippet = (
+                parent.snippet
+                + f" # edited test from context v{np.random.randint(100)}"
+            )
+            offspring = TestIndividual(
+                snippet=new_snippet,
+                probability=parent.probability * 0.98,
+                creation_op=OPERATION_EDIT,
+                generation_born=generation,
+                parents={parent.id: "test"},
+                metadata={"operation": "edit"},
+            )
+            return [offspring]
+
         else:
-            # For any other operation (including custom ones like "det"), use first individual
-            parent1 = (
-                context.test_individuals[0].snippet
-                if context.test_individuals
-                else (
-                    context.code_individuals[0].snippet
-                    if context.code_individuals
-                    else "# no input"
+            # For any other operation (including custom ones like "det")
+            # DET might use code parents to create test offspring
+            if code_parents:
+                # Cross-species operation: code parents → test offspring
+                parent1 = code_parents[0]
+                parent2 = code_parents[1] if len(code_parents) > 1 else parent1
+                new_snippet = f"def test_det_{np.random.randint(1000)}(self): pass  # {operation} test"
+                offspring = TestIndividual(
+                    snippet=new_snippet,
+                    probability=self.initial_prior,
+                    creation_op=operation,
+                    generation_born=generation,
+                    parents={parent1.id: "code", parent2.id: "code"},  # Code parents!
+                    metadata={"operation": operation, "cross_species": True},
                 )
-            )
-            return parent1 + f" # {context.operation} test v{np.random.randint(100)}"
+                return [offspring]
+            elif test_parents:
+                parent = test_parents[0]
+                new_snippet = (
+                    parent.snippet + f" # {operation} test v{np.random.randint(100)}"
+                )
+                offspring = TestIndividual(
+                    snippet=new_snippet,
+                    probability=parent.probability * 0.9,
+                    creation_op=operation,
+                    generation_born=generation,
+                    parents={parent.id: "test"},
+                    metadata={"operation": operation},
+                )
+                return [offspring]
+            else:
+                raise ValueError(
+                    f"Operation {operation} requires at least one parent individual"
+                )
 
 
 # --- Mock Strategies & Helpers ---
 
 
-class MockSelectionStrategy(ISelectionStrategy):
-    """Mocks parent selection."""
+class MockParentSelectionStrategy[T: BaseIndividual](IParentSelectionStrategy[T]):
+    """Mock implementation of parent selection using roulette wheel."""
 
-    def select(self, probabilities: np.ndarray) -> int:
-        # Simple roulette wheel selection
+    def select_parents(
+        self,
+        population: BasePopulation[T],
+        count: int,
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
+        """
+        Select parents using simple roulette wheel selection.
+
+        Args:
+            population: Population to select from
+            count: Number of parents to select
+            coevolution_context: Full context (unused in mock)
+
+        Returns:
+            List of selected parent individuals
+        """
+        probabilities = population.probabilities
         p_normalized = probabilities / probabilities.sum()
-        return np.random.choice(len(probabilities), p=p_normalized)
 
-    def select_parents(self, probabilities: np.ndarray) -> tuple[int, int]:
-        if len(probabilities) < 2:
-            raise ValueError("Population too small to select two parents.")
-        p1 = self.select(probabilities)
-        p2 = self.select(probabilities)
-        while p1 == p2:  # Ensure two *different* parents
-            p2 = self.select(probabilities)
-        return p1, p2
+        selected_indices = np.random.choice(
+            len(probabilities),
+            size=count,
+            p=p_normalized,
+            replace=True,  # Allow same parent multiple times
+        )
+
+        return [population[int(idx)] for idx in selected_indices]
+
+
+# Legacy alias
+MockSelectionStrategy = MockParentSelectionStrategy
 
 
 class MockProbabilityAssigner(IProbabilityAssigner):
@@ -249,148 +427,175 @@ class MockProbabilityAssigner(IProbabilityAssigner):
         return float(np.mean(parent_probs))
 
 
-class MockEliteSelector:
-    """Mock implementation of IEliteSelector for testing."""
+class MockEliteSelectionStrategy[T: BaseIndividual](IEliteSelectionStrategy[T]):
+    """Mock implementation of elite selection using simple top-k by probability."""
 
     def select_elites(
         self,
-        coevolution_context: CoevolutionContext,
-        target_population_type: str,
+        population: BasePopulation[T],
         population_config: PopulationConfig,
-    ) -> list[int]:
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
         """
         Select elite individuals using simple top-k selection by probability.
 
         Args:
-            coevolution_context: Complete system state (CoevolutionContext)
-            target_population_type: "code" or test population key
-            population_config: Population configuration
+            population: Population to select elites from
+            population_config: Configuration (uses elitism_rate if available)
+            coevolution_context: Full context (unused in mock)
 
         Returns:
-            Indices of selected elite individuals
+            List of elite individuals to preserve
         """
-        # Get the target population
-        if target_population_type == "code":
-            population = coevolution_context.code_population
-            # For code, use elitism_rate from CodePopulationConfig
-            if hasattr(population_config, "elitism_rate"):
-                num_elites = int(population.size * population_config.elitism_rate)
-            else:
-                num_elites = max(1, population.size // 2)  # Default: keep top 50%
-
-            # Simple top-k selection by probability
-            probabilities = population.probabilities
-            sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
-            elite_indices: list[int] = sorted_indices[:num_elites].tolist()
-
-            logger.debug(
-                f"MockEliteSelector: Selected {len(elite_indices)} elites from "
-                f"{target_population_type} population (size={population.size})"
-            )
+        # Determine number of elites based on config
+        if hasattr(population_config, "elitism_rate"):
+            num_elites = int(population.size * population_config.elitism_rate)
+        elif hasattr(population_config, "elite_size"):
+            num_elites = population_config.elite_size
         else:
-            # Test population
-            test_population = coevolution_context.test_populations.get(
-                target_population_type
-            )
-            if test_population is None:
-                logger.warning(
-                    f"MockEliteSelector: population '{target_population_type}' not found"
-                )
-                return []
-            # For tests, select top 50% by default (could also implement Pareto logic)
-            num_elites = max(1, test_population.size // 2)
+            num_elites = max(1, population.size // 2)  # Default: keep top 50%
 
-            # Simple top-k selection by probability
-            probabilities = test_population.probabilities
-            sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
-            elite_indices = sorted_indices[:num_elites].tolist()
+        # Simple top-k selection by probability
+        probabilities = population.probabilities
+        sorted_indices = np.argsort(probabilities)[::-1]  # Descending order
+        elite_indices = sorted_indices[:num_elites]
 
-            logger.debug(
-                f"MockEliteSelector: Selected {len(elite_indices)} elites from "
-                f"{target_population_type} population (size={test_population.size})"
-            )
+        elites = [population[int(idx)] for idx in elite_indices]
 
-        return elite_indices
+        logger.debug(
+            f"MockEliteSelectionStrategy: Selected {len(elites)} elites from "
+            f"population (size={population.size})"
+        )
+
+        return elites
+
+
+# Legacy alias
+MockEliteSelector = MockEliteSelectionStrategy
 
 
 class MockBreedingStrategy:
     """Mock implementation of IBreedingStrategy for testing."""
 
-    def __init__(self, individual_type: str = "code") -> None:
+    def __init__(
+        self,
+        operator: IOperator[Any],
+        individual_type: str = "code",
+        test_type: str | None = None,
+    ) -> None:
         """
         Initialize mock breeding strategy.
 
         Args:
+            operator: The genetic operator to use for creating individuals (IOperator)
             individual_type: "code" or "test" to determine which individuals to create
+            test_type: For test breeding, the test population type (e.g., "unittest")
         """
+        self.operator = operator
         self.individual_type = individual_type
+        self.test_type = test_type
         self.offspring_count = 0
 
-    def generate_offspring(self, context: BreedingContext) -> object:
+    def initialize_individuals(
+        self,
+        population_size: int,
+        initial_prior: float,
+        problem: Problem,
+    ) -> tuple[list[Any], str | None]:
         """
-        Generate a mock offspring individual.
+        Create initial population by delegating to operator.
 
         Args:
-            context: BreedingContext containing coevolution state and config
+            population_size: Number of individuals to create
+            initial_prior: Initial probability value for individuals
+            problem: The problem context to pass through to operator
 
         Returns:
-            A new mock offspring individual
+            Tuple of (individuals, context_code) from operator.
+            Breeder passes this through; orchestrator interprets context_code.
+        """
+        logger.debug(
+            f"MockBreedingStrategy: Creating {population_size} initial {self.individual_type} individuals"
+        )
+        # Operator returns tuple[list[T], str | None] - pass through directly
+        return self.operator.create_initial_individuals(
+            population_size, initial_prior, problem
+        )
+
+    def breed(
+        self, coevolution_context: CoevolutionContext, num_offsprings: int
+    ) -> Any:
+        """
+        Generate offspring using mock genetic operations.
+
+        Args:
+            coevolution_context: Complete system state for breeding
+            num_offsprings: Number of offspring to generate
+
+        Returns:
+            List of exactly num_offsprings new individuals
         """
         from .individual import CodeIndividual, TestIndividual
 
-        self.offspring_count += 1
-
-        # Select a random parent for probability inheritance
-        if self.individual_type == "code":
-            population = context.coevolution_context.code_population
-            parent_idx = np.random.randint(0, population.size)
-            parent = population[parent_idx]
-
-            # Create new code individual
-            offspring: CodeIndividual | TestIndividual = CodeIndividual(
-                snippet=f"{parent.snippet} # mock offspring {self.offspring_count}",
-                probability=parent.probability * 0.95,  # Slight decrease
-                creation_op="crossover",
-                generation_born=context.coevolution_context.code_population.generation
-                + 1,
-                parents={parent.id: "code"},
-            )
-        else:
-            # Test population - get from context
-            test_pop_key = context.target_population_type
-            test_population = context.coevolution_context.test_populations.get(
-                test_pop_key
-            )
-            if test_population is None or test_population.size == 0:
-                # Fallback: create a new test individual
-                offspring = TestIndividual(
-                    snippet=f"def test_mock_{self.offspring_count}(self): assert True",
-                    probability=0.5,
-                    creation_op="initial",
-                    generation_born=0,
-                    parents={},
-                )
-            else:
-                parent_idx = np.random.randint(0, test_population.size)
-                test_parent = test_population[parent_idx]
-
-                offspring = TestIndividual(
-                    snippet=f"{test_parent.snippet} # mock offspring {self.offspring_count}",
-                    probability=test_parent.probability * 0.95,
-                    creation_op="mutation",
-                    generation_born=test_population.generation + 1,
-                    parents={test_parent.id: "test"},
-                )
+        offsprings: list[Any] = []
 
         logger.debug(
-            f"MockBreedingStrategy: Generated {self.individual_type} offspring "
-            f"{offspring.id} (prob={offspring.probability:.3f})"
+            f"MockBreedingStrategy: Breeding {num_offsprings} {self.individual_type} offspring"
         )
-        return offspring
+
+        for _ in range(num_offsprings):
+            self.offspring_count += 1
+
+            # Select a random parent for probability inheritance
+            if self.individual_type == "code":
+                population = coevolution_context.code_population
+                parent_idx = np.random.randint(0, population.size)
+                parent = population[parent_idx]
+
+                # Create new code individual
+                offspring: Any = CodeIndividual(
+                    snippet=f"{parent.snippet} # mock offspring {self.offspring_count}",
+                    probability=parent.probability * 0.95,  # Slight decrease
+                    creation_op="crossover",
+                    generation_born=coevolution_context.code_population.generation + 1,
+                    parents={parent.id: "code"},
+                )
+            else:
+                # Test population - get from context
+                test_pop_key = self.test_type or "unittest"
+                test_population = coevolution_context.test_populations.get(test_pop_key)
+                if test_population is None or test_population.size == 0:
+                    # Fallback: create a new test individual
+                    offspring = TestIndividual(
+                        snippet=f"def test_mock_{self.offspring_count}(self): assert True",
+                        probability=0.5,
+                        creation_op="initial",
+                        generation_born=0,
+                        parents={},
+                    )
+                else:
+                    parent_idx = np.random.randint(0, test_population.size)
+                    test_parent = test_population[parent_idx]
+
+                    offspring = TestIndividual(
+                        snippet=f"{test_parent.snippet} # mock offspring {self.offspring_count}",
+                        probability=test_parent.probability * 0.95,
+                        creation_op="mutation",
+                        generation_born=test_population.generation + 1,
+                        parents={test_parent.id: "test"},
+                    )
+
+            offsprings.append(offspring)
+            logger.trace(
+                f"MockBreedingStrategy: Generated {self.individual_type} offspring "
+                f"{offspring.id} (prob={offspring.probability:.3f})"
+            )
+
+        return offsprings
 
 
-# MockPareto has been removed - elite selection now uses IEliteSelector protocol
-# See: IEliteSelector in interfaces.py for the new selection architecture
+# MockPareto has been removed - elite selection now uses IEliteSelectionStrategy protocol
+# See: IEliteSelectionStrategy in interfaces.py for the new selection architecture
 
 
 class MockTestBlockRebuilder(ITestBlockRebuilder):
@@ -425,7 +630,6 @@ class MockExecutionSystem(IExecutionSystem):
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
-        sandbox: Sandbox,
     ) -> ExecutionResults:
         """Execute all code against all tests."""
         logger.debug("MockExecutionSystem: 'Running' all tests...")

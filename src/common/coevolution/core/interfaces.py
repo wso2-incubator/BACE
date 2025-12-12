@@ -10,7 +10,7 @@ Interface Organization:
 
     1. Data Structures (dataclasses):
        - Configuration classes (BayesianConfig, OperatorRatesConfig, etc.)
-       - Context objects (CoevolutionContext, BreedingContext, OperationContext, InteractionData)
+       - Context objects (CoevolutionContext, InteractionData)
        - Data transfer objects (Test, Problem, LogEntry)
        - Type aliases (Operations, ExecutionResults, etc.)
 
@@ -20,11 +20,10 @@ Interface Organization:
 
     3. Fine-Grained Protocols:
        These are single-responsibility interfaces that can be composed:
-       - IGeneticOperator: applies genetic operations using OperationContext
-       - IBreedingStrategy: orchestrates breeding process using BreedingContext
-       - IEliteSelector: selects elite individuals using CoevolutionContext
-       - ICodeInitializer / ITestInitializer: create initial populations
-       - ISelectionStrategy: parent selection for breeding
+       - IOperator: unified operator for initialization and genetic operations
+       - IBreedingStrategy: orchestrates breeding process
+       - IEliteSelectionStrategy: selects elite individuals using CoevolutionContext
+       - IParentSelectionStrategy: parent selection for breeding
        - IProbabilityAssigner: offspring probability calculation
        - IBeliefInitializer / IBeliefUpdater: Bayesian operations
        - ICodeTestExecutor / IObservationMatrixBuilder: execution operations
@@ -35,14 +34,10 @@ Interface Organization:
        These combine related functionality typically implemented together:
        - IBayesianSystem: Belief initialization + updating
        - IExecutionSystem: Code execution + observation matrix building
-       - ICodeOperator: Code initialization + genetic operations
-       - ITestOperator: Test initialization + genetic operations
 
     5. Context-Based Architecture:
-       The system uses immutable context objects to pass state:
+       The system uses context objects to pass state:
        - CoevolutionContext: Complete system state (all populations + interactions)
-       - BreedingContext: Context for breeding strategies (adds rates config)
-       - OperationContext: Context for operators (adds selected individuals)
        - InteractionData: Encapsulates code-test interaction (execution + observation)
 
        This design maximizes flexibility and extensibility while maintaining clean interfaces.
@@ -87,7 +82,6 @@ class LifecycleEvent(Enum):
 type ParentProbabilities = list[float]
 type UnitTestResult = Any
 type ExecutionResults = dict[int, UnitTestResult]
-type Sandbox = Any
 
 
 @dataclass(frozen=True)
@@ -169,37 +163,6 @@ class OperatorRatesConfig:
             raise ValueError(
                 f"Operation rates sum to {total:.4f}, must be ≤ 1.0. "
                 f"Remaining probability ({1.0 - total:.4f}) is used for reproduction."
-            )
-
-    def validate_against_operator(
-        self, operator: "IGeneticOperator", operator_name: str = "operator"
-    ) -> None:
-        """
-        Validate that all operations in this config are supported by the operator.
-
-        Args:
-            operator: The genetic operator to validate against.
-            operator_name: Descriptive name for error messages (e.g., "code_operator").
-
-        Raises:
-            ValueError: If any operation in operation_rates is not supported by the operator.
-
-        Example:
-            >>> config = OperatorRatesConfig(
-            ...     operation_rates={"crossover": 0.3, "edit": 0.2, "invalid_op": 0.1},
-            ...     mutation_rate=0.1
-            ... )
-            >>> config.validate_against_operator(code_operator, "code_operator")
-            # Raises: ValueError: code_operator does not support operations: {'invalid_op'}
-        """
-        supported_ops = operator.supported_operations()
-        configured_ops = set(self.operation_rates.keys())
-        unsupported_ops = configured_ops - supported_ops
-
-        if unsupported_ops:
-            raise ValueError(
-                f"{operator_name} does not support operations: {unsupported_ops}. "
-                f"Supported operations: {supported_ops}"
             )
 
 
@@ -294,24 +257,33 @@ class InteractionData:
     observation_matrix: np.ndarray
 
 
-@dataclass(frozen=True)
+@dataclass
 class CoevolutionContext:
     """
-    Immutable snapshot of the coevolution system state.
+    Mutable container for the coevolution system state at a specific generation.
 
-    Contains all populations and their interactions at a specific point in time.
-    This serves as the single source of truth for the system state, passed to
-    breeding strategies and operators.
+    Holds references to populations and their current interactions. Populations
+    are mutated during the evolution cycle (belief updates, generation transitions).
+    A new context is created at each generation with fresh interaction data.
 
     Design principles:
     - One code population (primary population being evolved)
     - Multiple test populations with different roles/types
     - Each test population has interaction data with code population
-    - Immutable to prevent accidental state mutations
+    - Populations are mutated in-place during evolution
+    - Context is reconstructed each generation with new interactions
+    - Problem context flows through the system via this container
+
+    Lifecycle within a generation:
+        1. Context created with populations + new interaction data
+        2. Populations mutated during belief updates
+        3. Populations mutated during evolution (if not final generation)
+        4. Context discarded, new one created for next generation
 
     Example:
         context = CoevolutionContext(
-            code_population=code_pop,
+            problem=problem,
+            code_population=code_pop,  # Will be mutated
             test_populations={
                 "public": public_tests,
                 "unittest": generated_tests,
@@ -324,34 +296,19 @@ class CoevolutionContext:
             }
         )
 
+        # Mutations happen here
+        update_beliefs(context)  # Mutates populations
+        evolve_populations(context)  # Mutates populations
+
     Note: current_generation is accessible via code_population.generation
     """
 
+    problem: Problem
     code_population: "CodePopulation"
     test_populations: dict[
         str, "TestPopulation"
     ]  # Keys: "public", "unittest", "differential", "property", etc.
     interactions: dict[str, InteractionData]  # Same keys as test_populations
-
-
-@dataclass(frozen=True)
-class BreedingContext:
-    """
-    Context for breeding strategies with breeding-specific configuration.
-
-    Wraps CoevolutionContext with additional breeding parameters needed to
-    generate offspring. This separation keeps the breeding strategy interface
-    clean and extensible.
-
-    Args:
-        coevolution_context: Complete system state
-        rates_config: Operation selection probabilities
-        target_population_type: Which population to breed - "code" or test population key
-    """
-
-    coevolution_context: CoevolutionContext
-    rates_config: OperatorRatesConfig
-    target_population_type: str  # "code" or key from test_populations like "unittest"
 
 
 @dataclass(frozen=True)
@@ -369,21 +326,25 @@ class OperationContext:
     The operator extracts what it needs and ignores the rest.
 
     Design:
-    - code_individuals/test_individuals: Selected inputs for this specific operation
+    - code_parents/test_parents: Selected parent individuals for this specific operation
     - coevolution_context: Full system state for operators that need more context
 
     Examples:
-        MUTATION: uses code_individuals[0]
-        CROSSOVER: uses code_individuals[0] and [1]
-        EDIT: uses code_individuals[0], test_individuals[0],
+        MUTATION: uses code_parents[0]
+        CROSSOVER: uses code_parents[0] and [1]
+        EDIT: uses code_parents[0], test_parents[0],
               accesses coevolution_context.interactions for execution data
-        DET: uses code_individuals[0] and [1],
+        DET: uses code_parents[0] and [1],
              accesses coevolution_context.test_populations for test context
     """
 
     operation: Operation
-    code_individuals: list["CodeIndividual"]  # Selected inputs for this operation
-    test_individuals: list["TestIndividual"]  # Selected inputs for this operation
+    code_parents: list[
+        "CodeIndividual"
+    ]  # Selected parent individuals for this operation
+    test_parents: list[
+        "TestIndividual"
+    ]  # Selected parent individuals for this operation
     coevolution_context: CoevolutionContext  # Full system state
 
 
@@ -853,13 +814,43 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         pass
 
 
-class IGeneticOperator(Protocol):
+class IOperator[T: BaseIndividual](Protocol):
     """
-    Abstract interface (Protocol) for genetic operators.
+    Protocol for genetic operators that handle both initialization and evolution.
 
-    Defines the contract for any class that applies genetic operations
-    to evolve individuals using a rich context object.
+    Unified interface for operators that can:
+    1. Create initial populations (generation 0)
+    2. Apply genetic operations to evolve individuals (generation 1+)
+
+    Generic parameter T allows operators to be type-specific:
+    - IOperator[CodeIndividual] for code operations
+    - IOperator[TestIndividual] for test operations
     """
+
+    def create_initial_individuals(
+        self, population_size: int, initial_prior: float, problem: Problem
+    ) -> tuple[list[T], str | None]:
+        """
+        Generate initial population of individuals with optional context code.
+
+        Args:
+            population_size: Number of individuals to generate.
+            initial_prior: Initial probability for all individuals.
+            problem: The problem context containing question, tests, and starter code.
+                     Passed as parameter to keep operators stateless.
+
+        Returns:
+            Tuple of (individuals, context_code):
+            - individuals: List of newly generated individuals for generation 0.
+              All will have creation_op=OPERATION_INITIAL, generation_born=0, parents={}.
+            - context_code: Optional auxiliary/supporting code (e.g., test class scaffold
+              with imports, setUp, helpers for test populations). None for code populations.
+
+        Example:
+            Code operator: ([CodeIndividual(...), ...], None)
+            Test operator: ([TestIndividual(...), ...], "import unittest\n\nclass Test...")
+        """
+        ...
 
     def supported_operations(self) -> set[Operation]:
         """
@@ -876,9 +867,18 @@ class IGeneticOperator(Protocol):
         """
         ...
 
-    def apply(self, context: OperationContext) -> str:
+    def apply(self, context: OperationContext) -> list[T]:
         """
-        Apply a genetic operation using the provided context.
+        Apply a genetic operation and return offspring individuals.
+
+        The operator extracts what it needs from the context and returns
+        complete Individual objects with full provenance tracking.
+
+        Different operations may return different counts:
+        - MUTATION: returns [1 individual]
+        - CROSSOVER: returns [1 or 2 individuals] depending on implementation
+        - EDIT: returns [1 individual]
+        - DET: returns [N individuals] (batch of differential tests)
 
         The operator extracts what it needs from the context:
         - MUTATION: uses context.code_individuals[0]
@@ -886,14 +886,20 @@ class IGeneticOperator(Protocol):
         - EDIT: uses context.code_individuals[0], context.test_individuals[0],
                 context.execution_results, context.feedback
         - DET: uses context.code_individuals[0] and [1], context.observation_matrix
-                to generate a test that distinguishes between them
+                to generate tests that distinguish between them
 
         Args:
             context: Complete context including operation type, input individuals,
                     populations, execution results, and other data.
 
         Returns:
-            A new code or test snippet resulting from the operation.
+            List of offspring individuals with complete provenance:
+            - snippet: The generated code/test
+            - probability: Assigned via operator's probability logic
+            - creation_op: The operation that created them
+            - generation_born: From context
+            - parents: Dict mapping parent IDs to their types
+            - metadata: Operation-specific metadata for tracking
 
         Raises:
             ValueError: If required context for the operation is missing.
@@ -903,37 +909,97 @@ class IGeneticOperator(Protocol):
 
 class IBreedingStrategy[T_self: BaseIndividual](Protocol):
     """
-    Abstract interface (Protocol) for breeding strategies.
+    Protocol for breeding strategies that handle population generation.
 
-    Defines the contract for any class that orchestrates the genetic algorithm
-    breeding process: selecting parents, applying operators, and creating offspring.
+    Defines the contract for any class that orchestrates genetic algorithm
+    population generation, including both initial population creation (generation 0)
+    and subsequent offspring generation through genetic operations (generation 1+).
 
-    This is the primary orchestration interface that implementations can customize
-    to define different breeding behaviors.
+    The breeding strategy encapsulates:
+    - Genetic operators (mutation, crossover, edit, etc.)
+    - Parent selection strategies
+    - Operation rates configuration (owned by the strategy)
+    - Parallelization of breeding operations
 
-    The breeding strategy receives a complete BreedingContext with all system state
-    and configuration, allowing maximum flexibility in breeding logic.
+    Separation of Concerns:
+    - Breeding Strategy: Generates offspring via genetic operations
+    - Elite Selection: Handled separately by Orchestrator (NOT part of breeding)
+    - Orchestrator: Coordinates evolution (elite selection, breeding, belief updates)
+
+    Design:
+    - Breeder owns the operator, selection strategies, and rates config as dependencies
+    - Orchestrator interacts only with breeder, not with operators directly
+    - Target population type is configured at construction (code vs test types)
     """
 
-    def generate_offspring(
+    def initialize_individuals(
         self,
-        context: BreedingContext,
-    ) -> T_self:
+        population_size: int,
+        initial_prior: float,
+        problem: Problem,
+    ) -> tuple[list[T_self], str | None]:
         """
-        Generate a single offspring individual using the provided context.
+        Create initial population by delegating to operator.
+
+        This is a convenience method that wraps the operator's
+        create_initial_individuals, allowing orchestrator to interact
+        only with the breeder.
 
         Args:
-            context: Complete breeding context with coevolution state and configuration
+            population_size: Number of individuals to create
+            initial_prior: Initial probability value for individuals
+            problem: The problem context to pass through to operator
 
         Returns:
-            A new offspring individual of type T_self
+            Tuple of (individuals, context_code):
+            - individuals: List of newly generated individuals
+            - context_code: Optional auxiliary code from operator.
+              Breeder passes this through from operator.
+              Orchestrator interprets it (e.g., as test_block for test populations).
+
+        Example:
+            Code breeder: ([CodeIndividual(...), ...], None)
+            Test breeder: ([TestIndividual(...), ...], "import unittest\n...")
+        """
+        ...
+
+    def breed(
+        self,
+        coevolution_context: CoevolutionContext,
+        num_offsprings: int,
+    ) -> list[T_self]:
+        """
+        Generate offspring using genetic operations.
+
+        The breeder handles:
+        1. Operation selection based on its rates_config (owned by strategy)
+        2. Parent selection using selection strategies
+        3. Calling operators with appropriate context
+        4. Parallelization (if max_workers > 1)
+        5. Trimming to exact count if operators produce variable offspring
+
+        Note: Elite selection is NOT part of breeding - it's handled separately
+        by the Orchestrator. Breeders only generate new offspring through genetic
+        operations.
+
+        Args:
+            coevolution_context: Complete system state for breeding
+            num_offsprings: Number of offspring to generate
+
+        Returns:
+            List of exactly num_offsprings new individuals.
+            If operators produce more, list is trimmed to exact count.
+
+        Raises:
+            Exception: Re-raises exceptions from operators (e.g., LLMGenerationError)
+                      to allow caller to handle failures appropriately.
         """
         ...
 
 
-class IEliteSelector(Protocol):
+class IEliteSelectionStrategy[T: BaseIndividual](Protocol):
     """
-    Protocol for selecting elite individuals with access to full system context.
+    Protocol for selecting elite individuals to preserve unchanged to next generation.
 
     This interface enables pluggable, sophisticated selection strategies that can consider:
     - Individual probabilities (belief in correctness)
@@ -942,146 +1008,83 @@ class IEliteSelector(Protocol):
     - Diversity metrics (avoiding redundant individuals)
     - Any other custom criteria
 
-    The selector receives complete CoevolutionContext, providing maximum flexibility
-    to implement different selection strategies without modifying core architecture.
+    The strategy receives the target population, its configuration, and full coevolution
+    context, providing maximum flexibility to implement different selection strategies.
 
     Example strategies:
     - Code selection: Multi-objective (probability + test performance)
     - Test selection: Pareto front (probability + discrimination)
     - Simple selection: Top-k by probability only
     - Diversity-based: Select diverse individuals covering different behaviors
-
-    This replaces hardcoded selection logic (e.g., Pareto in TestPopulation),
-    making the system extensible and experimentable.
     """
 
     def select_elites(
         self,
-        coevolution_context: CoevolutionContext,
-        target_population_type: str,
+        population: BasePopulation[T],
         population_config: PopulationConfig,
-    ) -> list[int]:
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
         """
-        Select elite individuals from the target population.
+        Select elite individuals to preserve unchanged to next generation.
 
         Args:
+            population: The population to select elites from
+            population_config: Configuration containing selection preferences
+                              (e.g., diversity_selection flag, elitism_rate, elite_size)
             coevolution_context: Complete system state including all populations
-                                and their interactions. Provides full visibility
-                                for sophisticated selection decisions.
-            target_population_type: Population to select from:
-                                   - "code" for code population
-                                   - Test population key like "unittest", "differential", etc.
-            population_config: Population configuration containing selection preferences
-                              (e.g., diversity_selection flag, elitism_rate for code)
+                                and their interactions for context-aware selection
 
         Returns:
-            Indices of selected elite individuals.
-            For code: typically uses elitism_rate from CodePopulationConfig
-            For tests: selector determines size (e.g., Pareto front size)
+            List of elite individuals to preserve unchanged.
+            The number of elites is typically determined by population_config
+            (e.g., elite_size, survival_rate, or elitism_rate).
         """
         ...
 
 
-class ICodeInitializer(Protocol):
+class IParentSelectionStrategy[T: BaseIndividual](Protocol):
     """
-    Abstract interface (Protocol) for code initializers.
+    Protocol for selecting parent individuals for breeding.
 
-    Defines the contract for any class that generates
-    initial code snippets.
+    Defines the contract for any class that can select parents from a population
+    based on fitness, behavior, or other criteria. Strategies receive the full
+    population and coevolution context to enable sophisticated selection logic.
+
+    Example strategies:
+    - Roulette wheel: Probability-proportional selection
+    - Tournament: Select best from random subset
+    - Rank-based: Select based on rank rather than raw probability
+    - Behavior-based: Select parents with complementary behaviors
+    - DET-specific: Select code pairs with similar behavior for differential testing
     """
 
-    def create_initial_snippets(self, population_size: int) -> list[str]:
+    def select_parents(
+        self,
+        population: BasePopulation[T],
+        count: int,
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
         """
-        Generate an initial population of code snippets.
+        Select parent individuals for breeding.
 
         Args:
-            population_size: The number of individuals to generate.
+            population: Population to select parents from
+            count: Number of parents to select:
+                   - 1 for mutation/reproduction
+                   - 2 for crossover
+                   - N for batch operations
+            coevolution_context: Full coevolution state for context-aware selection
+                                (e.g., interaction data, other populations)
 
         Returns:
-            A list of code snippet strings.
-        """
-        ...
+            List of selected parent individuals. May contain duplicates if
+            count > 1 and the same individual is selected multiple times.
 
-
-class ITestInitializer(Protocol):
-    """
-    Abstract interface (Protocol) for a Test Population initializer.
-    """
-
-    def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
-        """
-        Generate an initial population of test snippets.
-
-        This must be implemented by the concrete (e.g., LLM) operator.
-        It is responsible for generating a full runnable block (e.g., a
-        unittest class) and extracting the individual test snippets.
-
-        Args:
-            population_size: A *hint* for how many test methods to
-                             generate within the block.
-
-        Returns:
-            A tuple containing:
-            1. A list of individual test method snippets (e.g., ["def test_1(self):...", ...])
-            2. The full text of the class block they were extracted from.
-        """
-        ...
-
-
-class ICodeOperator(ICodeInitializer, IGeneticOperator, Protocol):
-    """
-    Abstract interface (Protocol) for a Code genetic operator.
-
-    Combines code initialization and genetic operations.
-    Handles all aspects of code snippet creation and evolution.
-    """
-
-
-class ITestOperator(ITestInitializer, IGeneticOperator, Protocol):
-    """
-    Abstract interface (Protocol) for a Test genetic operator.
-
-    Combines test initialization and genetic operations.
-    Handles all aspects of test snippet creation and evolution.
-    """
-
-
-class ISelectionStrategy(Protocol):
-    """
-    Abstract interface (Protocol) for a parent selection strategy.
-
-    Defines the contract for any class that can select one or
-    more parents from a population based on their fitness scores
-    (probabilities).
-    """
-
-    def select(self, probabilities: np.ndarray) -> int:
-        """
-        Selects a single individual's index from the population.
-
-        Args:
-            probabilities: A 1D array of fitness/probability scores
-                           for the population.
-
-        Returns:
-            The integer index of the selected individual.
-        """
-        ...
-
-    def select_parents(self, probabilities: np.ndarray) -> tuple[int, int]:
-        """
-        Selects two *different* parent indices from the population.
-
-        Args:
-            probabilities: A 1D array of fitness/probability scores
-                           for the population.
-
-        Returns:
-            A tuple of two different integer indices (parent1_idx, parent2_idx).
-
-        Raises:
-            ValueError: If the population size (inferred from `probabilities`)
-                        is less than 2.
+        Note:
+            For cross-species operations (e.g., DET selecting code parents for
+            test offspring), the strategy can access other populations via
+            coevolution_context and return individuals of different type than
+            the target population.
         """
         ...
 
@@ -1187,7 +1190,6 @@ class ICodeTestExecutor(Protocol):
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
-        sandbox: Sandbox,
     ) -> ExecutionResults:
         """
         Executes the given code snippets against the test snippets.
@@ -1195,7 +1197,6 @@ class ICodeTestExecutor(Protocol):
         Args:
             code_population: The population of code snippets to be tested.
             test_population: The population of test snippets to run against the code.
-            sandbox: The sandbox environment for execution.
 
         Returns:
             An ExecutionResults object containing the results of the execution.

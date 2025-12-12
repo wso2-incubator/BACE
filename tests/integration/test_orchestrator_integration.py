@@ -18,10 +18,12 @@ import pytest
 from loguru import logger
 
 import common.coevolution.logging_utils as logging_utils
+from common.coevolution.core.individual import CodeIndividual, TestIndividual
 from common.coevolution.core.interfaces import (
     BayesianConfig,
     CodePopulationConfig,
     EvolutionConfig,
+    IEliteSelectionStrategy,
     OperatorRatesConfig,
     PopulationConfig,
     Problem,
@@ -73,19 +75,27 @@ def create_configurations() -> tuple[
         mutation_rate=0.2,
     )
 
-    # Per-test-type configurations (only unittest for this test)
+    # Per-test-type configurations (unittest and differential)
     test_pop_configs = {
         "unittest": PopulationConfig(
             initial_prior=0.5,
             initial_population_size=20,
-        )
+        ),
+        "differential": PopulationConfig(
+            initial_prior=0.5,
+            initial_population_size=15,
+        ),
     }
 
     test_op_rates_configs = {
         "unittest": OperatorRatesConfig(
             operation_rates={"crossover": 0.4, "edit": 0.3},
             mutation_rate=0.3,
-        )
+        ),
+        "differential": OperatorRatesConfig(
+            operation_rates={"crossover": 0.3, "edit": 0.4},
+            mutation_rate=0.3,
+        ),
     }
 
     # Bayesian belief update configuration
@@ -110,23 +120,36 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     """Create all mock component instances."""
 
     # Create code operator
-    code_operator = MockCodeOperator(problem)
+    code_operator = MockCodeOperator()
 
     # Create single bayesian system (not separate for code/test)
     bayesian_system = MockBayesianSystem()
 
     # Create code breeding strategy and elite selector
-    code_breeding_strategy = MockBreedingStrategy(individual_type="code")
-    code_elite_selector = MockEliteSelector()
+    code_breeding_strategy = MockBreedingStrategy(
+        operator=code_operator, individual_type="code"
+    )
+    code_elite_selector: IEliteSelectionStrategy[CodeIndividual] = MockEliteSelector()
 
-    # Create per-test-type components (only unittest for this test)
-    test_operators = {"unittest": MockTestOperator(problem)}
-
-    test_breeding_strategies = {
-        "unittest": MockBreedingStrategy(individual_type="test")
+    # Create per-test-type components (unittest and differential)
+    test_operators = {
+        "unittest": MockTestOperator(),
+        "differential": MockTestOperator(),
     }
 
-    test_elite_selectors = {"unittest": MockEliteSelector()}
+    test_breeding_strategies = {
+        "unittest": MockBreedingStrategy(
+            operator=test_operators["unittest"], individual_type="test"
+        ),
+        "differential": MockBreedingStrategy(
+            operator=test_operators["differential"], individual_type="test"
+        ),
+    }
+
+    test_elite_selectors: dict[str, IEliteSelectionStrategy[TestIndividual]] = {
+        "unittest": MockEliteSelector(),
+        "differential": MockEliteSelector(),
+    }
 
     # Create execution system
     execution_system = MockExecutionSystem()
@@ -268,47 +291,39 @@ def test_orchestrator_full_run(
         log_file_base_name="test_mock_coevolution",
     )
 
-    # Unpack configurations
+    # Unpack configurations (operator rates no longer passed to orchestrator)
     (
         evo_config,
         code_pop_config,
-        code_op_rates,
+        code_op_rates,  # Not used - kept for backward compat with fixture
         test_pop_configs,
-        test_op_rates_configs,
+        test_op_rates_configs,  # Not used - kept for backward compat with fixture
         bayesian_config,
     ) = configurations
 
-    # Create orchestrator
+    # Create orchestrator (operators AND their configs owned by breeding strategies)
     orchestrator = Orchestrator(
         # Configurations
         evo_config=evo_config,
         code_pop_config=code_pop_config,
-        code_op_rates_config=code_op_rates,
         bayesian_config=bayesian_config,
         test_pop_configs=test_pop_configs,
-        test_op_rates_configs=test_op_rates_configs,
-        # Problem and sandbox
-        problem=mock_problem,
-        sandbox=mock_components["sandbox"],
-        # Code operator and systems
-        code_operator=mock_components["code_operator"],
+        # Systems
         execution_system=mock_components["execution_system"],
         bayesian_system=mock_components["bayesian_system"],
         # Test components
         test_block_rebuilder=mock_components["test_block_rebuilder"],
         dataset_test_block_builder=mock_components["dataset_test_block_builder"],
-        # Code breeding strategy and elite selector
+        # Breeding strategies and elite selectors (own operators internally)
         code_breeding_strategy=mock_components["code_breeding_strategy"],
         code_elite_selector=mock_components["code_elite_selector"],
-        # Per-test-type components
-        test_operators=mock_components["test_operators"],
         test_breeding_strategies=mock_components["test_breeding_strategies"],
         test_elite_selectors=mock_components["test_elite_selectors"],
     )
 
-    # Run coevolution
+    # Run coevolution - orchestrator is stateless, problem passed at runtime
     with logger.contextualize(run_id="test_run", problem_id=mock_problem.question_id):
-        code_population, evolved_test_pops = orchestrator.run()
+        code_population, evolved_test_pops = orchestrator.run(mock_problem)
 
     # Assertions to verify the run was successful
     assert code_population is not None, "Code population should not be None"
@@ -405,19 +420,13 @@ def main() -> None:
         code_op_rates_config=code_op_rates,
         test_op_rates_configs=test_op_rates_configs,
         bayesian_config=bayesian_config,
-        # Problem and sandbox
-        problem=problem,
-        sandbox=components["sandbox"],
-        # Operators
-        code_operator=components["code_operator"],
-        test_operators=components["test_operators"],
         # Systems
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
         # Test components
         test_block_rebuilder=components["test_block_rebuilder"],
         dataset_test_block_builder=components["dataset_test_block_builder"],
-        # Breeding strategies and elite selectors
+        # Breeding strategies and elite selectors (own operators internally)
         code_breeding_strategy=components["code_breeding_strategy"],
         test_breeding_strategies=components["test_breeding_strategies"],
         code_elite_selector=components["code_elite_selector"],
@@ -429,7 +438,7 @@ def main() -> None:
 
     try:
         with logger.contextualize(run_id="mock_run", problem_id=problem.question_id):
-            code_population, test_populations = orchestrator.run()
+            code_population, test_populations = orchestrator.run(problem)
 
         # Step 6: Display results
         log_results(code_population, test_populations)

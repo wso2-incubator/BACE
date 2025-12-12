@@ -27,7 +27,7 @@ class TestPopulation(BasePopulation[TestIndividual]):
 
     Manages test individuals and rebuilds the test class block when the generation advances.
 
-    Note: Elite selection logic has been moved to IEliteSelector implementations,
+    Note: Elite selection logic has been moved to IEliteSelectionStrategy implementations,
     making this class independent of any specific selection strategy (e.g., Pareto).
     """
 
