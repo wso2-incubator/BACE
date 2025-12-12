@@ -285,6 +285,116 @@ if TYPE_CHECKING:
     from .population import CodePopulation, TestPopulation
 
 
+# =========================================================================
+# Population Profile Classes (System Specification Pattern)
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class CodeProfile:
+    """
+    Complete configuration profile for the code population.
+
+    Bundles all components needed to manage and evolve the code population:
+    - Population parameters (size, offspring rates)
+    - Breeding strategy (how offspring are generated)
+    - Elite selection strategy (how best individuals are chosen)
+
+    Example:
+        code_profile = CodeProfile(
+            population_config=PopulationConfig(
+                initial_prior=0.5,
+                initial_population_size=10,
+                max_population_size=20,
+                offspring_rate=0.8
+            ),
+            breeding_strategy=my_breeding_strategy,
+            elite_selector=my_elite_selector
+        )
+
+        # Direct access
+        max_size = code_profile.population_config.max_population_size
+        elites = code_profile.elite_selector.select(context, k=5)
+    """
+
+    population_config: PopulationConfig
+    breeding_strategy: "IBreedingStrategy[CodeIndividual]"
+    elite_selector: "IEliteSelectionStrategy[CodeIndividual]"
+
+
+@dataclass(frozen=True)
+class TestProfile:
+    """
+    Complete configuration profile for an evolved test population.
+
+    Bundles all components needed to manage and evolve a test population:
+    - Population parameters (size, initial probabilities)
+    - Breeding strategy (how test offspring are generated)
+    - Elite selection strategy (typically Pareto-based)
+    - Bayesian configuration (belief update parameters)
+
+    Different test types (e.g., 'unittest', 'differential') can have
+    different Bayesian configurations reflecting their varying reliability.
+
+    Example:
+        unittest_profile = TestProfile(
+            population_config=PopulationConfig(
+                initial_prior=0.5,
+                initial_population_size=20
+            ),
+            breeding_strategy=unittest_breeding_strategy,
+            elite_selector=pareto_selector,
+            bayesian_config=BayesianConfig(
+                alpha=0.01,  # Very reliable tests
+                beta=0.3,
+                gamma=0.3,
+                learning_rate=0.01
+            )
+        )
+
+        # Direct access
+        size = unittest_profile.population_config.initial_population_size
+        offspring = unittest_profile.breeding_strategy.breed(context, 10)
+        beliefs = bayesian_system.update_test_beliefs(
+            ...,
+            config=unittest_profile.bayesian_config
+        )
+    """
+
+    population_config: PopulationConfig
+    breeding_strategy: "IBreedingStrategy[TestIndividual]"
+    elite_selector: "IEliteSelectionStrategy[TestIndividual]"
+    bayesian_config: BayesianConfig
+
+
+@dataclass(frozen=True)
+class PublicTestProfile:
+    """
+    Configuration profile for fixed/ground-truth test populations (e.g., 'public').
+
+    These tests don't evolve, they only provide anchoring for code beliefs.
+    Contains only Bayesian configuration since there's no breeding or selection.
+
+    Example:
+        public_profile = PublicTestProfile(
+            bayesian_config=BayesianConfig(
+                alpha=0.001,  # Ground truth tests are highly reliable
+                beta=0.1,
+                gamma=0.1,
+                learning_rate=0.05
+            )
+        )
+
+        # Usage
+        code_beliefs = bayesian_system.update_code_beliefs(
+            ...,
+            config=public_profile.bayesian_config
+        )
+    """
+
+    bayesian_config: BayesianConfig
+
+
 @dataclass(frozen=True)
 class InteractionData:
     """

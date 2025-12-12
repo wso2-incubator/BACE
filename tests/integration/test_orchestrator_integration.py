@@ -21,11 +21,14 @@ import common.coevolution.logging_utils as logging_utils
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
 from common.coevolution.core.interfaces import (
     BayesianConfig,
+    CodeProfile,
     EvolutionConfig,
     IEliteSelectionStrategy,
     OperatorRatesConfig,
     PopulationConfig,
     Problem,
+    PublicTestProfile,
+    TestProfile,
 )
 from common.coevolution.core.mock import (
     MockBayesianSystem,
@@ -40,6 +43,38 @@ from common.coevolution.core.mock import (
 )
 from common.coevolution.core.orchestrator import Orchestrator
 from common.coevolution.core.population import CodePopulation, TestPopulation
+
+
+def create_profiles(
+    code_pop_config: PopulationConfig,
+    test_pop_configs: dict[str, PopulationConfig],
+    bayesian_config: BayesianConfig,
+    components: dict[str, Any],
+) -> tuple[CodeProfile, dict[str, TestProfile], PublicTestProfile]:
+    """Create profile objects from configurations and components."""
+
+    # Create code profile
+    code_profile = CodeProfile(
+        population_config=code_pop_config,
+        breeding_strategy=components["code_breeding_strategy"],
+        elite_selector=components["code_elite_selector"],
+    )
+
+    # Create evolved test profiles
+    evolved_test_profiles = {
+        test_type: TestProfile(
+            population_config=test_pop_configs[test_type],
+            breeding_strategy=components["test_breeding_strategies"][test_type],
+            elite_selector=components["test_elite_selectors"][test_type],
+            bayesian_config=bayesian_config,
+        )
+        for test_type in ["unittest", "differential"]
+    }
+
+    # Create public test profile
+    public_test_profile = PublicTestProfile(bayesian_config=bayesian_config)
+
+    return code_profile, evolved_test_profiles, public_test_profile
 
 
 def create_configurations() -> tuple[
@@ -289,7 +324,7 @@ def test_orchestrator_full_run(
         log_file_base_name="test_mock_coevolution",
     )
 
-    # Unpack configurations (operator rates no longer passed to orchestrator)
+    # Unpack configurations
     (
         evo_config,
         code_pop_config,
@@ -299,24 +334,24 @@ def test_orchestrator_full_run(
         bayesian_config,
     ) = configurations
 
-    # Create orchestrator (operators AND their configs owned by breeding strategies)
-    orchestrator = Orchestrator(
-        # Configurations
-        evo_config=evo_config,
+    # Create profiles from configurations and components
+    code_profile, evolved_test_profiles, public_test_profile = create_profiles(
         code_pop_config=code_pop_config,
-        bayesian_config=bayesian_config,
         test_pop_configs=test_pop_configs,
-        # Systems
+        bayesian_config=bayesian_config,
+        components=mock_components,
+    )
+
+    # Create orchestrator using profiles
+    orchestrator = Orchestrator(
+        evo_config=evo_config,
+        code_profile=code_profile,
+        evolved_test_profiles=evolved_test_profiles,
+        public_test_profile=public_test_profile,
         execution_system=mock_components["execution_system"],
         bayesian_system=mock_components["bayesian_system"],
-        # Test components
         test_block_rebuilder=mock_components["test_block_rebuilder"],
         dataset_test_block_builder=mock_components["dataset_test_block_builder"],
-        # Breeding strategies and elite selectors (own operators internally)
-        code_breeding_strategy=mock_components["code_breeding_strategy"],
-        code_elite_selector=mock_components["code_elite_selector"],
-        test_breeding_strategies=mock_components["test_breeding_strategies"],
-        test_elite_selectors=mock_components["test_elite_selectors"],
     )
 
     # Run coevolution - orchestrator is stateless, problem passed at runtime
@@ -408,28 +443,29 @@ def main() -> None:
     components = create_mock_components(problem)
     logger.info("All mock components created successfully")
 
-    # Step 4: Create orchestrator
-    logger.info("\nInitializing Orchestrator...")
-    orchestrator = Orchestrator(
-        # Configurations
-        evo_config=evo_config,
+    # Step 4: Create profiles
+    logger.info("\nCreating profiles...")
+    code_profile, evolved_test_profiles, public_test_profile = create_profiles(
         code_pop_config=code_pop_config,
-        bayesian_config=bayesian_config,
         test_pop_configs=test_pop_configs,
-        # Systems
-        execution_system=components["execution_system"],
-        bayesian_system=components["bayesian_system"],
-        # Test components
-        test_block_rebuilder=components["test_block_rebuilder"],
-        dataset_test_block_builder=components["dataset_test_block_builder"],
-        # Breeding strategies and elite selectors (own operators internally)
-        code_breeding_strategy=components["code_breeding_strategy"],
-        code_elite_selector=components["code_elite_selector"],
-        test_breeding_strategies=components["test_breeding_strategies"],
-        test_elite_selectors=components["test_elite_selectors"],
+        bayesian_config=bayesian_config,
+        components=components,
     )
 
-    # Step 5: Run coevolution
+    # Step 5: Create orchestrator
+    logger.info("\nInitializing Orchestrator...")
+    orchestrator = Orchestrator(
+        evo_config=evo_config,
+        code_profile=code_profile,
+        evolved_test_profiles=evolved_test_profiles,
+        public_test_profile=public_test_profile,
+        execution_system=components["execution_system"],
+        bayesian_system=components["bayesian_system"],
+        test_block_rebuilder=components["test_block_rebuilder"],
+        dataset_test_block_builder=components["dataset_test_block_builder"],
+    )
+
+    # Step 6: Run coevolution
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION RUN")
 
     try:

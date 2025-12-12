@@ -15,20 +15,19 @@ from .individual import CodeIndividual, TestIndividual
 from .interfaces import (
     OPERATION_INITIAL,
     BasePopulation,
-    BayesianConfig,
+    CodeProfile,
     CoevolutionContext,
     EvolutionConfig,
     ExecutionResults,
     IBayesianSystem,
-    IBreedingStrategy,
     IDatasetTestBlockBuilder,
-    IEliteSelectionStrategy,
     IExecutionSystem,
     InteractionData,
     ITestBlockRebuilder,
-    PopulationConfig,
     Problem,
+    PublicTestProfile,
     Test,
+    TestProfile,
 )
 from .population import CodePopulation, TestPopulation
 
@@ -57,21 +56,15 @@ class Orchestrator:
         self,
         # --- Configuration Objects ---
         evo_config: EvolutionConfig,
-        code_pop_config: PopulationConfig,
-        bayesian_config: BayesianConfig,
-        # --- Per-Test-Type Configuration (dict[test_type, config]) ---
-        test_pop_configs: dict[str, PopulationConfig],
-        # --- Injected Components ---
+        # --- Population Profiles ---
+        code_profile: CodeProfile,
+        evolved_test_profiles: dict[str, TestProfile],
+        public_test_profile: PublicTestProfile,
+        # --- Global Infrastructure ---
         execution_system: IExecutionSystem,
         bayesian_system: IBayesianSystem,
         test_block_rebuilder: ITestBlockRebuilder,
         dataset_test_block_builder: IDatasetTestBlockBuilder,
-        # --- Code Breeding Strategy & Elite Selection ---
-        code_breeding_strategy: IBreedingStrategy[CodeIndividual],
-        code_elite_selector: IEliteSelectionStrategy[CodeIndividual],
-        # --- Per-Test-Type Components (dict[test_type, component]) ---
-        test_breeding_strategies: dict[str, IBreedingStrategy[TestIndividual]],
-        test_elite_selectors: dict[str, IEliteSelectionStrategy[TestIndividual]],
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
@@ -82,30 +75,31 @@ class Orchestrator:
         Supports multiple test population types with different breeding strategies
         and configurations. Test populations are automatically categorized as:
         - Fixed: "public" and "private" (always fixed, used for evaluation/anchoring)
-        - Evolved: Any test type with breeding strategies configured (e.g., "unittest", "differential")
+        - Evolved: Any test type with profiles configured (e.g., "unittest", "differential")
 
         Note: Operators AND their configurations (operator rates) are owned by breeding
         strategies, not by orchestrator. Orchestrator only interacts with breeding strategies,
         which delegate to operators and manage their own operation rate configs internally.
 
         Args:
-            test_breeding_strategies: Map test_type → breeding strategy for that type.
-                                     Keys determine which test types will be evolved.
-            test_elite_selectors: Map test_type → elite selector for that type
-            test_pop_configs: Map test_type → population config for that type
-            code_breeding_strategy: Strategy for generating code offspring (owns code operator + config)
-            code_elite_selector: Strategy for selecting code elites
-            ... (other args documented inline)
+            evo_config: Top-level evolution configuration
+            code_profile: Complete profile for code population (config + strategies)
+            evolved_test_profiles: Map test_type → profile for that evolved test type
+            public_test_profile: Profile for public/ground-truth tests
+            execution_system: System for executing code against tests
+            bayesian_system: System for belief updates
+            test_block_rebuilder: Rebuilds test class blocks
+            dataset_test_block_builder: Builds test blocks from dataset
         """
         logger.info("Initializing Orchestrator...")
 
-        # --- Store Configs ---
-        self.evo_config = evo_config
-        self.code_pop_config = code_pop_config
-        self.bayesian_config = bayesian_config
+        # --- Store Profiles ---
+        self.code_profile = code_profile
+        self.evolved_test_profiles = evolved_test_profiles
+        self.public_test_profile = public_test_profile
 
-        # Store test configs per type
-        self.test_pop_configs = test_pop_configs
+        # --- Store Top-Level Config ---
+        self.evo_config = evo_config
 
         # --- Store max_workers for parallel breeding ---
         self.max_workers = evo_config.max_workers
@@ -115,8 +109,8 @@ class Orchestrator:
         # Fixed populations are always public and private
         self.fixed_test_types = {"public", "private"}
 
-        # Evolved populations are any that have breeding strategies configured
-        self.evolved_test_types = set(test_breeding_strategies.keys())
+        # Evolved populations are any that have profiles configured
+        self.evolved_test_types = set(evolved_test_profiles.keys())
 
         # Validate that fixed and evolved don't overlap
         overlap = self.fixed_test_types & self.evolved_test_types
@@ -136,28 +130,6 @@ class Orchestrator:
 
         self.test_block_rebuilder = test_block_rebuilder
         self.dataset_test_block_builder = dataset_test_block_builder
-
-        # --- Store Breeding Strategies & Elite Selectors ---
-        self.code_breeding_strategy = code_breeding_strategy
-        self.code_elite_selector = code_elite_selector
-
-        self.test_breeding_strategies = test_breeding_strategies
-        self.test_elite_selectors = test_elite_selectors
-
-        # Validate each test type has all required components
-        for test_type in self.evolved_test_types:
-            if test_type not in test_breeding_strategies:
-                raise ValueError(
-                    f"Missing breeding_strategy for evolved test type '{test_type}'"
-                )
-            if test_type not in test_elite_selectors:
-                raise ValueError(
-                    f"Missing elite_selector for evolved test type '{test_type}'"
-                )
-            if test_type not in test_pop_configs:
-                raise ValueError(
-                    f"Missing pop_config for evolved test type '{test_type}'"
-                )
 
         self._set_random_seed(evo_config.random_seed)
 
@@ -383,7 +355,7 @@ class Orchestrator:
             prior_test_probs=public_pop.probabilities,
             observation_matrix=public_obs_matrix,
             code_update_mask_matrix=code_mask_public,
-            config=self.bayesian_config,
+            config=self.public_test_profile.bayesian_config,
         )
         code_pop.update_probabilities(code_post_public)
 
@@ -391,6 +363,7 @@ class Orchestrator:
         for test_type in self.evolved_test_types:
             test_pop = context.test_populations[test_type]
             test_obs_matrix = context.interactions[test_type].observation_matrix
+            test_profile = self.evolved_test_profiles[test_type]
 
             # Get test update mask - tests updated based on ALL code individuals
             test_mask = self.bayesian_system.get_test_update_mask_generation(
@@ -420,7 +393,7 @@ class Orchestrator:
                 prior_test_probs=test_pop.probabilities,
                 observation_matrix=test_obs_matrix,
                 test_update_mask_matrix=test_mask,
-                config=self.bayesian_config,
+                config=test_profile.bayesian_config,
             )
 
             logger.debug(
@@ -431,7 +404,7 @@ class Orchestrator:
                 prior_test_probs=test_pop.probabilities,
                 observation_matrix=test_obs_matrix,
                 code_update_mask_matrix=code_mask_for_this_test,
-                config=self.bayesian_config,
+                config=test_profile.bayesian_config,
             )
 
             # Apply updates
@@ -544,9 +517,9 @@ class Orchestrator:
 
         # --- 1. Code Population ---
         code_individuals, context_code = (
-            self.code_breeding_strategy.initialize_individuals(
-                self.code_pop_config.initial_population_size,
-                self.code_pop_config.initial_prior,
+            self.code_profile.breeding_strategy.initialize_individuals(
+                self.code_profile.population_config.initial_population_size,
+                self.code_profile.population_config.initial_prior,
                 problem,
             )
         )
@@ -566,13 +539,14 @@ class Orchestrator:
             test_type: The type of test population to create (e.g., "unittest", "differential")
             problem: The problem to solve
         """
-        test_breeding_strategy = self.test_breeding_strategies[test_type]
-        test_pop_config = self.test_pop_configs[test_type]
+        test_profile = self.evolved_test_profiles[test_type]
 
-        test_individuals, context_code = test_breeding_strategy.initialize_individuals(
-            test_pop_config.initial_population_size,
-            test_pop_config.initial_prior,
-            problem,
+        test_individuals, context_code = (
+            test_profile.breeding_strategy.initialize_individuals(
+                test_profile.population_config.initial_population_size,
+                test_profile.population_config.initial_prior,
+                problem,
+            )
         )
 
         # For test populations, context_code contains the test class block (imports, setUp, helpers)
@@ -664,9 +638,9 @@ class Orchestrator:
         code_pop = context.code_population
 
         # --- Code Elites ---
-        code_elites = self.code_elite_selector.select_elites(
+        code_elites = self.code_profile.elite_selector.select_elites(
             population=code_pop,
-            population_config=self.code_pop_config,
+            population_config=self.code_profile.population_config,
             coevolution_context=context,
         )
 
@@ -674,12 +648,11 @@ class Orchestrator:
         test_elites_dict: dict[str, list[TestIndividual]] = {}
         for test_type in self.evolved_test_types:
             test_pop = context.test_populations[test_type]
-            test_elite_selector = self.test_elite_selectors[test_type]
-            test_pop_config = self.test_pop_configs[test_type]
+            test_profile = self.evolved_test_profiles[test_type]
 
-            test_elites = test_elite_selector.select_elites(
+            test_elites = test_profile.elite_selector.select_elites(
                 population=test_pop,
-                population_config=test_pop_config,
+                population_config=test_profile.population_config,
                 coevolution_context=context,
             )
             test_elites_dict[test_type] = test_elites
@@ -746,14 +719,16 @@ class Orchestrator:
         """
         num_code_offspring = min(
             int(
-                self.code_pop_config.max_population_size
-                * self.code_pop_config.offspring_rate
+                self.code_profile.population_config.max_population_size
+                * self.code_profile.population_config.offspring_rate
             ),
-            self.code_pop_config.max_population_size - num_elites,
+            self.code_profile.population_config.max_population_size - num_elites,
         )
 
         # Breeding strategy handles parallelization and returns exact count
-        code_offspring = self.code_breeding_strategy.breed(context, num_code_offspring)
+        code_offspring = self.code_profile.breeding_strategy.breed(
+            context, num_code_offspring
+        )
 
         logger.debug(f"Successfully bred {len(code_offspring)} code offspring")
         return code_offspring
@@ -774,13 +749,16 @@ class Orchestrator:
 
         The breeding strategy handles parallelization internally.
         """
-        test_pop_config = self.test_pop_configs[test_type]
-        test_breeding_strategy = self.test_breeding_strategies[test_type]
+        test_profile = self.evolved_test_profiles[test_type]
 
-        num_test_offspring = test_pop_config.initial_population_size - num_elites
+        num_test_offspring = (
+            test_profile.population_config.max_population_size - num_elites
+        )
 
         # Breeding strategy handles parallelization and returns exact count
-        test_offsprings = test_breeding_strategy.breed(context, num_test_offspring)
+        test_offsprings = test_profile.breeding_strategy.breed(
+            context, num_test_offspring
+        )
 
         logger.debug(f"Successfully bred {len(test_offsprings)} test offspring")
         return test_offsprings
