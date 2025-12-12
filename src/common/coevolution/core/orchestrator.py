@@ -16,7 +16,6 @@ from .interfaces import (
     OPERATION_INITIAL,
     BasePopulation,
     BayesianConfig,
-    CodePopulationConfig,
     CoevolutionContext,
     EvolutionConfig,
     ExecutionResults,
@@ -58,7 +57,7 @@ class Orchestrator:
         self,
         # --- Configuration Objects ---
         evo_config: EvolutionConfig,
-        code_pop_config: CodePopulationConfig,
+        code_pop_config: PopulationConfig,
         bayesian_config: BayesianConfig,
         # --- Per-Test-Type Configuration (dict[test_type, config]) ---
         test_pop_configs: dict[str, PopulationConfig],

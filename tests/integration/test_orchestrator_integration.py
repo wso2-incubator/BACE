@@ -21,7 +21,6 @@ import common.coevolution.logging_utils as logging_utils
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
 from common.coevolution.core.interfaces import (
     BayesianConfig,
-    CodePopulationConfig,
     EvolutionConfig,
     IEliteSelectionStrategy,
     OperatorRatesConfig,
@@ -45,7 +44,7 @@ from common.coevolution.core.population import CodePopulation, TestPopulation
 
 def create_configurations() -> tuple[
     EvolutionConfig,
-    CodePopulationConfig,
+    PopulationConfig,
     OperatorRatesConfig,
     dict[str, PopulationConfig],
     dict[str, OperatorRatesConfig],
@@ -61,11 +60,10 @@ def create_configurations() -> tuple[
     )
 
     # Code population configuration
-    code_pop_config = CodePopulationConfig(
+    code_pop_config = PopulationConfig(
         initial_prior=0.5,
         initial_population_size=10,
         max_population_size=15,
-        elitism_rate=0.5,  # Keep top 50% as elites
         offspring_rate=0.5,  # Generate 50% new offspring
     )
 
@@ -187,7 +185,7 @@ def mock_problem() -> Problem:
 @pytest.fixture
 def configurations() -> tuple[
     EvolutionConfig,
-    CodePopulationConfig,
+    PopulationConfig,
     OperatorRatesConfig,
     dict[str, PopulationConfig],
     dict[str, OperatorRatesConfig],
@@ -267,7 +265,7 @@ def test_orchestrator_full_run(
     mock_problem: Problem,
     configurations: tuple[
         EvolutionConfig,
-        CodePopulationConfig,
+        PopulationConfig,
         OperatorRatesConfig,
         dict[str, PopulationConfig],
         dict[str, OperatorRatesConfig],
@@ -416,10 +414,8 @@ def main() -> None:
         # Configurations
         evo_config=evo_config,
         code_pop_config=code_pop_config,
-        test_pop_configs=test_pop_configs,
-        code_op_rates_config=code_op_rates,
-        test_op_rates_configs=test_op_rates_configs,
         bayesian_config=bayesian_config,
+        test_pop_configs=test_pop_configs,
         # Systems
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
@@ -428,8 +424,8 @@ def main() -> None:
         dataset_test_block_builder=components["dataset_test_block_builder"],
         # Breeding strategies and elite selectors (own operators internally)
         code_breeding_strategy=components["code_breeding_strategy"],
-        test_breeding_strategies=components["test_breeding_strategies"],
         code_elite_selector=components["code_elite_selector"],
+        test_breeding_strategies=components["test_breeding_strategies"],
         test_elite_selectors=components["test_elite_selectors"],
     )
 

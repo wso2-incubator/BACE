@@ -169,41 +169,82 @@ class OperatorRatesConfig:
 @dataclass
 class PopulationConfig:
     """
-    A data structure to hold the hyperparameters for population management.
+    Unified configuration for population management.
 
-    CodePopulation and TestPopulation will both use this same config.
+    Supports both fixed-size and variable-size populations:
+
+    Fixed-size (e.g., test populations):
+        Set max_population_size = initial_population_size (default behavior)
+
+    Variable-size (e.g., code population):
+        Set max_population_size > initial_population_size
+        Control growth with offspring_rate
+
+    Args:
+        initial_prior: Initial probability for new individuals (0.0, 1.0)
+        initial_population_size: Size of generation 0 population
+        max_population_size: Maximum allowed size. If None, defaults to initial_population_size
+        offspring_rate: Fraction of max_population_size to generate as offspring (0.0, 1.0]
+        diversity_selection: Whether to use diversity-based selection strategies
+
+    Example - Fixed size (tests):
+        PopulationConfig(
+            initial_prior=0.5,
+            initial_population_size=15
+        )
+        # max_population_size auto-set to 15, stays constant
+
+    Example - Variable size (code):
+        PopulationConfig(
+            initial_prior=0.5,
+            initial_population_size=10,
+            max_population_size=20,
+            offspring_rate=0.8
+        )
+        # Can grow from 10 to 20 over generations
     """
 
     initial_prior: float
     initial_population_size: int
-    diversity_selection: bool = False  # Whether to use diversity-based selection
+    max_population_size: int | None = None
+    offspring_rate: float = 1.0
+    diversity_selection: bool = False
 
     def __post_init__(self) -> None:
+        # Validate required fields
         if not (0.0 < self.initial_prior < 1.0):
             raise ValueError("initial_prior must be in the range (0.0, 1.0)")
         if self.initial_population_size <= 0:
             raise ValueError("initial_population_size must be positive.")
 
+        # Auto-set max_population_size if not provided (fixed-size behavior)
+        if self.max_population_size is None:
+            object.__setattr__(
+                self, "max_population_size", self.initial_population_size
+            )
 
-@dataclass
-class CodePopulationConfig(PopulationConfig):
-    """
-    A data structure to hold the hyperparameters for Code population management.
-    Inherits from PopulationConfig.
-    """
-
-    max_population_size: int = 0
-    elitism_rate: float = 0.0
-    offspring_rate: float = 0.0
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
+        # Validate max_population_size
         if self.max_population_size <= 0:
             raise ValueError("max_population_size must be positive.")
-        if not (0.0 <= self.elitism_rate <= 1.0):
-            raise ValueError("elitism_rate must be in the range [0.0, 1.0]")
-        if not (0.0 <= self.offspring_rate <= 1.0):
-            raise ValueError("offspring_rate must be in the range [0.0, 1.0]")
+        if self.max_population_size < self.initial_population_size:
+            raise ValueError(
+                f"max_population_size ({self.max_population_size}) must be >= "
+                f"initial_population_size ({self.initial_population_size})"
+            )
+
+        # Validate offspring_rate
+        if not (0.0 < self.offspring_rate <= 1.0):
+            raise ValueError("offspring_rate must be in the range (0.0, 1.0]")
+
+    @property
+    def is_fixed_size(self) -> bool:
+        """Returns True if this is a fixed-size population configuration."""
+        return self.max_population_size == self.initial_population_size
+
+    @property
+    def is_variable_size(self) -> bool:
+        """Returns True if this is a variable-size population configuration."""
+        return self.max_population_size > self.initial_population_size
 
 
 @dataclass(frozen=True)
