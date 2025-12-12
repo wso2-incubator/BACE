@@ -251,9 +251,16 @@ class MockTestOperator(IOperator["TestIndividual"]):
             individuals.append(individual)
 
         # Create a mock test class block (context_code for tests)
+        # Always include the class header even for empty populations
         class_header = "import unittest\nfrom a_mock_solution import sort_array\n\nclass GeneratedTests(unittest.TestCase):\n"
-        indented_snippets = "\n\n".join([f"    {ind.snippet}" for ind in individuals])
-        context_code = class_header + indented_snippets
+        if individuals:
+            indented_snippets = "\n\n".join(
+                [f"    {ind.snippet}" for ind in individuals]
+            )
+            context_code = class_header + indented_snippets
+        else:
+            # Empty population: return template with pass statement
+            context_code = class_header + "    pass\n"
 
         return individuals, context_code
 
@@ -447,6 +454,13 @@ class MockEliteSelectionStrategy[T: BaseIndividual](IEliteSelectionStrategy[T]):
         Returns:
             List of elite individuals to preserve
         """
+        # Empty state guard: identity operation for empty population
+        if population.size == 0:
+            logger.debug(
+                "MockEliteSelectionStrategy: Population is empty, returning empty elites list"
+            )
+            return []
+
         # Determine number of elites based on config
         if hasattr(population_config, "elitism_rate"):
             num_elites = int(population.size * population_config.elitism_rate)
@@ -518,6 +532,7 @@ class MockBreedingStrategy:
             f"MockBreedingStrategy: Creating {population_size} initial {self.individual_type} individuals"
         )
         # Operator returns tuple[list[T], str | None] - pass through directly
+        # Operator is responsible for providing appropriate context_code (including for size=0)
         return self.operator.create_initial_individuals(
             population_size, initial_prior, problem
         )
@@ -536,6 +551,13 @@ class MockBreedingStrategy:
             List of exactly num_offsprings new individuals
         """
         from .individual import CodeIndividual, TestIndividual
+
+        # Empty state guard: identity operation for num_offsprings=0
+        if num_offsprings == 0:
+            logger.debug(
+                f"MockBreedingStrategy: num_offsprings=0, returning empty {self.individual_type} list"
+            )
+            return []
 
         offsprings: list[Any] = []
 
@@ -632,6 +654,14 @@ class MockExecutionSystem(IExecutionSystem):
         test_population: "TestPopulation",
     ) -> ExecutionResults:
         """Execute all code against all tests."""
+        # Empty state guard: identity operation for empty populations
+        if len(code_population) == 0 or len(test_population) == 0:
+            logger.debug(
+                f"MockExecutionSystem: Empty population detected (code={len(code_population)}, "
+                f"test={len(test_population)}), returning empty ExecutionResults"
+            )
+            return {}
+
         logger.debug("MockExecutionSystem: 'Running' all tests...")
 
         execution_results: dict[int, MockUnitTestResult] = {}
@@ -660,6 +690,16 @@ class MockExecutionSystem(IExecutionSystem):
         logger.trace("MockExecutionSystem: Building observation matrix...")
         num_code = len(code_population)
         num_tests = len(test_population)
+
+        # Empty state guard: return properly shaped empty matrix
+        # (N,0) for empty test population, (0,N) for empty code population
+        if num_code == 0 or num_tests == 0:
+            logger.trace(
+                f"MockExecutionSystem: Empty population (code={num_code}, test={num_tests}), "
+                f"returning matrix with shape ({num_code}, {num_tests})"
+            )
+            return np.zeros((num_code, num_tests), dtype=int)
+
         combined_matrix = np.zeros((num_code, num_tests), dtype=int)
         for code_idx, result in execution_results.items():
             for j in range(num_tests):
@@ -745,6 +785,13 @@ class MockBayesianSystem(IBayesianSystem):
         population_size: int,
         initial_probability: float,
     ) -> np.ndarray:
+        # Empty state guard: identity operation for size=0
+        if population_size == 0:
+            logger.trace(
+                "MockBayesianSystem: population_size=0, returning empty belief array"
+            )
+            return np.array([])
+
         logger.trace("MockBayesianSystem: Initializing beliefs")
         return np.full(population_size, initial_probability)
 
@@ -756,6 +803,14 @@ class MockBayesianSystem(IBayesianSystem):
         code_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
+        # Empty state guard: identity operation when no tests (N,0) or no code (0,N)
+        if observation_matrix.shape[1] == 0 or observation_matrix.shape[0] == 0:
+            logger.trace(
+                f"MockBayesianSystem: Empty observation matrix {observation_matrix.shape}, "
+                "returning prior_code_probs unchanged (identity operation)"
+            )
+            return prior_code_probs.copy()
+
         logger.trace("MockBayesianSystem: Updating code beliefs")
 
         mask_arr = np.asarray(code_update_mask_matrix, dtype=bool)
@@ -786,6 +841,14 @@ class MockBayesianSystem(IBayesianSystem):
         test_update_mask_matrix: np.ndarray,
         config: BayesianConfig,
     ) -> np.ndarray:
+        # Empty state guard: identity operation when no code (0,N) or no tests (N,0)
+        if observation_matrix.shape[0] == 0 or observation_matrix.shape[1] == 0:
+            logger.trace(
+                f"MockBayesianSystem: Empty observation matrix {observation_matrix.shape}, "
+                "returning prior_test_probs unchanged (identity operation)"
+            )
+            return prior_test_probs.copy()
+
         logger.trace("MockBayesianSystem: Updating test beliefs")
 
         mask_arr = np.asarray(test_update_mask_matrix, dtype=bool)

@@ -549,11 +549,13 @@ class Orchestrator:
             )
         )
 
-        # For test populations, context_code contains the test class block (imports, setUp, helpers)
+        # For test populations, context_code should contain the test class block
+        # (imports, setUp, helpers). Breeding strategy/operator is responsible for
+        # providing this, even for empty populations (e.g., with a template).
         if context_code is None:
             raise ValueError(
                 f"Test breeding strategy for '{test_type}' returned None context_code - "
-                f"expected test class block"
+                f"expected test class block (even for empty populations)"
             )
 
         test_population = TestPopulation(

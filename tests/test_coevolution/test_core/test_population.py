@@ -122,11 +122,15 @@ class TestBasePopulationSharedBehavior:
     def test_initialization_with_empty_list(
         self, sample_code_individuals: list[CodeIndividual]
     ) -> None:
-        """Test that empty list raises ValueError."""
-        with pytest.raises(
-            ValueError, match="cannot be initialized with an empty list"
-        ):
-            CodePopulation([], generation=0)
+        """Test that empty list is now allowed (for bootstrap/dynamic populations)."""
+        # Empty populations are now supported for dynamic population types
+        pop = CodePopulation([], generation=0)
+        assert pop.size == 0
+        assert pop.generation == 0
+        assert len(pop.individuals) == 0
+        assert len(pop.probabilities) == 0
+        assert len(pop.snippets) == 0
+        assert len(pop.ids) == 0
 
     def test_len_magic_method(self, sample_code_population: CodePopulation) -> None:
         """Test __len__ returns correct size."""

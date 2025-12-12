@@ -188,9 +188,17 @@ def log_generation_summary(
         test_probs = [ind.probability for ind in test_pop]
 
         summary[f"{test_type}_pop_size"] = len(test_pop)
-        summary[f"{test_type}_avg_prob"] = round(sum(test_probs) / len(test_probs), 4)
-        summary[f"{test_type}_min_prob"] = round(min(test_probs), 4)
-        summary[f"{test_type}_max_prob"] = round(max(test_probs), 4)
+        # Handle empty populations (avoid division by zero)
+        if test_probs:
+            summary[f"{test_type}_avg_prob"] = round(
+                sum(test_probs) / len(test_probs), 4
+            )
+            summary[f"{test_type}_min_prob"] = round(min(test_probs), 4)
+            summary[f"{test_type}_max_prob"] = round(max(test_probs), 4)
+        else:
+            summary[f"{test_type}_avg_prob"] = 0.0
+            summary[f"{test_type}_min_prob"] = 0.0
+            summary[f"{test_type}_max_prob"] = 0.0
         summary[f"{test_type}_new_count"] = len(new_test_ids)
         summary[f"{test_type}_new_ids"] = new_test_ids
 

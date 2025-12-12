@@ -214,8 +214,8 @@ class PopulationConfig:
         # Validate required fields
         if not (0.0 < self.initial_prior < 1.0):
             raise ValueError("initial_prior must be in the range (0.0, 1.0)")
-        if self.initial_population_size <= 0:
-            raise ValueError("initial_population_size must be positive.")
+        if self.initial_population_size < 0:
+            raise ValueError("initial_population_size must be non-negative.")
 
         # Auto-set max_population_size if not provided (fixed-size behavior)
         if self.max_population_size is None:
@@ -224,12 +224,18 @@ class PopulationConfig:
             )
 
         # Validate max_population_size
-        if self.max_population_size <= 0:
-            raise ValueError("max_population_size must be positive.")
+        if self.max_population_size < 0:
+            raise ValueError("max_population_size must be non-negative.")
         if self.max_population_size < self.initial_population_size:
             raise ValueError(
                 f"max_population_size ({self.max_population_size}) must be >= "
                 f"initial_population_size ({self.initial_population_size})"
+            )
+
+        # Special validation for empty initial populations
+        if self.initial_population_size == 0 and self.max_population_size == 0:
+            raise ValueError(
+                "Population initialized to 0 must have max_population_size > 0 to allow growth."
             )
 
         # Validate offspring_rate
@@ -784,16 +790,21 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
     def __init__(self, individuals: list[T_Individual], generation: int = 0) -> None:
         """
         Initializes the shared state for all populations.
-        """
-        if not individuals:
-            logger.error("Attempted to initialize BasePopulation with an empty list.")
-            raise ValueError("Population cannot be initialized with an empty list.")
 
+        Note: Empty populations are now supported to enable dynamic/bootstrapped
+        population types (e.g., differential testing that starts with zero tests).
+        """
         self._individuals = individuals
         self._generation = generation
-        logger.debug(
-            f"Initialized {self.__class__.__name__} with {len(individuals)} individuals, gen {generation}"
-        )
+
+        if not individuals:
+            logger.debug(
+                f"Initialized {self.__class__.__name__} with 0 individuals (empty/bootstrap mode), gen {generation}"
+            )
+        else:
+            logger.debug(
+                f"Initialized {self.__class__.__name__} with {len(individuals)} individuals, gen {generation}"
+            )
 
     def __len__(self) -> int:
         return len(self._individuals)
@@ -1111,6 +1122,12 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
         Example:
             Code breeder: ([CodeIndividual(...), ...], None)
             Test breeder: ([TestIndividual(...), ...], "import unittest\n...")
+
+        Empty State Behavior (size=0):
+            - When population_size is 0, should return ([], context_code) where
+              context_code may be None or an empty string/template.
+            - This supports differential testing scenarios where populations start
+              empty and individuals are added through bootstrapping.
         """
         ...
 
@@ -1140,6 +1157,14 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
         Returns:
             List of exactly num_offsprings new individuals.
             If operators produce more, list is trimmed to exact count.
+
+        Empty State Behavior (size=0):
+            - When num_offsprings is 0, should return an empty list [].
+            - When the target population in coevolution_context is empty (size=0),
+              breeding may fall back to bootstrapping/initialization instead of
+              genetic operations, depending on implementation strategy.
+            - This supports differential testing scenarios where populations may
+              start empty and grow incrementally.
 
         Raises:
             Exception: Re-raises exceptions from operators (e.g., LLMGenerationError)
@@ -1189,6 +1214,12 @@ class IEliteSelectionStrategy[T: BaseIndividual](Protocol):
             List of elite individuals to preserve unchanged.
             The number of elites is typically determined by population_config
             (e.g., elite_size, survival_rate, or elitism_rate).
+
+        Empty State Behavior (size=0):
+            - Identity Operation: When population size is 0, should return an empty
+              list [] (no individuals to select from, no elites to preserve).
+            - This supports differential testing scenarios where populations may
+              start empty and grow through bootstrapping operations.
         """
         ...
 
@@ -1351,6 +1382,14 @@ class ICodeTestExecutor(Protocol):
 
         Returns:
             An ExecutionResults object containing the results of the execution.
+
+        Empty State Behavior (size=0):
+            - When test_population is empty (size=0), implementations should return
+              an empty ExecutionResults object with no test results.
+            - When code_population is empty (size=0), implementations should return
+              an empty ExecutionResults object with no code results.
+            - Empty populations are valid inputs (e.g., differential testing starting
+              with 0 tests and bootstrapping over time).
         """
         ...
 
@@ -1376,6 +1415,14 @@ class IObservationMatrixBuilder(Protocol):
 
         Returns:
             A 2D numpy array representing the observation matrix.
+
+        Empty State Behavior (size=0):
+            - When test_population is empty (size=0), should return matrix with
+              shape (N_code, 0) where N_code is the code population size.
+            - When code_population is empty (size=0), should return matrix with
+              shape (0, N_tests) where N_tests is the test population size.
+            - When both are empty, should return matrix with shape (0, 0).
+            - Empty matrices are valid (e.g., differential testing scenarios).
         """
         ...
 
@@ -1427,6 +1474,12 @@ class IBeliefInitializer(Protocol):
 
         Returns:
             A numpy array of shape (population_size,) with the initialized probabilities.
+
+        Empty State Behavior (size=0):
+            - When population_size is 0, should return an empty numpy array with
+              shape (0,) representing an empty prior distribution.
+            - This supports differential testing scenarios where populations start
+              empty and grow through bootstrapping.
         """
         ...
 
@@ -1496,6 +1549,13 @@ class IBeliefUpdater(Protocol):
 
         Returns:
             Updated posterior probabilities for the code population.
+
+        Empty State Behavior (size=0):
+            - Identity Operation: When observation_matrix has shape (N, 0) (no tests),
+              should return posterior = prior_code_probs unchanged (no evidence).
+            - When prior_code_probs is empty (shape (0,)), should return empty array
+              (shape (0,)) representing no code individuals to update.
+            - This supports differential testing where test population may start empty.
         """
         ...
 
@@ -1520,6 +1580,13 @@ class IBeliefUpdater(Protocol):
 
         Returns:
             Updated posterior probabilities for the test population.
+
+        Empty State Behavior (size=0):
+            - Identity Operation: When observation_matrix has shape (0, N) (no code),
+              should return posterior = prior_test_probs unchanged (no evidence).
+            - When prior_test_probs is empty (shape (0,)), should return empty array
+              (shape (0,)) representing no test individuals to update.
+            - This supports differential testing where test population may start empty.
         """
         ...
 

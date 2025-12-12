@@ -116,7 +116,8 @@ def create_configurations() -> tuple[
         ),
         "differential": PopulationConfig(
             initial_prior=0.5,
-            initial_population_size=15,
+            initial_population_size=0,  # Start with empty population for differential testing
+            max_population_size=15,  # Allow growth through bootstrapping
         ),
     }
 
