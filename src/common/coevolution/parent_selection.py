@@ -132,5 +132,3 @@ class RouletteWheelParentSelection[T: BaseIndividual]:
     def __repr__(self) -> str:
         """String representation for debugging and logging."""
         return "RouletteWheelParentSelection()"
-        """String representation for debugging and logging."""
-        return "RouletteWheelParentSelection()"
