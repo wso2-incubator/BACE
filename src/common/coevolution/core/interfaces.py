@@ -45,7 +45,7 @@ Interface Organization:
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
@@ -309,6 +309,26 @@ class EvolutionConfig:
             raise ValueError("max_workers must be at least 1.")
 
 
+@dataclass(frozen=True)
+class BaseOperatorInput:
+    """Base class for all operator inputs."""
+
+    operation: Operation
+    question_content: str
+
+
+@dataclass(frozen=True)
+class OperatorResult:
+    snippet: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+# The Output is just a list of these results
+@dataclass(frozen=True)
+class OperatorOutput:
+    results: list[OperatorResult]
+
+
 @dataclass
 class Test:
     input: str
@@ -505,43 +525,6 @@ class CoevolutionContext:
         str, "TestPopulation"
     ]  # Keys: "public", "unittest", "differential", "property", etc.
     interactions: dict[str, InteractionData]  # Same keys as test_populations
-
-
-@dataclass(frozen=True)
-class OperationContext:
-    """
-    Context object passed to genetic operators with operation-specific inputs.
-
-    This design supports:
-    - Same-population operations (code→code, test→test)
-    - Cross-population operations (code→test for DET, test+code→code for edit)
-    - Access to full system state via coevolution context
-    - Flexible inputs without assuming genetic lineage
-
-    The breeding strategy selects relevant individuals and passes them explicitly.
-    The operator extracts what it needs and ignores the rest.
-
-    Design:
-    - code_parents/test_parents: Selected parent individuals for this specific operation
-    - coevolution_context: Full system state for operators that need more context
-
-    Examples:
-        MUTATION: uses code_parents[0]
-        CROSSOVER: uses code_parents[0] and [1]
-        EDIT: uses code_parents[0], test_parents[0],
-              accesses coevolution_context.interactions for execution data
-        DET: uses code_parents[0] and [1],
-             accesses coevolution_context.test_populations for test context
-    """
-
-    operation: Operation
-    code_parents: list[
-        "CodeIndividual"
-    ]  # Selected parent individuals for this operation
-    test_parents: list[
-        "TestIndividual"
-    ]  # Selected parent individuals for this operation
-    coevolution_context: CoevolutionContext  # Full system state
 
 
 class BaseIndividual(ABC):
@@ -1035,41 +1018,43 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         pass
 
 
-class IOperator[T: BaseIndividual](Protocol):
+class IOperator(Protocol):
     """
-    Protocol for genetic operators that handle both initialization and evolution.
+    Protocol for genetic operators that transform code/test strings.
 
-    Unified interface for operators that can:
-    1. Create initial populations (generation 0)
-    2. Apply genetic operations to evolve individuals (generation 1+)
+    Operators are "stateless workers" that handle pure string transformation.
+    They are strictly decoupled from Domain Objects (Individuals, Populations).
+    The Breeding Strategy handles the wrapping/unwrapping of Individual objects.
 
-    Generic parameter T allows operators to be type-specific:
-    - IOperator[CodeIndividual] for code operations
-    - IOperator[TestIndividual] for test operations
+    Capabilities:
+    1. Generate initial snippets (Generation 0)
+    2. Apply genetic operations to existing snippets (Generation 1+)
     """
 
-    def create_initial_individuals(
-        self, population_size: int, initial_prior: float, problem: Problem
-    ) -> tuple[list[T], str | None]:
+    def generate_initial_snippets(
+        self,
+        population_size: int,
+        problem_description: str,
+        starter_code: str | None = None,
+    ) -> tuple[OperatorOutput, str | None]:
         """
-        Generate initial population of individuals with optional context code.
+        Generate the initial batch of code or test snippets.
 
         Args:
-            population_size: Number of individuals to generate.
-            initial_prior: Initial probability for all individuals.
-            problem: The problem context containing question, tests, and starter code.
-                     Passed as parameter to keep operators stateless.
+            population_size: Number of snippets to generate.
+            problem_description: The problem statement (from Problem.question_content).
+            starter_code: Optional starting code or scaffold.
+            rng_seed: Seed for reproducibility.
 
         Returns:
-            Tuple of (individuals, context_code):
-            - individuals: List of newly generated individuals for generation 0.
-              All will have creation_op=OPERATION_INITIAL, generation_born=0, parents={}.
-            - context_code: Optional auxiliary/supporting code (e.g., test class scaffold
-              with imports, setUp, helpers for test populations). None for code populations.
+            Tuple of:
+            - OperatorOutput: A container with the generated snippets and metadata.
+            - context_code: Optional auxiliary code (e.g., test class scaffold
+              with imports/setUp) needed to run these snippets. None for code ops.
 
-        Example:
-            Code operator: ([CodeIndividual(...), ...], None)
-            Test operator: ([TestIndividual(...), ...], "import unittest\n\nclass Test...")
+        Empty State Behavior (size=0):
+            If population_size is 0, should return an empty OperatorOutput
+            (results=[]) and potentially a context string (e.g. empty test suite scaffold).
         """
         ...
 
@@ -1077,53 +1062,30 @@ class IOperator[T: BaseIndividual](Protocol):
         """
         Return the set of operations this operator can handle.
 
-        This method enables validation that OperatorRatesConfig only
-        references operations that the operator actually implements.
+        Used to validate that the Breeding Strategy's configuration only
+        requests operations that this operator actually supports.
 
         Returns:
-            Set of operation names (strings) that this operator supports.
-
-        Example:
-            {"mutation", "crossover", "edit", "det"}
+            Set of operation names (strings).
+            Example: {"mutation", "crossover", "edit", "det"}
         """
         ...
 
-    def apply(self, context: OperationContext) -> list[T]:
+    def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
         """
-        Apply a genetic operation and return offspring individuals.
+        Apply a genetic operation to input strings.
 
-        The operator extracts what it needs from the context and returns
-        complete Individual objects with full provenance tracking.
-
-        Different operations may return different counts:
-        - MUTATION: returns [1 individual]
-        - CROSSOVER: returns [1 or 2 individuals] depending on implementation
-        - EDIT: returns [1 individual]
-        - DET: returns [N individuals] (batch of differential tests)
-
-        The operator extracts what it needs from the context:
-        - MUTATION: uses context.code_individuals[0]
-        - CROSSOVER: uses context.code_individuals[0] and [1]
-        - EDIT: uses context.code_individuals[0], context.test_individuals[0],
-                context.execution_results, context.feedback
-        - DET: uses context.code_individuals[0] and [1], context.observation_matrix
-                to generate tests that distinguish between them
+        The operator does not need to know about 'Individuals', 'Populations',
+        or 'ObservationMatrices'. It receives exactly what it needs via the DTO.
 
         Args:
-            context: Complete context including operation type, input individuals,
-                    populations, execution results, and other data.
+            input_dto: A strongly-typed DTO (e.g., MutationInput, EditInput)
+                       containing the operation name, parent snippets, and
+                       any required context (like error traces).
 
         Returns:
-            List of offspring individuals with complete provenance:
-            - snippet: The generated code/test
-            - probability: Assigned via operator's probability logic
-            - creation_op: The operation that created them
-            - generation_born: From context
-            - parents: Dict mapping parent IDs to their types
-            - metadata: Operation-specific metadata for tracking
-
-        Raises:
-            ValueError: If required context for the operation is missing.
+            OperatorOutput containing the generated offspring snippets and metadata.
+            The Strategy is responsible for wrapping these into new Individuals.
         """
         ...
 
@@ -1132,25 +1094,28 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
     """
     Protocol for breeding strategies that handle population generation.
 
-    Defines the contract for any class that orchestrates genetic algorithm
-    population generation, including both initial population creation (generation 0)
-    and subsequent offspring generation through genetic operations (generation 1+).
+    The Breeding Strategy acts as the "Manager" of the evolutionary process.
+    It bridges the gap between the Domain Model (Individuals, Populations) and
+    the Stateless Workers (Operators).
 
-    The breeding strategy encapsulates:
-    - Genetic operators (mutation, crossover, edit, etc.)
-    - Parent selection strategies
-    - Operation rates configuration (owned by the strategy)
-    - Parallelization of breeding operations
+    Responsibilities:
+    1. **Orchestration**: Decides which operations to perform (Mutation, Crossover, Edit, etc.)
+       based on configured rates.
+    2. **Selection**: Selects parents and operation-specific context.
+       - Generic Selection: Uses IParentSelectionStrategy for fitness-based selection.
+       - Specialized Selection: Finds specific contexts (e.g., failing tests for edits,
+         divergent pairs for differential testing) using internal logic or helpers.
+    3. **Data Preparation (Unwrapping)**: Extracts raw strings/primitives from selected
+       Individual objects and packages them into strongly-typed DTOs (e.g., MutationInput,
+       EditInput) for the Operator.
+    4. **Dispatch**: Calls the 'dumb' IOperator with these DTOs.
+    5. **Construction (Wrapping)**: Uses an IIndividualFactory to wrap the raw strings
+       returned by the Operator into new Individual objects, assigning IDs, probabilities,
+       and lineage data.
 
-    Separation of Concerns:
-    - Breeding Strategy: Generates offspring via genetic operations
-    - Elite Selection: Handled separately by Orchestrator (NOT part of breeding)
-    - Orchestrator: Coordinates evolution (elite selection, breeding, belief updates)
-
-    Design:
-    - Breeder owns the operator, selection strategies, and rates config as dependencies
-    - Orchestrator interacts only with breeder, not with operators directly
-    - Target population type is configured at construction (code vs test types)
+    Design Pattern: "Smart Strategy, Dumb Operator"
+    - The Strategy absorbs the complexity of the domain (Matrices, Objects, History).
+    - The Operator handles only pure string transformation.
     """
 
     def initialize_individuals(
@@ -1162,31 +1127,26 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
         """
         Create initial population by delegating to operator.
 
-        This is a convenience method that wraps the operator's
-        create_initial_individuals, allowing orchestrator to interact
-        only with the breeder.
+        This method orchestrates the creation of Generation 0:
+        1. Extracts problem description and starter code from the Problem object.
+        2. Calls the operator's `generate_initial_snippets` method with these primitives.
+        3. Wraps the resulting snippets into Individual objects using the factory.
 
         Args:
-            population_size: Number of individuals to create
-            initial_prior: Initial probability value for individuals
-            problem: The problem context to pass through to operator
+            population_size: Number of individuals to create.
+            initial_prior: Initial probability value for individuals.
+            problem: The problem context (used to extract question/starter code strings).
 
         Returns:
             Tuple of (individuals, context_code):
-            - individuals: List of newly generated individuals
-            - context_code: Optional auxiliary code from operator.
-              Breeder passes this through from operator.
-              Orchestrator interprets it (e.g., as test_block for test populations).
-
-        Example:
-            Code breeder: ([CodeIndividual(...), ...], None)
-            Test breeder: ([TestIndividual(...), ...], "import unittest\n...")
+            - individuals: List of newly generated individuals (Gen 0).
+            - context_code: Optional auxiliary code returned by the operator
+              (e.g., test class scaffold).
 
         Empty State Behavior (size=0):
-            - When population_size is 0, should return ([], context_code) where
-              context_code may be None or an empty string/template.
-            - This supports differential testing scenarios where populations start
-              empty and individuals are added through bootstrapping.
+            - If population_size is 0, returns ([], context_code).
+            - This supports bootstrapping scenarios where a population (like differential tests)
+              starts empty and is populated later via breeding.
         """
         ...
 
@@ -1198,36 +1158,35 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
         """
         Generate offspring using genetic operations.
 
-        The breeder handles:
-        1. Operation selection based on its rates_config (owned by strategy)
-        2. Parent selection using selection strategies
-        3. Calling operators with appropriate context
-        4. Parallelization (if max_workers > 1)
-        5. Trimming to exact count if operators produce variable offspring
-
-        Note: Elite selection is NOT part of breeding - it's handled separately
-        by the Orchestrator. Breeders only generate new offspring through genetic
-        operations.
+        The workflow for each offspring is:
+        1. **Select Operation**: Sample an operation type (e.g., "edit") from rates config.
+        2. **Select Context**:
+           - If "mutation": Select 1 parent using standard selector.
+           - If "crossover": Select 2 parents using standard selector.
+           - If "edit": Find a (Code, FailingTest) pair using specialized logic/helpers.
+           - If "det": Find divergent code pairs using specialized logic/helpers.
+        3. **Prepare Input**: Construct the specific DTO (e.g., EditInput) with raw strings.
+        4. **Execute**: Call `operator.apply(dto)` to get `OperatorOutput`.
+        5. **Construct**: Iterate through results, calculating new probabilities and
+           creating new Individual objects via the factory.
 
         Args:
-            coevolution_context: Complete system state for breeding
-            num_offsprings: Number of offspring to generate
+            coevolution_context: Complete system state (populations, matrices) used
+                                 for context-aware selection.
+            num_offsprings: Number of offspring to generate.
 
         Returns:
             List of exactly num_offsprings new individuals.
-            If operators produce more, list is trimmed to exact count.
 
         Empty State Behavior (size=0):
-            - When num_offsprings is 0, should return an empty list [].
-            - When the target population in coevolution_context is empty (size=0),
-              breeding may fall back to bootstrapping/initialization instead of
-              genetic operations, depending on implementation strategy.
-            - This supports differential testing scenarios where populations may
-              start empty and grow incrementally.
+            - If num_offsprings is 0, returns [].
+            - If the target population is empty (size=0), the strategy may switch
+              to "Bootstrap Mode" (e.g., creating the first tests from code ambiguities)
+              instead of standard genetic evolution.
 
         Raises:
-            Exception: Re-raises exceptions from operators (e.g., LLMGenerationError)
-                      to allow caller to handle failures appropriately.
+            Exception: Re-raises exceptions from operators to allow the Orchestrator
+                       to handle failures (e.g., by retrying or logging).
         """
         ...
 
