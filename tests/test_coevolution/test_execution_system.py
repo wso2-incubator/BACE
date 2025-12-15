@@ -32,21 +32,21 @@ def simple_code_population() -> CodePopulation:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={"code": [], "test": []},
         ),
         CodeIndividual(
             snippet="def add(a, b): return a - b",  # Wrong
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={"code": [], "test": []},
         ),
         CodeIndividual(
             snippet="def add(a, b): return a * 2 + b",
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={"code": [], "test": []},
         ),
     ]
     return CodePopulation(individuals=individuals)
@@ -69,23 +69,21 @@ class TestAdd:
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={"code": [], "test": []},
         ),
         TestIndividual(
             snippet="test_zero",
             probability=0.5,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
-            parent_ids=[],
+            parents={"code": [], "test": []},
         ),
     ]
     # Create mock dependencies for TestPopulation
-    mock_pareto = Mock()
     mock_rebuilder = Mock()
 
     return TestPopulation(
         individuals=individuals,
-        pareto=mock_pareto,
         test_block_rebuilder=mock_rebuilder,
         test_class_block=test_class,
     )
@@ -498,7 +496,7 @@ class TestExecuteTests:
         simple_test_population: TestPopulation,
         mock_sandbox: Mock,
     ) -> None:
-        """Test that execute_tests handles execution failures gracefully."""
+        """Test that execute_tests raises ValueError when execution failures occur."""
         system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
 
         # Mock sandbox to fail on second execution
@@ -526,10 +524,9 @@ class TestExecuteTests:
 
         mock_sandbox.execute_test_script.side_effect = side_effect
 
-        results = system.execute_tests(simple_code_population, simple_test_population)
-
-        # Should get 2 successful results (first and third)
-        assert len(results) == 2
+        # Should raise ValueError because we expect 3 results but only get 2
+        with pytest.raises(ValueError, match="Mismatch in number of execution results"):
+            system.execute_tests(simple_code_population, simple_test_population)
 
     def test_execute_tests_empty_populations(self, mock_sandbox: Mock) -> None:
         """Test execute_tests with empty populations."""
@@ -663,7 +660,7 @@ class TestRealSandboxIntegration:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
             # Wrong implementation (subtracts instead)
             CodeIndividual(
@@ -671,7 +668,7 @@ class TestRealSandboxIntegration:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
             # Partially correct (passes test_zero, fails others)
             CodeIndividual(
@@ -679,7 +676,7 @@ class TestRealSandboxIntegration:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
         ]
         return CodePopulation(individuals=individuals)
@@ -721,31 +718,29 @@ if __name__ == '__main__':
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
             TestIndividual(
                 snippet="test_zero",
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
             TestIndividual(
                 snippet="test_negative_numbers",
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
         ]
 
         # Mock the required dependencies for TestPopulation
-        mock_pareto = Mock()
         mock_rebuilder = Mock()
 
         return TestPopulation(
             individuals=individuals,
-            pareto=mock_pareto,
             test_block_rebuilder=mock_rebuilder,
             test_class_block=test_class,
         )
@@ -848,7 +843,7 @@ class TestAdditionalEdgeCases:
                     probability=0.5,
                     creation_op=OPERATION_INITIAL,
                     generation_born=0,
-                    parent_ids=[],
+                    parents={"code": [], "test": []},
                 )
             ]
         )
@@ -984,25 +979,23 @@ class TestAdditionalEdgeCases:
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
             TestIndividual(
                 snippet="test_beta",
                 probability=0.5,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
-                parent_ids=[],
+                parents={"code": [], "test": []},
             ),
         ]
 
         from unittest.mock import Mock
 
-        mock_pareto = Mock()
         mock_rebuilder = Mock()
 
         test_population = TestPopulation(
             individuals=individuals,
-            pareto=mock_pareto,
             test_block_rebuilder=mock_rebuilder,
             test_class_block="class TestDummy: pass",
         )
