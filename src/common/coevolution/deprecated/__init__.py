@@ -30,4 +30,4 @@ warnings.warn(
     stacklevel=2,
 )
 
-__all__ = ["orchestrator", "population", "reproduction"]
+__all__ = ["orchestrator", "population", "reproduction", "selection_strategy"]
