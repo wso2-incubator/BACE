@@ -17,18 +17,13 @@ Design Principles:
 - Returns individuals: Works with Individual objects, not indices
 """
 
-from typing import TypeVar
-
 import numpy as np
 from loguru import logger
 
 from .core.interfaces import BaseIndividual, BasePopulation, CoevolutionContext
 
-# Type variable for genetic algorithm individuals
-T = TypeVar("T", bound=BaseIndividual)
 
-
-class RouletteWheelParentSelection:
+class RouletteWheelParentSelection[T: BaseIndividual]:
     """
     Roulette wheel (fitness-proportionate) parent selection strategy.
 
@@ -135,5 +130,7 @@ class RouletteWheelParentSelection:
         return selected
 
     def __repr__(self) -> str:
+        """String representation for debugging and logging."""
+        return "RouletteWheelParentSelection()"
         """String representation for debugging and logging."""
         return "RouletteWheelParentSelection()"
