@@ -102,10 +102,13 @@ def create_configurations() -> tuple[
         offspring_rate=0.5,  # Generate 50% new offspring
     )
 
-    # Code genetic operator rates
+    # Code genetic operator rates (must sum to 1.0)
     code_op_rates = OperatorRatesConfig(
-        operation_rates={"crossover": 0.2, "edit": 0.6},
-        mutation_rate=0.2,
+        operation_rates={
+            "mutation": 0.2,
+            "crossover": 0.2,
+            "edit": 0.6,
+        },
     )
 
     # Per-test-type configurations (unittest and differential)
@@ -123,12 +126,18 @@ def create_configurations() -> tuple[
 
     test_op_rates_configs = {
         "unittest": OperatorRatesConfig(
-            operation_rates={"crossover": 0.4, "edit": 0.3},
-            mutation_rate=0.3,
+            operation_rates={
+                "mutation": 0.3,
+                "crossover": 0.4,
+                "edit": 0.3,
+            },
         ),
         "differential": OperatorRatesConfig(
-            operation_rates={"crossover": 0.3, "edit": 0.4},
-            mutation_rate=0.3,
+            operation_rates={
+                "mutation": 0.3,
+                "crossover": 0.3,
+                "edit": 0.4,
+            },
         ),
     }
 

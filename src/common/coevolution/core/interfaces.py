@@ -133,21 +133,43 @@ class OperatorRatesConfig:
     """
     Configuration for operation selection probabilities.
 
-    Supports flexible operation types - add new operations without changing this class.
-    The breeding strategy samples from operation_rates to select a base operation,
-    then applies mutation with mutation_rate probability.
+    Defines the probability distribution over genetic operations for breeding.
+    All breeding produces new individuals via genetic operations - there is no
+    reproduction (elite selection handles preservation of unchanged individuals).
+
+    The breeding strategy samples from operation_rates to select which operation
+    to apply. Rates must sum to exactly 1.0 to ensure all breeding is productive.
+
+    Supported operations:
+    - mutation: Small random changes to a single parent
+    - crossover: Combine genetic material from two parents
+    - edit: Improve code based on test failure feedback
+    - det: Generate differential tests from divergent code pairs
+    - (custom operations can be added)
 
     Example:
+        # Code population breeding
         OperatorRatesConfig(
-            operation_rates={"crossover": 0.3, "edit": 0.2, "det": 0.1},
-            mutation_rate=0.1
+            operation_rates={
+                "mutation": 0.4,   # 40% single-parent variation
+                "crossover": 0.3,  # 30% two-parent combination
+                "edit": 0.3,       # 30% feedback-driven improvement
+            }
+        )
+
+        # Test population breeding
+        OperatorRatesConfig(
+            operation_rates={
+                "mutation": 0.5,   # 50% test mutation
+                "crossover": 0.3,  # 30% test crossover
+                "det": 0.2,        # 20% differential test generation
+            }
         )
     """
 
     operation_rates: dict[
         Operation, float
     ]  # Maps operation name to selection probability
-    mutation_rate: float  # Probability of applying mutation after base operation
 
     def __post_init__(self) -> None:
         # Validate all operation rates are in [0, 1]
@@ -157,15 +179,13 @@ class OperatorRatesConfig:
                     f"Rate for operation '{op}' must be in [0.0, 1.0], got {rate}"
                 )
 
-        if not (0.0 <= self.mutation_rate <= 1.0):
-            raise ValueError("mutation_rate must be in [0.0, 1.0]")
-
-        # Validate that rates sum to at most 1.0
+        # Validate that rates sum to exactly 1.0
         total = sum(self.operation_rates.values())
-        if total > 1.0:
+        if not np.isclose(total, 1.0, atol=1e-6):
             raise ValueError(
-                f"Operation rates sum to {total:.4f}, must be ≤ 1.0. "
-                f"Remaining probability ({1.0 - total:.4f}) is used for reproduction."
+                f"Operation rates must sum to 1.0 (got {total:.6f}). "
+                f"All breeding should produce new individuals via genetic operations. "
+                f"Elite selection (handled separately) preserves unchanged individuals."
             )
 
 
