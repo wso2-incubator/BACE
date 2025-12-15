@@ -144,7 +144,7 @@ class MockCodeOperator(IOperator["CodeIndividual"]):
                 probability=parent.probability * 0.95,  # Slight decrease
                 creation_op=OPERATION_MUTATION,
                 generation_born=generation,
-                parents={parent.id: "code"},
+                parents={"code": [parent.id], "test": []},
                 metadata={"operation": "mutation", "parent_prob": parent.probability},
             )
             return [offspring]
@@ -167,7 +167,7 @@ class MockCodeOperator(IOperator["CodeIndividual"]):
                 probability=offspring_prob,
                 creation_op=OPERATION_CROSSOVER,
                 generation_born=generation,
-                parents={parent1.id: "code", parent2.id: "code"},
+                parents={"code": [parent1.id, parent2.id], "test": []},
                 metadata={
                     "operation": "crossover",
                     "parent1_prob": parent1.probability,
@@ -188,7 +188,7 @@ class MockCodeOperator(IOperator["CodeIndividual"]):
                 probability=parent.probability * 0.98,
                 creation_op=OPERATION_EDIT,
                 generation_born=generation,
-                parents={parent.id: "code"},
+                parents={"code": [parent.id], "test": []},
                 metadata={
                     "operation": "edit",
                     "has_test_context": bool(test_parents),
@@ -210,7 +210,7 @@ class MockCodeOperator(IOperator["CodeIndividual"]):
                 probability=parent.probability * 0.9,
                 creation_op=operation,
                 generation_born=generation,
-                parents={parent.id: "code"},
+                parents={"code": [parent.id], "test": []},
                 metadata={"operation": operation},
             )
             return [offspring]
@@ -296,7 +296,7 @@ class MockTestOperator(IOperator["TestIndividual"]):
                 probability=parent.probability * 0.95,
                 creation_op=OPERATION_MUTATION,
                 generation_born=generation,
-                parents={parent.id: "test"},
+                parents={"code": [], "test": [parent.id]},
                 metadata={"operation": "mutation"},
             )
             return [offspring]
@@ -319,7 +319,7 @@ class MockTestOperator(IOperator["TestIndividual"]):
                 probability=offspring_prob,
                 creation_op=OPERATION_CROSSOVER,
                 generation_born=generation,
-                parents={parent1.id: "test", parent2.id: "test"},
+                parents={"code": [], "test": [parent1.id, parent2.id]},
                 metadata={"operation": "crossover"},
             )
             return [offspring]
@@ -335,7 +335,7 @@ class MockTestOperator(IOperator["TestIndividual"]):
                 probability=parent.probability * 0.98,
                 creation_op=OPERATION_EDIT,
                 generation_born=generation,
-                parents={parent.id: "test"},
+                parents={"code": [], "test": [parent.id]},
                 metadata={"operation": "edit"},
             )
             return [offspring]
@@ -353,7 +353,10 @@ class MockTestOperator(IOperator["TestIndividual"]):
                     probability=self.initial_prior,
                     creation_op=operation,
                     generation_born=generation,
-                    parents={parent1.id: "code", parent2.id: "code"},  # Code parents!
+                    parents={
+                        "code": [parent1.id, parent2.id],
+                        "test": [],
+                    },  # Code parents!
                     metadata={"operation": operation, "cross_species": True},
                 )
                 return [offspring]
@@ -367,7 +370,7 @@ class MockTestOperator(IOperator["TestIndividual"]):
                     probability=parent.probability * 0.9,
                     creation_op=operation,
                     generation_born=generation,
-                    parents={parent.id: "test"},
+                    parents={"code": [], "test": [parent.id]},
                     metadata={"operation": operation},
                 )
                 return [offspring]
@@ -580,7 +583,7 @@ class MockBreedingStrategy:
                     probability=parent.probability * 0.95,  # Slight decrease
                     creation_op="crossover",
                     generation_born=coevolution_context.code_population.generation + 1,
-                    parents={parent.id: "code"},
+                    parents={"code": [parent.id], "test": []},
                 )
             else:
                 # Test population - get from context
@@ -604,7 +607,7 @@ class MockBreedingStrategy:
                         probability=test_parent.probability * 0.95,
                         creation_op="mutation",
                         generation_born=test_population.generation + 1,
-                        parents={test_parent.id: "test"},
+                        parents={"code": [], "test": [test_parent.id]},
                     )
 
             offsprings.append(offspring)

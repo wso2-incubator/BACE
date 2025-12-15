@@ -1,10 +1,10 @@
 # src/common/coevolution/core/individual.py
 import itertools
-from typing import Any, Literal
+from typing import Any
 
 from loguru import logger
 
-from .interfaces import BaseIndividual, Operation
+from .interfaces import BaseIndividual, Operation, ParentDict
 
 
 class CodeIndividual(BaseIndividual):
@@ -24,7 +24,7 @@ class CodeIndividual(BaseIndividual):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parents: dict[str, Literal["code", "test"]] | None = None,
+        parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -73,7 +73,7 @@ class TestIndividual(BaseIndividual):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parents: dict[str, Literal["code", "test"]] | None = None,
+        parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """

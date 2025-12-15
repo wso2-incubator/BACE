@@ -60,6 +60,9 @@ if TYPE_CHECKING:
 # Type alias for genetic operations
 type Operation = str
 
+# Type alias for parent lineage tracking (grouped by type)
+type ParentDict = dict[Literal["code", "test"], list[str]]
+
 # Standard operation names (for convenience, not exhaustive)
 OPERATION_INITIAL: Literal["initial"] = "initial"
 OPERATION_CROSSOVER: Literal["crossover"] = "crossover"
@@ -525,7 +528,7 @@ class BaseIndividual(ABC):
         probability: float,
         creation_op: Operation,
         generation_born: int,
-        parents: dict[str, Literal["code", "test"]] | None = None,
+        parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -536,14 +539,14 @@ class BaseIndividual(ABC):
             probability: Initial probability value
             creation_op: The genetic operation that created this individual
             generation_born: Generation when this individual was created
-            parents: Parent individuals {parent_id: parent_type}, supports cross-species
+            parents: Parent individuals grouped by type {"code": [ids], "test": [ids]}
             metadata: Additional operation-specific metadata
         """
         self.lifecycle_log: list[LogEntry] = []
         self._snippet = snippet
         self._creation_op = creation_op
         self._generation_born = generation_born
-        self._parents = parents if parents is not None else {}
+        self._parents = parents if parents is not None else {"code": [], "test": []}
         self._metadata = metadata if metadata is not None else {}
 
         BaseIndividual._validate_probability(probability)
@@ -727,17 +730,37 @@ class BaseIndividual(ABC):
         return self._creation_op
 
     @property
-    def parents(self) -> dict[str, Literal["code", "test"]]:
+    def parents(self) -> ParentDict:
         """
-        Dictionary mapping parent IDs to their types.
+        Dictionary grouping parent IDs by their types.
 
         This allows tracking cross-species parents (e.g., DET operator
         takes code parents to create test offspring).
 
         Returns:
-            Dict mapping parent IDs to "code" or "test".
+            Dict grouping parent IDs: {"code": [id1, id2], "test": [id3]}.
         """
         return self._parents
+
+    @property
+    def code_parent_ids(self) -> list[str]:
+        """
+        Convenience accessor for code parent IDs.
+
+        Returns:
+            List of code parent IDs, empty list if none.
+        """
+        return self._parents.get("code", [])
+
+    @property
+    def test_parent_ids(self) -> list[str]:
+        """
+        Convenience accessor for test parent IDs.
+
+        Returns:
+            List of test parent IDs, empty list if none.
+        """
+        return self._parents.get("test", [])
 
     @property
     def metadata(self) -> dict[str, Any]:
