@@ -12,7 +12,7 @@ making it easy to test and use without instantiation.
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import IPareto
+from ..core.interfaces import IPareto
 
 
 class ParetoSystem(IPareto):
