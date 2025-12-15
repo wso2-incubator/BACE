@@ -228,25 +228,32 @@ def mock_execution_results_list() -> list[TestExecutionResult]:
 class TestExecutionSystemInitialization:
     """Test suite for ExecutionSystem initialization."""
 
-    def test_default_initialization(self) -> None:
+    def test_default_initialization(self, mock_sandbox: Mock) -> None:
         """Test default initialization with multiprocessing enabled."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
+        assert system.sandbox is mock_sandbox
         assert system.enable_multiprocessing is True
         assert system._num_workers is None
 
-    def test_initialization_with_multiprocessing_disabled(self) -> None:
+    def test_initialization_with_multiprocessing_disabled(
+        self, mock_sandbox: Mock
+    ) -> None:
         """Test initialization with multiprocessing disabled."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
         assert system.enable_multiprocessing is False
 
-    def test_initialization_with_custom_workers(self) -> None:
+    def test_initialization_with_custom_workers(self, mock_sandbox: Mock) -> None:
         """Test initialization with custom number of workers."""
-        system = ExecutionSystem(num_workers=4)
+        system = ExecutionSystem(mock_sandbox, num_workers=4)
         assert system._num_workers == 4
 
-    def test_initialization_multiprocessing_off_ignores_workers(self) -> None:
+    def test_initialization_multiprocessing_off_ignores_workers(
+        self, mock_sandbox: Mock
+    ) -> None:
         """Test that num_workers is ignored when multiprocessing is disabled."""
-        system = ExecutionSystem(enable_multiprocessing=False, num_workers=8)
+        system = ExecutionSystem(
+            mock_sandbox, enable_multiprocessing=False, num_workers=8
+        )
         num_workers = system._get_num_workers(100)
         assert num_workers == 1  # Should be 1 when multiprocessing is off
 
@@ -254,31 +261,35 @@ class TestExecutionSystemInitialization:
 class TestWorkerCountDetermination:
     """Test suite for _get_num_workers method."""
 
-    def test_get_num_workers_multiprocessing_disabled(self) -> None:
+    def test_get_num_workers_multiprocessing_disabled(self, mock_sandbox: Mock) -> None:
         """Test that worker count is 1 when multiprocessing is disabled."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
         assert system._get_num_workers(100) == 1
 
-    def test_get_num_workers_with_custom_count(self) -> None:
+    def test_get_num_workers_with_custom_count(self, mock_sandbox: Mock) -> None:
         """Test worker count respects custom num_workers."""
-        system = ExecutionSystem(num_workers=4)
+        system = ExecutionSystem(mock_sandbox, num_workers=4)
         assert system._get_num_workers(100) == 4
 
-    def test_get_num_workers_limited_by_population(self) -> None:
+    def test_get_num_workers_limited_by_population(self, mock_sandbox: Mock) -> None:
         """Test that worker count doesn't exceed population size."""
-        system = ExecutionSystem(num_workers=10)
+        system = ExecutionSystem(mock_sandbox, num_workers=10)
         assert system._get_num_workers(3) == 3
 
     @patch("os.cpu_count", return_value=8)
-    def test_get_num_workers_uses_cpu_count(self, mock_cpu_count: int) -> None:
+    def test_get_num_workers_uses_cpu_count(
+        self, mock_cpu_count: int, mock_sandbox: Mock
+    ) -> None:
         """Test that worker count defaults to CPU count."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
         assert system._get_num_workers(100) == 8
 
     @patch("os.cpu_count", return_value=None)
-    def test_get_num_workers_handles_none_cpu_count(self, mock_cpu_count: int) -> None:
+    def test_get_num_workers_handles_none_cpu_count(
+        self, mock_cpu_count: int, mock_sandbox: Mock
+    ) -> None:
         """Test fallback when cpu_count returns None."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
         assert system._get_num_workers(100) == 1
 
 
@@ -289,9 +300,10 @@ class TestObservationMatrixBuilding:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Test observation matrix when all tests pass."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         # All tests pass
         execution_results = {
@@ -328,9 +340,10 @@ class TestObservationMatrixBuilding:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Test observation matrix when all tests fail."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         # All tests fail
         execution_results = {
@@ -370,9 +383,10 @@ class TestObservationMatrixBuilding:
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
         mock_execution_results: list[TestExecutionResult],
+        mock_sandbox: Mock,
     ) -> None:
         """Test observation matrix with mixed pass/fail results."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, mock_execution_results
@@ -400,9 +414,10 @@ class TestObservationMatrixBuilding:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Test that error status is treated as failure (0)."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         execution_results = {
             0: TestExecutionResult(
@@ -452,7 +467,7 @@ class TestExecuteTests:
         mock_sandbox: Mock,
     ) -> None:
         """Test execute_tests in sequential mode (no multiprocessing)."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
 
         # Mock the sandbox to return successful results
         mock_sandbox.execute_test_script.return_value = TestExecutionResult(
@@ -471,9 +486,7 @@ class TestExecuteTests:
             summary="Passed",
         )
 
-        results = system.execute_tests(
-            simple_code_population, simple_test_population, mock_sandbox
-        )
+        results = system.execute_tests(simple_code_population, simple_test_population)
 
         assert len(results) == 3  # All 3 codes executed successfully
         assert all(isinstance(r, TestExecutionResult) for r in results.values())
@@ -486,7 +499,7 @@ class TestExecuteTests:
         mock_sandbox: Mock,
     ) -> None:
         """Test that execute_tests handles execution failures gracefully."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
 
         # Mock sandbox to fail on second execution
         def side_effect(*args: Any, **kwargs: Any) -> TestExecutionResult:
@@ -513,9 +526,7 @@ class TestExecuteTests:
 
         mock_sandbox.execute_test_script.side_effect = side_effect
 
-        results = system.execute_tests(
-            simple_code_population, simple_test_population, mock_sandbox
-        )
+        results = system.execute_tests(simple_code_population, simple_test_population)
 
         # Should get 2 successful results (first and third)
         assert len(results) == 2
@@ -576,19 +587,17 @@ class TestIntegration:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
         mock_execution_results_list: list[TestExecutionResult],
+        mock_sandbox: Mock,
     ) -> None:
         """Test the full pipeline from execution to observation matrix."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
 
         # Mock sandbox to return our predefined results
         mock_sandbox.execute_test_script.side_effect = mock_execution_results_list
 
         # Execute tests
-        results = system.execute_tests(
-            simple_code_population, simple_test_population, mock_sandbox
-        )
+        results = system.execute_tests(simple_code_population, simple_test_population)
 
         # Build observation matrix
         matrix = system.build_observation_matrix(
@@ -614,9 +623,10 @@ class TestIntegration:
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
         mock_execution_results: list[TestExecutionResult],
+        mock_sandbox: Mock,
     ) -> None:
         """Test that pass rates can be calculated from observation matrix."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         matrix = system.build_observation_matrix(
             simple_code_population, simple_test_population, mock_execution_results
@@ -747,12 +757,10 @@ if __name__ == '__main__':
         real_test_population: TestPopulation,
     ) -> None:
         """Test ExecutionSystem with real SafeCodeSandbox execution."""
-        system = ExecutionSystem(enable_multiprocessing=False)
+        system = ExecutionSystem(real_sandbox, enable_multiprocessing=False)
 
         # Execute tests with real sandbox
-        results = system.execute_tests(
-            real_code_population, real_test_population, real_sandbox
-        )
+        results = system.execute_tests(real_code_population, real_test_population)
 
         # Should get results for all 3 codes
         assert len(results) == 3
@@ -793,12 +801,12 @@ if __name__ == '__main__':
         real_test_population: TestPopulation,
     ) -> None:
         """Test ExecutionSystem with multiprocessing enabled."""
-        system = ExecutionSystem(enable_multiprocessing=True, num_workers=2)
+        system = ExecutionSystem(
+            real_sandbox, enable_multiprocessing=True, num_workers=2
+        )
 
         # Execute tests with real sandbox and multiprocessing
-        results = system.execute_tests(
-            real_code_population, real_test_population, real_sandbox
-        )
+        results = system.execute_tests(real_code_population, real_test_population)
 
         # Should get results for all 3 codes
         assert len(results) == 3
@@ -827,9 +835,10 @@ class TestAdditionalEdgeCases:
     def test_build_matrix_ignores_extra_execution_results(
         self,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """If there are more execution results than codes, extras are ignored."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         # Only one code individual
         code_population = CodePopulation(
@@ -875,9 +884,10 @@ class TestAdditionalEdgeCases:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Test that mismatched test result counts are logged as errors."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         # Execution results with wrong number of test results (3 instead of 2)
         execution_results = {
@@ -962,9 +972,10 @@ class TestAdditionalEdgeCases:
     def test_build_matrix_uses_direct_index_mapping(
         self,
         simple_code_population: CodePopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Test that observation matrix uses direct index mapping (not name-based)."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         # Build a test population with simple snippets
         individuals = [
@@ -1064,9 +1075,10 @@ class TestAdditionalEdgeCases:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """Statuses other than 'passed' should be treated as 0 (failure)."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         execution_results = {
             0: TestExecutionResult(
@@ -1155,9 +1167,11 @@ class TestAdditionalEdgeCases:
         assert code_idx == 7
         assert result is None
 
-    def test_execute_with_multiprocessing_handles_pool_error(self) -> None:
+    def test_execute_with_multiprocessing_handles_pool_error(
+        self, mock_sandbox: Mock
+    ) -> None:
         """_execute_with_multiprocessing returns [] when Pool raises an exception."""
-        system = ExecutionSystem()
+        system = ExecutionSystem(mock_sandbox)
 
         tasks: list[tuple[int, str, str, SafeCodeSandbox]] = []
         # Patch Pool to raise on construction
@@ -1170,9 +1184,12 @@ class TestAdditionalEdgeCases:
         self,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
+        mock_sandbox: Mock,
     ) -> None:
         """When mp enabled but num_workers==1, it should run sequential path."""
-        system = ExecutionSystem(enable_multiprocessing=True, num_workers=1)
+        system = ExecutionSystem(
+            mock_sandbox, enable_multiprocessing=True, num_workers=1
+        )
 
         # Prepare a stub sequential execution to detect invocation
         def fake_seq(
@@ -1217,11 +1234,9 @@ class TestAdditionalEdgeCases:
                 side_effect=AssertionError("Should not be called"),
             ),
         ):
-            # Use a simple mock sandbox since composition is not under test here
-            sandbox = Mock()
             # The sandbox won't be called because compose is not patched and worker runs inside fake_seq
             results = system.execute_tests(
-                simple_code_population, simple_test_population, sandbox
+                simple_code_population, simple_test_population
             )
 
         # Should have results for all code individuals

@@ -16,7 +16,7 @@ from loguru import logger
 import common.code_preprocessing as cpp
 from common.sandbox import SafeCodeSandbox, TestExecutionResult
 
-from .core.interfaces import ExecutionResults, Sandbox
+from .core.interfaces import ExecutionResults
 from .core.population import CodePopulation, TestPopulation
 
 
@@ -87,17 +87,22 @@ class ExecutionSystem:
     """
 
     def __init__(
-        self, enable_multiprocessing: bool = True, num_workers: int | None = None
+        self,
+        sandbox: SafeCodeSandbox,
+        enable_multiprocessing: bool = True,
+        num_workers: int | None = None,
     ):
         """
         Initialize the execution system.
 
         Args:
+            sandbox: Safe execution environment instance to use for all code executions.
             enable_multiprocessing: Whether to use multiprocessing for parallel execution.
                                    Set to False for debugging or sequential execution.
             num_workers: Number of worker processes. If None, uses CPU count.
                         Ignored if enable_multiprocessing is False.
         """
+        self.sandbox = sandbox
         self.enable_multiprocessing = enable_multiprocessing
         self._num_workers = num_workers
 
@@ -155,7 +160,6 @@ class ExecutionSystem:
         self,
         code_population: CodePopulation,
         test_population: TestPopulation,
-        sandbox: Sandbox,
     ) -> ExecutionResults:
         """
         Execute each code snippet against all tests using multiprocessing.
@@ -167,15 +171,15 @@ class ExecutionSystem:
         Args:
             code_population: Population of code snippets to test
             test_population: Population of test cases (provides test_class_block)
-            sandbox: Safe execution environment instance
 
         Returns:
             Dictionary mapping code_idx to TestExecutionResult for successfully executed codes.
             Failed executions will not have entries in the dictionary.
 
         Example:
-            >>> system = ExecutionSystem()
-            >>> results = system.execute_tests(codes, tests, sandbox)
+            >>> sandbox = SafeCodeSandbox()
+            >>> system = ExecutionSystem(sandbox)
+            >>> results = system.execute_tests(codes, tests)
             >>> len(results)  # May be less than len(codes) if failures occurred
             >>> 0 in results  # Check if code at index 0 executed successfully
         """
@@ -196,7 +200,7 @@ class ExecutionSystem:
                 code_idx,
                 code_individual.snippet,
                 test_population.test_class_block,
-                sandbox,
+                self.sandbox,
             )
             for code_idx, (code_individual) in enumerate(code_population)
         ]
