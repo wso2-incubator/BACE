@@ -12,7 +12,7 @@ Test Coverage:
 import numpy as np
 import pytest
 
-from common.coevolution.pareto_system import ParetoSystem
+from common.coevolution.deprecated.pareto_system import ParetoSystem
 
 
 class TestDiscriminationCalculation:
