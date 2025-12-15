@@ -38,10 +38,8 @@ Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
 # Note: Most files have been moved to deprecated/
 # They will be replaced by new implementations based on core/ interfaces
 from . import core, deprecated
-from .parent_selection import RouletteWheelParentSelection
 
 __all__ = [
     "core",
     "deprecated",
-    "RouletteWheelParentSelection",
 ]
