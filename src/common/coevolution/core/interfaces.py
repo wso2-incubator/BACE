@@ -181,36 +181,48 @@ class PopulationConfig:
 
     Variable-size (e.g., code population):
         Set max_population_size > initial_population_size
-        Control growth with offspring_rate
+        Control growth with offspring_rate and elitism_rate
 
     Args:
         initial_prior: Initial probability for new individuals (0.0, 1.0)
         initial_population_size: Size of generation 0 population
         max_population_size: Maximum allowed size. If None, defaults to initial_population_size
-        offspring_rate: Fraction of max_population_size to generate as offspring (0.0, 1.0]
+        offspring_rate: Fraction of remaining capacity to fill with offspring each generation (0.0, 1.0]
+                       Controls growth speed toward max_population_size
+        elitism_rate: Fraction of next generation that should be elites from current population (0.0, 1.0)
+                     Controls elite/offspring ratio in next generation
         diversity_selection: Whether to use diversity-based selection strategies
 
     Example - Fixed size (tests):
         PopulationConfig(
             initial_prior=0.5,
-            initial_population_size=15
+            initial_population_size=15,
+            elitism_rate=0.5
         )
         # max_population_size auto-set to 15, stays constant
+        # Each generation: 7-8 elites + 7-8 offspring = 15 total
 
     Example - Variable size (code):
         PopulationConfig(
             initial_prior=0.5,
             initial_population_size=10,
             max_population_size=20,
-            offspring_rate=0.8
+            offspring_rate=0.5,
+            elitism_rate=0.4
         )
-        # Can grow from 10 to 20 over generations
+        # Gen 0: 10 individuals
+        # Gen 1 target: min(10 + 0.5*(20-10), 20) = 15
+        #   - 6 elites (40% of 15) + 9 offspring = 15
+        # Gen 2 target: min(15 + 0.5*(20-15), 20) = 17-18
+        #   - 7 elites (40% of 17) + 10 offspring = 17
+        # Gradually grows to max_population_size
     """
 
     initial_prior: float
     initial_population_size: int
     max_population_size: int | None = None
     offspring_rate: float = 1.0
+    elitism_rate: float = 0.5
     diversity_selection: bool = False
 
     def __post_init__(self) -> None:
@@ -244,6 +256,10 @@ class PopulationConfig:
         # Validate offspring_rate
         if not (0.0 < self.offspring_rate <= 1.0):
             raise ValueError("offspring_rate must be in the range (0.0, 1.0]")
+
+        # Validate elitism_rate
+        if not (0.0 < self.elitism_rate < 1.0):
+            raise ValueError("elitism_rate must be in the range (0.0, 1.0)")
 
     @property
     def is_fixed_size(self) -> bool:

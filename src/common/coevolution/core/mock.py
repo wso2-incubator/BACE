@@ -451,7 +451,7 @@ class MockEliteSelectionStrategy[T: BaseIndividual](IEliteSelectionStrategy[T]):
 
         Args:
             population: Population to select elites from
-            population_config: Configuration (uses elitism_rate if available)
+            population_config: Configuration containing elitism_rate
             coevolution_context: Full context (unused in mock)
 
         Returns:
@@ -464,13 +464,8 @@ class MockEliteSelectionStrategy[T: BaseIndividual](IEliteSelectionStrategy[T]):
             )
             return []
 
-        # Determine number of elites based on config
-        if hasattr(population_config, "elitism_rate"):
-            num_elites = int(population.size * population_config.elitism_rate)
-        elif hasattr(population_config, "elite_size"):
-            num_elites = population_config.elite_size
-        else:
-            num_elites = max(1, population.size // 2)  # Default: keep top 50%
+        # Determine number of elites based on elitism_rate
+        num_elites = int(population.size * population_config.elitism_rate)
 
         # Simple top-k selection by probability
         probabilities = population.probabilities
@@ -480,8 +475,8 @@ class MockEliteSelectionStrategy[T: BaseIndividual](IEliteSelectionStrategy[T]):
         elites = [population[int(idx)] for idx in elite_indices]
 
         logger.debug(
-            f"MockEliteSelectionStrategy: Selected {len(elites)} elites from "
-            f"population (size={population.size})"
+            f"MockEliteSelectionStrategy: Selected {len(elites)} elites "
+            f"({population_config.elitism_rate:.1%} of {population.size}) from population"
         )
 
         return elites
