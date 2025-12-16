@@ -1,15 +1,29 @@
 """
-Test cases for LLM operators using a mock ILanguageModel protocol for testing."""
+Test cases for LLM operators using a mock ILanguageModel protocol for testing.
+"""
 
 from typing import Any
 
 import pytest
 
-from common.coevolution.core.interfaces import Problem
+from common.coevolution.core.interfaces import (
+    OPERATION_CROSSOVER,
+    OPERATION_EDIT,
+    OPERATION_INITIAL,
+    OPERATION_MUTATION,
+    Problem,
+)
 from common.coevolution.llm_operators import (
+    CodeCrossoverInput,
+    CodeEditInput,
     CodeLLMOperator,
+    CodeMutationInput,
+    InitialInput,
     LLMGenerationError,
-    TestLLMOperator,
+    UnittestCrossoverInput,
+    UnittestEditInput,
+    UnittestLLMOperator,
+    UnittestMutationInput,
 )
 
 
@@ -90,25 +104,18 @@ class TestCodeLLMOperator:
     def test_initialization(self, sample_problem: Any) -> None:
         """Test that CodeLLMOperator initializes correctly."""
         mock_llm = MockLLM()
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        assert operator.problem == sample_problem
-        assert operator.problem.starter_code == sample_problem.starter_code
+        assert operator._llm is mock_llm
+        assert isinstance(operator, CodeLLMOperator)
 
-    def test_initialization_fails_without_starter_code(self) -> None:
-        """Test that CodeLLMOperator raises ValueError when problem has no starter code."""
-        problem = Problem(
-            question_title="Test",
-            question_content="Content",
-            question_id="test",
-            starter_code="",  # Empty starter code
-            public_test_cases=[],
-            private_test_cases=[],
-        )
+    def test_constructor_accepts_no_problem(self) -> None:
+        """Test that CodeLLMOperator can be constructed without a Problem."""
         mock_llm = MockLLM()
+        operator = CodeLLMOperator(mock_llm)
 
-        with pytest.raises(ValueError, match="Problem 'Test' has no starter_code"):
-            CodeLLMOperator(mock_llm, problem)
+        assert operator._llm is mock_llm
+        assert isinstance(operator, CodeLLMOperator)
 
     def test_create_initial_snippets_success(self, sample_problem: Any) -> None:
         """Test successful creation of initial code snippets."""
@@ -132,9 +139,17 @@ def twoSum(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        snippets = operator.create_initial_snippets(population_size=2)
+        output, _ = operator.generate_initial_snippets(
+            InitialInput(
+                operation=OPERATION_INITIAL,
+                question_content=sample_problem.question_content,
+                population_size=2,
+                starter_code=sample_problem.starter_code,
+            )
+        )
+        snippets = [r.snippet for r in output.results]
 
         assert len(snippets) == 2
         assert "def twoSum" in snippets[0]
@@ -154,10 +169,17 @@ def twoSum(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response_one)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
         with pytest.raises(ValueError, match="Generated 1 code snippets, expected 2"):
-            operator.create_initial_snippets(population_size=2)
+            operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=sample_problem.question_content,
+                    population_size=2,
+                    starter_code=sample_problem.starter_code,
+                )
+            )
 
         # Should have tried 3 times (retry decorator)
         assert mock_llm.call_count == 3
@@ -178,10 +200,20 @@ def anotherWrong(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        with pytest.raises(ValueError, match="does not contain starter code structure"):
-            operator.create_initial_snippets(population_size=2)
+        with pytest.raises(
+            ValueError,
+            match="One of the generated code snippets does not contain starter code",
+        ):
+            operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=sample_problem.question_content,
+                    population_size=2,
+                    starter_code=sample_problem.starter_code,
+                )
+            )
 
         # Should have tried 3 times
         assert mock_llm.call_count == 3
@@ -216,9 +248,17 @@ def twoSum(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        child = operator.crossover(parent1, parent2)
+        dto = CodeCrossoverInput(
+            operation=OPERATION_CROSSOVER,
+            question_content=sample_problem.question_content,
+            parent1_snippet=parent1,
+            parent2_snippet=parent2,
+            starter_code=sample_problem.starter_code,
+        )
+        output = operator.apply(dto)
+        child = output.results[0].snippet
 
         assert "def twoSum" in child
         assert "num_to_index" in child
@@ -236,10 +276,18 @@ def wrongName(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
+
+        dto = CodeCrossoverInput(
+            operation=OPERATION_CROSSOVER,
+            question_content=sample_problem.question_content,
+            parent1_snippet=parent1,
+            parent2_snippet=parent2,
+            starter_code=sample_problem.starter_code,
+        )
 
         with pytest.raises(ValueError, match="does not contain starter code structure"):
-            operator.crossover(parent1, parent2)
+            operator.apply(dto)
 
         # Should have tried 3 times
         assert mock_llm.call_count == 3
@@ -263,9 +311,16 @@ def twoSum(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        mutated = operator.mutate(individual)
+        dto = CodeMutationInput(
+            operation=OPERATION_MUTATION,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+            starter_code=sample_problem.starter_code,
+        )
+        output = operator.apply(dto)
+        mutated = output.results[0].snippet
 
         assert "def twoSum" in mutated
         assert "enumerate" in mutated
@@ -282,10 +337,17 @@ def different(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
+
+        dto = CodeMutationInput(
+            operation=OPERATION_MUTATION,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+            starter_code=sample_problem.starter_code,
+        )
 
         with pytest.raises(ValueError, match="does not contain starter code structure"):
-            operator.mutate(individual)
+            operator.apply(dto)
 
         assert mock_llm.call_count == 3
 
@@ -308,9 +370,17 @@ def twoSum(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
-        edited = operator.edit(individual, feedback)
+        dto = CodeEditInput(
+            operation=OPERATION_EDIT,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+            feedback=feedback,
+            starter_code=sample_problem.starter_code,
+        )
+        output = operator.apply(dto)
+        edited = output.results[0].snippet
 
         assert "def twoSum" in edited
         assert "for j in range" in edited
@@ -328,39 +398,61 @@ def wrongFunction(nums, target):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
+
+        dto = CodeEditInput(
+            operation=OPERATION_EDIT,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+            feedback=feedback,
+            starter_code=sample_problem.starter_code,
+        )
 
         with pytest.raises(ValueError, match="does not contain starter code structure"):
-            operator.edit(individual, feedback)
+            operator.apply(dto)
 
         assert mock_llm.call_count == 3
 
     def test_llm_failure_raises_error(self, sample_problem: Any) -> None:
         """Test that LLM failures are properly raised."""
         mock_llm = MockLLM(should_fail=True)
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
         with pytest.raises(LLMGenerationError, match="LLM API call failed"):
-            operator.create_initial_snippets(population_size=1)
+            operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=sample_problem.question_content,
+                    population_size=1,
+                    starter_code=sample_problem.starter_code,
+                )
+            )
 
     def test_empty_response_raises_error(self, sample_problem: Any) -> None:
         """Test that empty LLM responses raise an error."""
         mock_llm = MockLLM(response="")
-        operator = CodeLLMOperator(mock_llm, sample_problem)
+        operator = CodeLLMOperator(mock_llm)
 
         with pytest.raises(LLMGenerationError, match="empty response"):
-            operator.create_initial_snippets(population_size=1)
+            operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=sample_problem.question_content,
+                    population_size=1,
+                    starter_code=sample_problem.starter_code,
+                )
+            )
 
 
 class TestTestLLMOperator:
     """Test cases for TestLLMOperator."""
 
     def test_initialization(self, sample_problem: Any) -> None:
-        """Test that TestLLMOperator initializes correctly."""
+        """Test that UnittestLLMOperator initializes correctly."""
         mock_llm = MockLLM()
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        assert operator.problem == sample_problem
+        assert operator._llm is mock_llm
 
     def test_create_initial_snippets_success(self, sample_problem: Any) -> None:
         """Test successful creation of initial test snippets."""
@@ -377,9 +469,17 @@ class TestTwoSum(unittest.TestCase):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        snippets, full_code = operator.create_initial_snippets(population_size=2)
+        output, full_code = operator.generate_initial_snippets(
+            InitialInput(
+                operation=OPERATION_INITIAL,
+                question_content=sample_problem.question_content,
+                population_size=2,
+                starter_code=sample_problem.starter_code,
+            )
+        )
+        snippets = [r.snippet for r in output.results]
 
         assert len(snippets) == 2
         assert "def test_basic_case" in snippets[0]
@@ -409,9 +509,17 @@ class TestTwoSum(unittest.TestCase):
 ```
 """
         mock_llm = MockLLM(responses=[response1, response2])
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        snippets, full_code = operator.create_initial_snippets(population_size=2)
+        output, full_code = operator.generate_initial_snippets(
+            InitialInput(
+                operation=OPERATION_INITIAL,
+                question_content=sample_problem.question_content,
+                population_size=2,
+                starter_code=sample_problem.starter_code,
+            )
+        )
+        snippets = [r.snippet for r in output.results]
 
         assert len(snippets) == 2
         assert "def test_basic_case" in snippets[0]
@@ -437,9 +545,17 @@ class TestTwoSum(unittest.TestCase):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        snippets, full_code = operator.create_initial_snippets(population_size=2)
+        output, full_code = operator.generate_initial_snippets(
+            InitialInput(
+                operation=OPERATION_INITIAL,
+                question_content=sample_problem.question_content,
+                population_size=2,
+                starter_code=sample_problem.starter_code,
+            )
+        )
+        snippets = [r.snippet for r in output.results]
 
         assert len(snippets) == 2
         assert "def test_basic_case" in snippets[0]
@@ -462,9 +578,16 @@ def test_single_element(self):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        child = operator.crossover(parent1, parent2)
+        dto = UnittestCrossoverInput(
+            operation=OPERATION_CROSSOVER,
+            question_content=sample_problem.question_content,
+            parent1_snippet=parent1,
+            parent2_snippet=parent2,
+        )
+        output = operator.apply(dto)
+        child = output.results[0].snippet
 
         assert "def test_single_element" in child
         assert "assertEqual" in child
@@ -482,9 +605,15 @@ def test_larger_array(self):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        mutated = operator.mutate(individual)
+        dto = UnittestMutationInput(
+            operation=OPERATION_MUTATION,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+        )
+        output = operator.apply(dto)
+        mutated = output.results[0].snippet
 
         assert "def test_larger_array" in mutated
         assert "assertEqual" in mutated
@@ -504,9 +633,16 @@ def test_duplicate_numbers(self):
 ```
 """
         mock_llm = MockLLM(response=response)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
-        edited = operator.edit(individual, feedback)
+        dto = UnittestEditInput(
+            operation=OPERATION_EDIT,
+            question_content=sample_problem.question_content,
+            parent_snippet=individual,
+            feedback=feedback,
+        )
+        output = operator.apply(dto)
+        edited = output.results[0].snippet
 
         assert "def test_duplicate_numbers" in edited
         assert "[3, 3]" in edited
@@ -515,7 +651,14 @@ def test_duplicate_numbers(self):
     def test_llm_failure_raises_error(self, sample_problem: Problem) -> None:
         """Test that LLM failures are properly raised."""
         mock_llm = MockLLM(should_fail=True)
-        operator = TestLLMOperator(mock_llm, sample_problem)
+        operator = UnittestLLMOperator(mock_llm)
 
         with pytest.raises(LLMGenerationError, match="LLM API call failed"):
-            operator.create_initial_snippets(population_size=1)
+            operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=sample_problem.question_content,
+                    population_size=1,
+                    starter_code=sample_problem.starter_code,
+                )
+            )
