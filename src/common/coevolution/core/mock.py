@@ -21,6 +21,7 @@ from .interfaces import (
     IBayesianSystem,
     IEliteSelectionStrategy,
     IExecutionSystem,
+    InitialInput,
     IOperator,
     IParentSelectionStrategy,
     IProbabilityAssigner,
@@ -93,17 +94,16 @@ class MockCodeOperator(IOperator):
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
     def generate_initial_snippets(
-        self,
-        population_size: int,
-        problem_description: str,
-        starter_code: str | None = None,
+        self, input_dto: InitialInput
     ) -> tuple[OperatorOutput, str | None]:
         """Generate initial code snippets (generation 0). Returns (OperatorOutput, None) for code."""
+        population_size = input_dto.population_size
+        starter_code = input_dto.starter_code or ""
         logger.debug(f"MockCodeOperator: Generating {population_size} code snippets...")
 
         results = []
         for i in range(population_size):
-            snippet = (starter_code or "") + f"    pass # mock code {i}"
+            snippet = starter_code + f"    pass # mock code {i}"
             result = OperatorResult(
                 snippet=snippet,
                 metadata={"mock_index": i},
@@ -150,12 +150,10 @@ class MockTestOperator(IOperator):
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
     def generate_initial_snippets(
-        self,
-        population_size: int,
-        problem_description: str,
-        starter_code: str | None = None,
+        self, input_dto: InitialInput
     ) -> tuple[OperatorOutput, str | None]:
         """Generate initial test snippets (generation 0) with test class block (context_code)."""
+        population_size = input_dto.population_size
         logger.debug(f"MockTestOperator: Generating {population_size} test snippets...")
 
         results = []
@@ -361,10 +359,15 @@ class MockBreedingStrategy:
             f"MockBreedingStrategy: Creating {population_size} initial {self.individual_type} individuals"
         )
         # Call operator's new generate_initial_snippets method
+        from .core.interfaces import InitialInput
+
         operator_output, context_code = self.operator.generate_initial_snippets(
-            population_size=population_size,
-            problem_description=problem.question_content,
-            starter_code=problem.starter_code,
+            InitialInput(
+                operation=OPERATION_INITIAL,
+                question_content=problem.question_content,
+                population_size=population_size,
+                starter_code=problem.starter_code,
+            )
         )
 
         # Wrap the OperatorResults into Individual objects

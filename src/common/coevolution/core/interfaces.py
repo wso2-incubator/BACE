@@ -318,6 +318,19 @@ class BaseOperatorInput:
 
 
 @dataclass(frozen=True)
+class InitialInput(BaseOperatorInput):
+    """Input DTO for initial population generation.
+
+    Fields:
+        population_size: Number of individuals to generate.
+        starter_code: Optional starter code scaffold (may be empty for tests).
+    """
+
+    population_size: int
+    starter_code: str
+
+
+@dataclass(frozen=True)
 class OperatorResult:
     snippet: str
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -1033,18 +1046,13 @@ class IOperator(Protocol):
 
     def generate_initial_snippets(
         self,
-        population_size: int,
-        problem_description: str,
-        starter_code: str | None = None,
+        input_dto: InitialInput,
     ) -> tuple[OperatorOutput, str | None]:
         """
         Generate the initial batch of code or test snippets.
 
         Args:
-            population_size: Number of snippets to generate.
-            problem_description: The problem statement (from Problem.question_content).
-            starter_code: Optional starting code or scaffold.
-            rng_seed: Seed for reproducibility.
+            input_dto: DTO containing generation parameters (`InitialInput`).
 
         Returns:
             Tuple of:

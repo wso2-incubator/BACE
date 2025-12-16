@@ -10,6 +10,7 @@ Design:
 """
 
 from abc import ABC
+from dataclasses import dataclass
 from typing import Callable, Protocol, Tuple, Type
 
 from loguru import logger
@@ -30,7 +31,13 @@ from ..code_preprocessing import (
     extraction,
     transformation,
 )
-from .core.interfaces import ICodeOperator, ITestOperator, Problem
+from .core.interfaces import (
+    BaseOperatorInput,
+    InitialInput,
+    IOperator,
+    OperatorOutput,
+    OperatorResult,
+)
 from .prompt_templates import (
     CROSSOVER_CODE,
     CROSSOVER_TEST,
@@ -41,6 +48,69 @@ from .prompt_templates import (
     MUTATE_CODE,
     MUTATE_TEST,
 )
+
+# ============================================
+# === CODE OPERATOR INPUT DTOs
+# ============================================
+
+
+@dataclass(frozen=True)
+class CodeMutationInput(BaseOperatorInput):
+    """Input DTO for code mutation operations."""
+
+    parent_snippet: str
+    starter_code: str
+
+
+@dataclass(frozen=True)
+class CodeCrossoverInput(BaseOperatorInput):
+    """Input DTO for code crossover operations."""
+
+    parent1_snippet: str
+    parent2_snippet: str
+    starter_code: str
+
+
+@dataclass(frozen=True)
+class CodeEditInput(BaseOperatorInput):
+    """Input DTO for code edit operations."""
+
+    parent_snippet: str
+    feedback: str
+    starter_code: str
+
+
+# ============================================
+# === TEST OPERATOR INPUT DTOs
+# ============================================
+
+
+@dataclass(frozen=True)
+class TestMutationInput(BaseOperatorInput):
+    """Input DTO for test mutation operations."""
+
+    parent_snippet: str
+
+
+@dataclass(frozen=True)
+class TestCrossoverInput(BaseOperatorInput):
+    """Input DTO for test crossover operations."""
+
+    parent1_snippet: str
+    parent2_snippet: str
+
+
+@dataclass(frozen=True)
+class TestEditInput(BaseOperatorInput):
+    """Input DTO for test edit operations."""
+
+    parent_snippet: str
+    feedback: str
+
+
+# ============================================
+# === UTILITY FUNCTIONS
+# ============================================
 
 
 def llm_retry(
@@ -72,36 +142,20 @@ class BaseLLMOperator(ABC):
     """
     Abstract base class providing LLM orchestration for genetic operators.
 
-    Provides access to problem context. Assumes the Problem instance
-    always provides valid starter_code (enforced by the dataset loader).
+    No longer stores problem context - problem information is passed
+    via method parameters as needed.
     """
 
-    def __init__(self, llm: ILanguageModel, problem: Problem) -> None:
+    def __init__(self, llm: ILanguageModel) -> None:
         """
-        Initialize the BaseLLMOperator with a language model and problem.
+        Initialize the BaseLLMOperator with a language model.
 
         Args:
             llm: Any object implementing ILanguageModel protocol (has generate() method)
                  The client is responsible for retry logic and error handling.
-            problem: The problem context containing question, tests, and starter code.
-                     The problem MUST have non-empty starter_code.
         """
         self._llm = llm
-        self._problem = problem
-
-        # Validate that problem has starter code
-        if not problem.starter_code or not problem.starter_code.strip():
-            raise ValueError(
-                f"Problem '{problem.question_title}' has no starter_code. "
-                "The dataset loader should provide a default starter_code."
-            )
-
         logger.debug(f"Initialized {self.__class__.__name__}")
-
-    @property
-    def problem(self) -> Problem:
-        """Get the current problem context."""
-        return self._problem
 
     def _generate(self, prompt: str) -> str:
         """
@@ -166,9 +220,12 @@ class BaseLLMOperator(ABC):
         return extracted_code
 
 
-# TODO: Refactor mutate, crossover, and edit methods to use a centralized _execute_pipeline method for consistency and maintainability.
-class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
-    """Concrete LLM-based genetic operator for code snippets."""
+class CodeLLMOperator(BaseLLMOperator, IOperator):
+    """Concrete LLM-based genetic operator for code snippets implementing IOperator protocol."""
+
+    def supported_operations(self) -> set[str]:
+        """Return the set of operations this operator supports."""
+        return {"mutation", "crossover", "edit"}
 
     def _extract_all_code_blocks(self, response: str) -> list[str]:
         """
@@ -184,40 +241,47 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
         """
         return extraction.extract_all_code_blocks_from_response(response)
 
-    def _contains_starter_code(self, code: str) -> bool:
+    def _contains_starter_code(self, code: str, starter_code: str) -> bool:
         """
-        Check if the given code contains the problem's starter code.
+        Check if the given code contains the starter code.
 
         Args:
             code: Code string to check
+            starter_code: The starter code to look for
         Returns:
             True if starter code is present, raise ValueError otherwise
         Raises:
             ValueError: If starter code is not found in the code snippet
         """
-        return analysis.contains_starter_code(code, self.problem.starter_code)
+        return analysis.contains_starter_code(code, starter_code)
 
     @llm_retry((ValueError, CodeParsingError))
-    def create_initial_snippets(self, population_size: int) -> list[str]:
+    def generate_initial_snippets(
+        self, input_dto: InitialInput
+    ) -> tuple[OperatorOutput, str | None]:
         """
-        Create initial code snippets for the population.
+        Generate initial code snippets for the population (IOperator interface).
 
-        This method generates initial code snippets based on the problem's starter code.
         Uses tenacity to retry up to 3 times if ValueError is raised (e.g., wrong number
         of snippets or missing starter code).
 
         Args:
-            population_size: Number of code snippets to generate
+            input_dto: `InitialInput` containing population_size, question_content, and starter_code
+
         Returns:
-            List of initial code snippets
+            Tuple of (OperatorOutput with snippets, None for code operators)
+
         Raises:
             ValueError: If after retries, still can't generate valid snippets
         """
+        population_size = input_dto.population_size
+        problem_description = input_dto.question_content
+        starter_code = input_dto.starter_code
 
         prompt: str = INITIAL_CODE.format(
             population_size=population_size,
-            question_content=self.problem.question_content,
-            starter_code=self.problem.starter_code,
+            question_content=problem_description,
+            starter_code=starter_code,
         )
 
         response: str = self._generate(prompt)
@@ -225,7 +289,7 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
 
         # Validate each code block contains starter code
         for code in code_blocks:
-            if not self._contains_starter_code(code):
+            if not self._contains_starter_code(code, starter_code):
                 logger.error(
                     "One of the generated code snippets does not contain starter code."
                 )
@@ -244,96 +308,137 @@ class CodeLLMOperator(BaseLLMOperator, ICodeOperator):
 
         logger.info(f"Successfully generated {population_size} initial code snippets")
         logger.trace(f"Generated initial code snippets:\n{'\n\n'.join(code_blocks)}")
-        return code_blocks
+
+        results = [OperatorResult(snippet=code, metadata={}) for code in code_blocks]
+        return OperatorOutput(results=results), None
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def crossover(self, parent1: str, parent2: str) -> str:
+    def _handle_crossover(self, input_dto: CodeCrossoverInput) -> OperatorOutput:
         """
         Perform crossover between two parent code snippets.
 
         Args:
-            parent1: First parent code snippet
-            parent2: Second parent code snippet
+            input_dto: CodeCrossoverInput containing parents and context
 
         Returns:
-            New child code snippet resulting from crossover
+            OperatorOutput with the child code snippet
         """
         logger.debug("Performing crossover between two parent code snippets")
         prompt = CROSSOVER_CODE.format(
-            question_content=self.problem.question_content,
-            parent1=parent1,
-            parent2=parent2,
-            starter_code=self.problem.starter_code,
+            question_content=input_dto.question_content,
+            parent1=input_dto.parent1_snippet,
+            parent2=input_dto.parent2_snippet,
+            starter_code=input_dto.starter_code,
         )
 
         response = self._generate(prompt)
         child_code = self._extract_code_block(response)
         logger.info("Crossover produced a new child code snippet")
-        if not self._contains_starter_code(child_code):
+
+        if not self._contains_starter_code(child_code, input_dto.starter_code):
             logger.error("Crossover result does not contain starter code structure.")
             raise ValueError(
                 "Crossover result does not contain starter code structure."
             )
         logger.trace(f"Generated child code snippet (Crossover):\n{child_code}")
-        return child_code
+
+        return OperatorOutput(
+            results=[
+                OperatorResult(snippet=child_code, metadata={"operation": "crossover"})
+            ]
+        )
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def mutate(self, individual: str) -> str:
+    def _handle_mutation(self, input_dto: CodeMutationInput) -> OperatorOutput:
         """
         Perform mutation on a individual code snippet.
 
         Args:
-            individual: Individual code snippet to mutate
+            input_dto: CodeMutationInput containing parent and context
 
         Returns:
-            New mutated code snippet
+            OperatorOutput with the mutated code snippet
         """
         logger.debug("Performing mutation on individual code snippet")
         prompt = MUTATE_CODE.format(
-            question_content=self.problem.question_content,
-            individual=individual,
-            starter_code=self.problem.starter_code,
+            question_content=input_dto.question_content,
+            individual=input_dto.parent_snippet,
+            starter_code=input_dto.starter_code,
         )
         response = self._generate(prompt)
         mutated_code = self._extract_code_block(response)
-        if not self._contains_starter_code(mutated_code):
+
+        if not self._contains_starter_code(mutated_code, input_dto.starter_code):
             logger.error("Mutation result does not contain starter code structure.")
             raise ValueError("Mutation result does not contain starter code structure.")
         logger.info("Mutation produced a new code snippet")
         logger.trace(f"Generated mutated code snippet:\n{mutated_code}")
-        return mutated_code
+
+        return OperatorOutput(
+            results=[
+                OperatorResult(snippet=mutated_code, metadata={"operation": "mutation"})
+            ]
+        )
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def edit(self, individual: str, feedback: str) -> str:
+    def _handle_edit(self, input_dto: CodeEditInput) -> OperatorOutput:
         """
         Edit an individual code snippet based on provided feedback.
 
         Args:
-            individual: Individual code snippet to edit
-            feedback: Feedback or suggestions for improvement
+            input_dto: CodeEditInput containing parent, feedback, and context
 
         Returns:
-            New edited code snippet
+            OperatorOutput with the edited code snippet
         """
         logger.debug("Performing edit on individual code snippet based on feedback")
         prompt = EDIT_CODE_FIX_FAIL_ONLY.format(
-            question_content=self.problem.question_content,
-            starter_code=self.problem.starter_code,
-            individual=individual,
-            feedback=feedback,
+            question_content=input_dto.question_content,
+            starter_code=input_dto.starter_code,
+            individual=input_dto.parent_snippet,
+            feedback=input_dto.feedback,
         )
         response = self._generate(prompt)
         edited_code = self._extract_code_block(response)
-        if not self._contains_starter_code(edited_code):
+
+        if not self._contains_starter_code(edited_code, input_dto.starter_code):
             logger.error("Edit result does not contain starter code structure.")
             raise ValueError("Edit result does not contain starter code structure.")
         logger.info("Edit produced a new code snippet")
         logger.trace(f"Generated edited code snippet:\n{edited_code}")
-        return edited_code
+
+        return OperatorOutput(
+            results=[
+                OperatorResult(snippet=edited_code, metadata={"operation": "edit"})
+            ]
+        )
+
+    def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
+        """
+        Dispatcher: Routes the DTO to the specific LLM strategy.
+
+        Args:
+            input_dto: Input DTO specifying the operation and context
+
+        Returns:
+            OperatorOutput with the generated code snippet(s)
+
+        Raises:
+            ValueError: If unsupported input type is provided
+        """
+        match input_dto:
+            case CodeMutationInput():
+                return self._handle_mutation(input_dto)
+            case CodeCrossoverInput():
+                return self._handle_crossover(input_dto)
+            case CodeEditInput():
+                return self._handle_edit(input_dto)
+            case _:
+                raise ValueError(f"Unsupported input type: {type(input_dto)}")
 
 
-class TestLLMOperator(BaseLLMOperator, ITestOperator):
-    """Concrete LLM-based genetic operator for test cases."""
+class TestLLMOperator(BaseLLMOperator):
+    """Concrete LLM-based genetic operator for test cases. (To be refactored to implement IOperator)"""
 
     def _extract_test_methods(self, test_block: str) -> list[str]:
         """
