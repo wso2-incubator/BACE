@@ -86,7 +86,8 @@ class CodeEditInput(BaseOperatorInput):
     """Input DTO for code edit operations."""
 
     parent_snippet: str
-    feedback: str
+    failing_test_case: str
+    error_trace: str
     starter_code: str
 
 
@@ -420,7 +421,8 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
             individual=input_dto.parent_snippet,
-            feedback=input_dto.feedback,
+            failing_test_case=input_dto.failing_test_case,
+            error_trace=input_dto.error_trace,
         )
         response = self._generate(prompt)
         edited_code = self._extract_code_block(response)

@@ -358,7 +358,8 @@ def different(nums, target):
         if nums[i] + nums[i] == target:  # Bug: should be i and j
             return [i, i]
 """
-        feedback = "IndexError: You're using the same index twice"
+        failing_test_case = "assert twoSum([2, 7, 11, 15], 9) == [0, 1]"
+        error_trace = "IndexError: You're using the same index twice"
 
         response = """Here's the fixed solution:
 ```python
@@ -376,7 +377,8 @@ def twoSum(nums, target):
             operation=OPERATION_EDIT,
             question_content=sample_problem.question_content,
             parent_snippet=individual,
-            feedback=feedback,
+            failing_test_case=failing_test_case,
+            error_trace=error_trace,
             starter_code=sample_problem.starter_code,
         )
         output = operator.apply(dto)
@@ -389,7 +391,8 @@ def twoSum(nums, target):
     def test_edit_missing_starter_code_retries(self, sample_problem: Any) -> None:
         """Test that edit retries when result doesn't contain starter code."""
         individual = "def twoSum(nums, target):\n    return []"
-        feedback = "Fix this"
+        failing_test_case = "assert twoSum([2, 7], 9) == [0, 1]"
+        error_trace = "AssertionError: assert None == [0, 1]"
 
         response = """Here's the fixed solution:
 ```python
@@ -404,7 +407,8 @@ def wrongFunction(nums, target):
             operation=OPERATION_EDIT,
             question_content=sample_problem.question_content,
             parent_snippet=individual,
-            feedback=feedback,
+            failing_test_case=failing_test_case,
+            error_trace=error_trace,
             starter_code=sample_problem.starter_code,
         )
 
