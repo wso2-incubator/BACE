@@ -1,12 +1,22 @@
 """
-BaseLLMOperator: Minimal infrastructure for LLM-based genetic operators.
+LLM-based genetic operator helpers and concrete operators.
 
-This module provides a lightweight base class that handles ONLY LLM orchestration.
+This module supplies a small, focused framework for building LLM-backed
+genetic operators used by the coevolution system. Key responsibilities:
 
-Design:
-- LLM client is responsible for retry logic (network, rate limits, timeouts)
-- BaseLLMOperator just calls llm.generate() and trusts it works
-- Domain-specific validation/extraction is delegated to external utilities
+- Provide `BaseLLMOperator`: a minimal wrapper around an LLM client that
+    delegates generation and adds common logging and error handling.
+- Define DTOs for operator inputs (code/test mutation, crossover, edit)
+    and a unified `InitialInput` for population initialization.
+- Implement `CodeLLMOperator` and `UnittestLLMOperator` which follow the
+    DTO-driven `IOperator` protocol and perform prompt construction,
+    extraction, and simple validation of LLM outputs.
+- Expose retry decorators for robust LLM calls and a small set of
+    helper utilities for working with code/test snippets.
+
+Note: This module intentionally keeps domain validation (parsing,
+composition, transformation) in `common.code_preprocessing` utilities so
+operators can remain focused on prompt/LLM orchestration.
 """
 
 from abc import ABC
@@ -81,19 +91,19 @@ class CodeEditInput(BaseOperatorInput):
 
 
 # ============================================
-# === TEST OPERATOR INPUT DTOs
+# === UNITTEST OPERATOR INPUT DTOs
 # ============================================
 
 
 @dataclass(frozen=True)
-class TestMutationInput(BaseOperatorInput):
+class UnittestMutationInput(BaseOperatorInput):
     """Input DTO for test mutation operations."""
 
     parent_snippet: str
 
 
 @dataclass(frozen=True)
-class TestCrossoverInput(BaseOperatorInput):
+class UnittestCrossoverInput(BaseOperatorInput):
     """Input DTO for test crossover operations."""
 
     parent1_snippet: str
@@ -101,7 +111,7 @@ class TestCrossoverInput(BaseOperatorInput):
 
 
 @dataclass(frozen=True)
-class TestEditInput(BaseOperatorInput):
+class UnittestEditInput(BaseOperatorInput):
     """Input DTO for test edit operations."""
 
     parent_snippet: str
@@ -136,6 +146,20 @@ class LLMGenerationError(Exception):
     """Raised when LLM fails to generate output."""
 
     pass
+
+
+class UnsupportedOperatorInput(Exception):
+    """Raised when an operator receives an input DTO it doesn't support.
+
+    Message includes the input type and (if available) the declared operation.
+    """
+
+    def __init__(self, input_type: type, operation: str | None = None) -> None:
+        op_part = f" for operation '{operation}'" if operation else ""
+        super().__init__(
+            f"Unsupported operator input type: {getattr(input_type, '__name__', str(input_type))}{op_part}. "
+            "The operation might not be supported by this operator."
+        )
 
 
 class BaseLLMOperator(ABC):
@@ -434,79 +458,41 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             case CodeEditInput():
                 return self._handle_edit(input_dto)
             case _:
-                raise ValueError(f"Unsupported input type: {type(input_dto)}")
+                raise UnsupportedOperatorInput(
+                    type(input_dto), getattr(input_dto, "operation", None)
+                )
 
 
-class TestLLMOperator(BaseLLMOperator):
-    """Concrete LLM-based genetic operator for test cases. (To be refactored to implement IOperator)"""
+class UnittestLLMOperator(BaseLLMOperator, IOperator):
+    """Concrete LLM-based genetic operator for unittest-based tests implementing IOperator."""
+
+    def supported_operations(self) -> set[str]:
+        return {"mutation", "crossover", "edit"}
 
     def _extract_test_methods(self, test_block: str) -> list[str]:
-        """
-        Extract test methods from unittest test code block extracted from LLM response.
-
-        Args:
-            test_block: extracted test code block from LLM response
-        Returns:
-            List of test method strings
-        """
         return transformation.extract_test_methods_code(test_block)
 
     def _extract_unittest_block(self, code: str) -> str:
-        """
-        Extract the unittest code block from the given code snippet.
-
-        Args:
-            code: Code snippet potentially containing starter code
-        Returns:
-            Code snippet with starter code removed
-        """
         return transformation.extract_unittest_code(code)
 
     def _extract_first_test_method(self, code: str) -> str:
-        """
-        Extract the first test method from a code snippet.
-        The code snippet may contain multiple test methods or a full unittest class.
-        Args:
-            code: Code snippet potentially containing multiple test methods or a full unittest class
-        Returns:
-            Code string of the first test method found
-        """
         return transformation.extract_first_test_method_code(code)
 
     def _rebuild_unittest_with_methods(
         self, test_block: str, test_methods: list[str]
     ) -> str:
-        """
-        Rebuild a unittest class by replacing old test methods with new ones.
-
-        Args:
-            test_block: String containing the original unittest test class definition
-            test_methods: List of code strings for new test methods to insert
-        Returns:
-            String containing the rebuilt unittest class with new test methods
-        """
         return composition.rebuild_unittest_with_methods(test_block, test_methods)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def create_initial_snippets(self, population_size: int) -> tuple[list[str], str]:
-        """
-        Create initial test code snippets for a population of test cases.
-
-        Uses tenacity to retry up to 3 times if ValueError is raised (e.g., wrong number
-        of test methods generated).
-
-        Args:
-            population_size: Number of initial test snippets to create
-
-        Returns:
-            A tuple containing a list of initial test snippets and a string representing the overall test suite
-        Raises:
-            ValueError: If after retries, still can't generate valid test snippets
-        """
+    def generate_initial_snippets(
+        self, input_dto: InitialInput
+    ) -> tuple[OperatorOutput, str | None]:
+        """Generate initial test methods and an overall unittest block (context_code)."""
+        population_size = input_dto.population_size
         prompt: str = INITIAL_TEST_AGENT_CODER_STYLE.format(
             population_size=population_size,
-            question_content=self.problem.question_content,
-            starter_code=self.problem.starter_code,
+            question_content=input_dto.question_content,
+            starter_code=input_dto.starter_code,
         )
 
         response: str = self._generate(prompt)
@@ -520,108 +506,79 @@ class TestLLMOperator(BaseLLMOperator):
             )
 
         if len(test_methods) > population_size:
-            logger.debug("Trimming excess test methods to match population size")
             test_methods = test_methods[:population_size]
             test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
 
         if len(test_methods) < population_size:
-            logger.debug("Adding additional test methods to match population size")
-            additional_methods_needed = population_size - len(test_methods)
+            additional_needed = population_size - len(test_methods)
             prompt_additional = INITIAL_TEST_AGENT_CODER_STYLE.format(
-                population_size=additional_methods_needed,
-                question_content=self.problem.question_content,
-                starter_code=self.problem.starter_code,
+                population_size=additional_needed,
+                question_content=input_dto.question_content,
+                starter_code=input_dto.starter_code,
             )
             response_additional = self._generate(prompt_additional)
             extracted_additional = self._extract_code_block(response_additional)
-            additional_test_block = self._extract_unittest_block(extracted_additional)
-            additional_test_methods = self._extract_test_methods(additional_test_block)
-            test_methods.extend(
-                additional_test_methods[:additional_methods_needed]
-            )  # Trim if too many
+            additional_block = self._extract_unittest_block(extracted_additional)
+            additional_methods = self._extract_test_methods(additional_block)
+            test_methods.extend(additional_methods[:additional_needed])
             test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
 
-        logger.info(f"Successfully generated {population_size} initial test snippets")
-        logger.trace(f"Generated test block:\n{test_block}")
-        return test_methods, test_block
+        results = [OperatorResult(snippet=m, metadata={}) for m in test_methods]
+        logger.info(f"Successfully generated {len(results)} initial test snippets")
+        return OperatorOutput(results=results), test_block
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def crossover(self, parent1: str, parent2: str) -> str:
-        """
-        Perform crossover between two parent test snippets.
-
-        Uses tenacity to retry up to 3 times if ValueError is raised.
-
-        Args:
-            parent1: First parent test snippet
-            parent2: Second parent test snippet
-        Returns:
-            New child test snippet resulting from crossover
-        Raises:
-            ValueError: If after retries, still can't generate valid test snippet
-        """
+    def _handle_crossover(self, input_dto: UnittestCrossoverInput) -> OperatorOutput:
         prompt = CROSSOVER_TEST.format(
-            question_content=self.problem.question_content,
-            parent1=parent1,
-            parent2=parent2,
+            question_content=input_dto.question_content,
+            parent1=input_dto.parent1_snippet,
+            parent2=input_dto.parent2_snippet,
+        )
+        response = self._generate(prompt)
+        extracted = self._extract_code_block(response)
+        child = self._extract_first_test_method(extracted)
+        return OperatorOutput(
+            results=[OperatorResult(snippet=child, metadata={"operation": "crossover"})]
         )
 
-        response = self._generate(prompt)
-        extracted_code = self._extract_code_block(response)
-        child_test = self._extract_first_test_method(extracted_code)
-        logger.info("Crossover produced a new child test snippet")
-        logger.trace(f"Generated child test snippet (Crossover):\n{child_test}")
-        return child_test
-
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def mutate(self, individual: str) -> str:
-        """
-        Mutate an individual test snippet by modifying its structure or assertions.
-
-        Uses tenacity to retry up to 3 times if ValueError is raised.
-
-        Args:
-            individual: Individual test snippet to mutate
-        Returns:
-            New mutated test snippet
-        Raises:
-            ValueError: If after retries, still can't generate valid test snippet
-        """
+    def _handle_mutation(self, input_dto: UnittestMutationInput) -> OperatorOutput:
         prompt = MUTATE_TEST.format(
-            question_content=self.problem.question_content, individual=individual
+            question_content=input_dto.question_content,
+            individual=input_dto.parent_snippet,
         )
-
         response = self._generate(prompt)
-        extracted_code = self._extract_code_block(response)
-        mutated_test = self._extract_first_test_method(extracted_code)
-        logger.info("Mutation produced a new test snippet")
-        logger.trace(f"Generated mutated test snippet:\n{mutated_test}")
-        return mutated_test
+        extracted = self._extract_code_block(response)
+        mutated = self._extract_first_test_method(extracted)
+        return OperatorOutput(
+            results=[
+                OperatorResult(snippet=mutated, metadata={"operation": "mutation"})
+            ]
+        )
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def edit(self, individual: str, feedback: str) -> str:
-        """
-        Edit an individual test snippet based on provided feedback.
-
-        Uses tenacity to retry up to 3 times if ValueError is raised.
-
-        Args:
-            individual: Individual test snippet to edit
-            feedback: Feedback or suggestions for improvement
-        Returns:
-            New edited test snippet
-        Raises:
-            ValueError: If after retries, still can't generate valid test snippet
-        """
+    def _handle_edit(self, input_dto: UnittestEditInput) -> OperatorOutput:
         prompt = EDIT_TEST.format(
-            question_content=self.problem.question_content,
-            individual=individual,
-            feedback=feedback,
+            question_content=input_dto.question_content,
+            individual=input_dto.parent_snippet,
+            feedback=input_dto.feedback,
+        )
+        response = self._generate(prompt)
+        extracted = self._extract_code_block(response)
+        edited = self._extract_first_test_method(extracted)
+        return OperatorOutput(
+            results=[OperatorResult(snippet=edited, metadata={"operation": "edit"})]
         )
 
-        response = self._generate(prompt)
-        extracted_code = self._extract_code_block(response)
-        edited_test = self._extract_first_test_method(extracted_code)
-        logger.info("Edit produced a new test snippet")
-        logger.trace(f"Generated edited test snippet:\n{edited_test}")
-        return edited_test
+    def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
+        match input_dto:
+            case UnittestMutationInput():
+                return self._handle_mutation(input_dto)
+            case UnittestCrossoverInput():
+                return self._handle_crossover(input_dto)
+            case UnittestEditInput():
+                return self._handle_edit(input_dto)
+            case _:
+                raise UnsupportedOperatorInput(
+                    type(input_dto), getattr(input_dto, "operation", None)
+                )
