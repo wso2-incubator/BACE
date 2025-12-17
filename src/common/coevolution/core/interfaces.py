@@ -107,7 +107,7 @@ class ExecutionResult:
     """
 
     script_error: bool
-    test_result: dict[str, TestResult] = field(default_factory=dict)
+    test_results: dict[str, TestResult] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

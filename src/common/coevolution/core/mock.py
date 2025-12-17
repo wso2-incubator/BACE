@@ -535,7 +535,7 @@ class MockExecutionSystem(IExecutionSystem):
         observation_matrix = np.zeros((num_code, num_tests), dtype=int)
 
         # Collect ordered test ids for deterministic mapping
-        test_ids = [t.id for t in test_population]
+        # test_ids = [t.id for t in test_population]
 
         for i, code_ind in enumerate(code_population):
             logger.trace(f"Executing generated tests for Code ID {code_ind.id}")
@@ -554,7 +554,7 @@ class MockExecutionSystem(IExecutionSystem):
                     details=details, status=status_lit
                 )
 
-            exec_result = ExecutionResult(script_error=False, test_result=test_results)
+            exec_result = ExecutionResult(script_error=False, test_results=test_results)
             execution_results[code_ind.id] = exec_result
 
         return InteractionData(
@@ -591,7 +591,7 @@ class MockExecutionSystem(IExecutionSystem):
             if exec_result is None:
                 # Missing entry -> leave zeros
                 continue
-            for test_id, test_result in exec_result.test_result.items():
+            for test_id, test_result in exec_result.test_results.items():
                 col_idx = test_id_to_idx.get(test_id)
                 if col_idx is None:
                     # unknown test id -> skip
