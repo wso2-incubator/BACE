@@ -85,12 +85,9 @@ class RouletteWheelParentSelection[T: BaseIndividual]:
         if population.size == 0:
             raise ValueError("Cannot select parents from empty population")
 
-        # Handle single individual case
-        if population.size == 1:
-            logger.trace(
-                "Roulette wheel: only one individual, returning it {count} times"
-            )
-            return [population.individuals[0]] * count
+        # count greater than population size
+        if population.size < count:
+            raise ValueError("Population size must be at least equal to count")
 
         # Extract probabilities from population
         probabilities = population.probabilities
