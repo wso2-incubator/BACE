@@ -543,20 +543,18 @@ class MockExecutionSystem(IExecutionSystem):
             is_passing = np.random.rand(num_tests) < code_ind.probability
 
             # Build TestResult mapping keyed by test individual id
-            test_results_dict: dict[str, TestResult] = {}
+            test_results: dict[str, TestResult] = {}
             for j, test_ind in enumerate(test_population):
                 passed = bool(is_passing[j])
                 observation_matrix[i, j] = 1 if passed else 0
                 details = None if passed else "Mock failure message"
                 status = "passed" if passed else "failed"
                 status_lit = cast(Literal["passed", "failed", "error"], status)
-                test_results_dict[test_ind.id] = TestResult(
+                test_results[test_ind.id] = TestResult(
                     details=details, status=status_lit
                 )
 
-            exec_result = ExecutionResult(
-                script_error=False, test_results_dict=test_results_dict
-            )
+            exec_result = ExecutionResult(script_error=False, test_result=test_results)
             execution_results[code_ind.id] = exec_result
 
         return InteractionData(
@@ -593,7 +591,7 @@ class MockExecutionSystem(IExecutionSystem):
             if exec_result is None:
                 # Missing entry -> leave zeros
                 continue
-            for test_id, test_result in exec_result.test_results_dict.items():
+            for test_id, test_result in exec_result.test_result.items():
                 col_idx = test_id_to_idx.get(test_id)
                 if col_idx is None:
                     # unknown test id -> skip
