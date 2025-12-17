@@ -63,7 +63,7 @@ class TestFailingTestSelector(unittest.TestCase):
         """Helper to create mock population, individuals, and execution results."""
         # Create Individuals
         individuals = []
-        test_results = []
+        test_results = {}
 
         for i, data in enumerate(test_data_list):
             # Mock Individual
@@ -84,11 +84,10 @@ class TestFailingTestSelector(unittest.TestCase):
                 status=status_literal,
                 details=data.get("details", None),
             )
-            test_results.append(result)
+            test_results[mock_ind.id] = result
 
-        # Mock Population object
-        mock_pop = MagicMock()
-        mock_pop.individuals = individuals
+        # Mock Population object - now just the list of individuals
+        self.mock_context.test_populations[test_type] = individuals
 
         # Mock ExecutionResult
         mock_exec_result = MagicMock(spec=TestExecutionResult)
@@ -96,16 +95,17 @@ class TestFailingTestSelector(unittest.TestCase):
         mock_exec_result.test_results = test_results
 
         # Setup Context
-        self.mock_context.test_populations[test_type] = mock_pop
 
         mock_interaction = MagicMock(spec=InteractionData)
-        mock_interaction.execution_results = {self.code_index: mock_exec_result}
+        mock_interaction.execution_results = {
+            self.mock_code_individual.id: mock_exec_result
+        }
 
         # Build a simple integer observation matrix (rows=code, cols=tests).
         # By convention 1 => pass, 0 => fail. Tests in this suite mock only the
         # single code index (0), so create a (1, n_tests) array.
         obs = np.ones((1, len(test_results)), dtype=int)
-        for idx, tr in enumerate(test_results):
+        for idx, tr in enumerate(test_results.values()):
             if tr.status in ("failed", "error"):
                 obs[0, idx] = 0
 
@@ -157,21 +157,22 @@ class TestFailingTestSelector(unittest.TestCase):
         diff_ind.snippet = "diff code"
         diff_ind.probability = 0.8
 
-        diff_pop = MagicMock()
-        diff_pop.individuals = [diff_ind]
+        diff_pop = [diff_ind]
 
         diff_result = TestResult(
             name="diff_0", description="diff_0", status="failed", details="DiffErr"
         )
         diff_exec_res = MagicMock(spec=TestExecutionResult)
         diff_exec_res.script_error = False
-        diff_exec_res.test_results = [diff_result]
+        diff_exec_res.test_results = {diff_ind.id: diff_result}
 
         diff_interaction = MagicMock(spec=InteractionData)
-        diff_interaction.execution_results = {self.code_index: diff_exec_res}
+        diff_interaction.execution_results = {
+            self.mock_code_individual.id: diff_exec_res
+        }
         # Build integer observation matrix for the differential interaction.
         diff_obs = np.ones((1, len(diff_exec_res.test_results)), dtype=int)
-        for idx, tr in enumerate(diff_exec_res.test_results):
+        for idx, tr in enumerate(diff_exec_res.test_results.values()):
             if getattr(tr, "status", "passed") in ("failed", "error"):
                 diff_obs[0, idx] = 0
         diff_interaction.observation_matrix = diff_obs
@@ -197,7 +198,7 @@ class TestFailingTestSelector(unittest.TestCase):
 
         # Force script_error = True
         interaction = self.mock_context.interactions["unittest"]
-        interaction.execution_results[self.code_index].script_error = True
+        interaction.execution_results[self.mock_code_individual.id].script_error = True
 
         result = FailingTestSelector.select_failing_test(
             self.mock_context, self.mock_code_individual
@@ -220,9 +221,7 @@ class TestFailingTestSelector(unittest.TestCase):
         result = FailingTestSelector.select_failing_test(
             self.mock_context, self.mock_code_individual
         )
-        # Since selection relies solely on observation_matrix, missing
-        # execution_results should not prevent selecting a failing test.
-        self.assertIsNotNone(result)
+        # Should return None since execution_results are missing and no fallback
         if result:
             selected_test, population_type = result
             self.assertEqual(selected_test.id, "unittest_0")
@@ -231,7 +230,7 @@ class TestFailingTestSelector(unittest.TestCase):
         """Should handle missing error trace (verify it doesn't crash)."""
         self._create_mock_population_data(
             "unittest",
-            [{"status": "error", "prob": 0.5, "details": None}],
+            [{"status": "failed", "prob": 0.5, "details": None}],
         )
 
         with patch.object(FailingTestSelector, "_rank_selection", return_value=0):

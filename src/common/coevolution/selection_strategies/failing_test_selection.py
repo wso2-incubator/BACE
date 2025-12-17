@@ -52,15 +52,6 @@ class FailingTestSelector:
             A tuple of (selected_test_individual, test_population_type) if a failing test is found,
             otherwise None.
         """
-        # 1. Get Code Index
-        code_index = coevolution_context.code_population.get_index_of_individual(
-            code_individual
-        )
-        if code_index == -1:
-            logger.warning(
-                f"CodeIndividual {code_individual.id} not found in population."
-            )
-            return None
 
         # List of candidates: (TestIndividual, TestPopulationType)
         candidates: list[tuple[TestIndividual, TestPopulationType]] = []
@@ -72,11 +63,21 @@ class FailingTestSelector:
                 continue
 
             interaction = coevolution_context.interactions[test_type]
+            if code_individual.id not in interaction.execution_results:
+                logger.warning(
+                    f"No execution results for code individual '{code_individual.id}' "
+                    f"in test population '{test_type}'"
+                )
+                continue
 
-            # Get tests that failed against this code individual using the observation matrix
-            for test_idx, test_individual in enumerate(test_pop.individuals):
-                if interaction.observation_matrix[code_index][test_idx] == 0:
-                    candidates.append((test_individual, test_type))
+            test_results = interaction.execution_results[
+                code_individual.id
+            ].test_results
+
+            # Get tests that failed against this code individual using the execution results
+            for test_ind in test_pop:
+                if test_results[test_ind.id].status in ["failed"]:
+                    candidates.append((test_ind, test_type))
 
         if not candidates:
             return None
