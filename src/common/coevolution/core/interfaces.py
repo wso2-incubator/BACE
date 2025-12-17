@@ -1007,6 +1007,13 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
             f"avg {old_avg:.4f} -> {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
         )
 
+    def get_index_of_individual(self, individual: T_Individual) -> int:
+        """Returns the index of the given individual in the population."""
+        for idx, ind in enumerate(self._individuals):
+            if ind.id == individual.id:
+                return idx
+        return -1
+
     # -- abstract hook for subclasses --
     @abstractmethod
     def _on_generation_advanced(self) -> None:
