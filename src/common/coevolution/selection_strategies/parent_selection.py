@@ -1,29 +1,21 @@
 """
 Parent selection strategies for breeding in coevolutionary algorithms.
 
-This module implements the IParentSelectionStrategy protocol, providing
-selection mechanisms for choosing parent individuals during the breeding phase.
-
-The selection strategies work with Individual objects and utilize their
-probability values for making selection decisions.
-
-Available Strategies:
-- RouletteWheelParentSelection: Fitness-proportionate selection
-
-Design Principles:
-- Protocol-based: Implements IParentSelectionStrategy[T]
-- Context-aware: Receives full CoevolutionContext for advanced selection logic
-- Type-safe: Uses generic type parameters bounded by BaseIndividual
-- Returns individuals: Works with Individual objects, not indices
+Implements fitness-proportionate (roulette wheel) selection.
 """
 
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import BaseIndividual, BasePopulation, CoevolutionContext
+from ..core.interfaces import (
+    BaseIndividual,
+    BasePopulation,
+    CoevolutionContext,
+    IParentSelectionStrategy,
+)
 
 
-class RouletteWheelParentSelection[T: BaseIndividual]:
+class RouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T]):
     """
     Roulette wheel (fitness-proportionate) parent selection strategy.
 

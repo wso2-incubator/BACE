@@ -14,7 +14,9 @@ import pytest
 from common.coevolution.core.individual import CodeIndividual
 from common.coevolution.core.interfaces import OPERATION_INITIAL, CoevolutionContext
 from common.coevolution.core.population import CodePopulation
-from common.coevolution.parent_selection import RouletteWheelParentSelection
+from common.coevolution.selection_strategies.parent_selection import (
+    RouletteWheelParentSelection,
+)
 
 
 @pytest.fixture
@@ -95,14 +97,14 @@ class TestRouletteWheelParentSelection:
         """Test selecting multiple parents (more than 2)."""
         strategy = RouletteWheelParentSelection()
         count = 5
-        parents = strategy.select_parents(
-            sample_code_population,
-            count=count,
-            coevolution_context=mock_coevolution_context,
-        )
-
-        assert len(parents) == count
-        assert all(p in sample_code_population.individuals for p in parents)
+        with pytest.raises(
+            ValueError, match="Population size must be at least equal to count"
+        ):
+            strategy.select_parents(
+                sample_code_population,
+                count=count,
+                coevolution_context=mock_coevolution_context,
+            )
 
     def test_allows_duplicate_selection(
         self,
@@ -111,17 +113,15 @@ class TestRouletteWheelParentSelection:
     ) -> None:
         """Test that same individual can be selected multiple times (sampling with replacement)."""
         strategy = RouletteWheelParentSelection()
-        # Select many parents to increase chance of duplicates
-        parents = strategy.select_parents(
-            sample_code_population,
-            count=100,
-            coevolution_context=mock_coevolution_context,
-        )
-
-        assert len(parents) == 100
-        # With 100 selections from 3 individuals, we should definitely have duplicates
-        unique_ids = set(p.id for p in parents)
-        assert len(unique_ids) < 100  # Should have duplicates
+        # Selecting more parents than population size should now raise an error
+        with pytest.raises(
+            ValueError, match="Population size must be at least equal to count"
+        ):
+            strategy.select_parents(
+                sample_code_population,
+                count=100,
+                coevolution_context=mock_coevolution_context,
+            )
 
     def test_probability_proportional_selection(
         self,
@@ -175,14 +175,13 @@ class TestRouletteWheelParentSelection:
         ]
         population = CodePopulation(individuals=individuals)
         strategy = RouletteWheelParentSelection()
-
-        parents = strategy.select_parents(
-            population, count=3, coevolution_context=mock_coevolution_context
-        )
-
-        # Should return the same individual multiple times
-        assert len(parents) == 3
-        assert all(p.id == individuals[0].id for p in parents)
+        # Selecting more parents than population size should raise an error
+        with pytest.raises(
+            ValueError, match="Population size must be at least equal to count"
+        ):
+            strategy.select_parents(
+                population, count=3, coevolution_context=mock_coevolution_context
+            )
 
     def test_all_zero_probabilities(
         self, mock_coevolution_context: CoevolutionContext

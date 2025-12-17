@@ -8,34 +8,22 @@ into the next generation.
 The selection strategies work with Individual objects and can utilize the
 full CoevolutionContext including interaction matrices for sophisticated
 selection criteria.
-
-Available Strategies:
-- TopKEliteSelector: Simple top-k selection by probability (generic)
-- TestDiversityEliteSelector: Diversity-based selection for test populations
-  using observation matrix analysis
-- CodeDiversityEliteSelector: Diversity-based selection for code populations
-  combining diversity with top probability elites
-
-Design Principles:
-- Protocol-based: Implements IEliteSelectionStrategy[T]
-- Context-aware: Receives full CoevolutionContext for advanced selection logic
-- Type-safe: Uses generic type parameters bounded by BaseIndividual
-- Matrix-aware: Can access interaction matrices for diversity calculations
 """
 
 import numpy as np
 from loguru import logger
 
-from .core.individual import CodeIndividual, TestIndividual
-from .core.interfaces import (
+from ..core.individual import CodeIndividual, TestIndividual
+from ..core.interfaces import (
     BaseIndividual,
     BasePopulation,
     CoevolutionContext,
+    IEliteSelectionStrategy,
     PopulationConfig,
 )
 
 
-class TopKEliteSelector[T: BaseIndividual]:
+class TopKEliteSelector[T: BaseIndividual](IEliteSelectionStrategy[T]):
     """
     Simple top-k elite selection strategy based on probability.
 
@@ -107,7 +95,7 @@ class TopKEliteSelector[T: BaseIndividual]:
         return "TopKEliteSelector()"
 
 
-class TestDiversityEliteSelector[T: TestIndividual]:
+class TestDiversityEliteSelector[T: TestIndividual](IEliteSelectionStrategy[T]):
     """
     Diversity-based elite selection for test populations.
 
@@ -145,7 +133,7 @@ class TestDiversityEliteSelector[T: TestIndividual]:
         >>> elites = diff_selector.select_elites(diff_pop, config, context)
     """
 
-    def __init__(self, test_population_key: str):
+    def __init__(self, test_population_key: str) -> None:
         """
         Initialize the diversity selector for a specific test population.
 
@@ -350,7 +338,7 @@ class TestDiversityEliteSelector[T: TestIndividual]:
         return f"TestDiversityEliteSelector(test_population_key='{self.test_population_key}')"
 
 
-class CodeDiversityEliteSelector[T: CodeIndividual]:
+class CodeDiversityEliteSelector[T: CodeIndividual](IEliteSelectionStrategy[T]):
     """
     Diversity-based elite selection for code populations.
 
@@ -385,7 +373,7 @@ class CodeDiversityEliteSelector[T: CodeIndividual]:
         >>> elites = code_selector.select_elites(code_pop, config, context)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the diversity selector for code population.
 
@@ -563,7 +551,7 @@ class CodeDiversityEliteSelector[T: CodeIndividual]:
             f"(rows={concatenated.shape[0]}, total_cols={concatenated.shape[1]})"
         )
 
-        return concatenated
+        return np.asarray(concatenated)
 
     def _group_by_unique_rows(self, observation_matrix: np.ndarray) -> list[np.ndarray]:
         """

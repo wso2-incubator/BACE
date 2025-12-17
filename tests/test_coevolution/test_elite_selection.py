@@ -19,7 +19,7 @@ from common.coevolution.core.interfaces import (
     PopulationConfig,
 )
 from common.coevolution.core.population import CodePopulation, TestPopulation
-from common.coevolution.elite_selection import (
+from common.coevolution.selection_strategies.elite_selection import (
     CodeDiversityEliteSelector,
     TestDiversityEliteSelector,
     TopKEliteSelector,
@@ -109,7 +109,7 @@ class TestTopKEliteSelector:
         """Test that empty population returns empty elite list."""
         # Create empty population (now supported)
         empty_pop = CodePopulation(individuals=[])
-        selector = TopKEliteSelector()
+        selector:  = TopKEliteSelector()
         elites = selector.select_elites(
             empty_pop, population_config, mock_coevolution_context
         )
