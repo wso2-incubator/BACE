@@ -32,8 +32,7 @@ Interface Organization:
 
     4. Grouped Protocols (Systems):
        These combine related functionality typically implemented together:
-       - IBayesianSystem: Belief initialization + updating
-       - IExecutionSystem: Code execution + observation matrix building
+       - IBayesianSystem: Belief initialization + updating + mask generation
 
     5. Context-Based Architecture:
        The system uses context objects to pass state:
@@ -47,7 +46,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, overload
 
 import numpy as np
 from loguru import logger
@@ -83,11 +82,45 @@ class LifecycleEvent(Enum):
 
 
 type ParentProbabilities = list[float]
-type UnitTestResult = Any
-# ExecutionResults is ID-based: maps Code Individual ID -> (Test ID -> UnitTestResult)
-# This allows selection strategies that operate on Individual objects (by id)
-# to look up execution outcomes in O(1) without needing population index lookups.
-type ExecutionResults = dict[str, dict[str, UnitTestResult]]
+
+# ExecutionResults is an alias mapping a code-individual ID (str) to its
+# ExecutionResult. We use a forward-reference string for `ExecutionResult`
+# to avoid evaluation order issues at import time and mark it as a TypeAlias
+# for clearer typing semantics.
+ExecutionResults: TypeAlias = dict[str, "ExecutionResult"]
+
+
+@dataclass(frozen=True)
+class TestResult:
+    """
+    Represents the result of a single unit test execution.
+    """
+
+    details: str | None
+    status: Literal["passed", "failed", "error"]
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    """
+    Represents the result of executing a unit test suite against a code individual.
+    """
+
+    script_error: bool
+    test_results_dict: dict[str, TestResult] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class InteractionData:
+    """
+    Captures the interaction between code population and a specific test population.
+
+    This encapsulates execution results and observation matrix for a single
+    code-test population pair, making the data relationship explicit.
+    """
+
+    execution_results: ExecutionResults
+    observation_matrix: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -463,24 +496,6 @@ class PublicTestProfile:
     """
 
     bayesian_config: BayesianConfig
-
-
-@dataclass(frozen=True)
-class InteractionData:
-    """
-    Captures the interaction between code population and a specific test population.
-
-    This encapsulates execution results and observation matrix for a single
-    code-test population pair, making the data relationship explicit.
-    """
-
-    # `execution_results` maps `code_individual.id` -> { `test_individual.id`: UnitTestResult }
-    # The `observation_matrix` is a numpy array aligned to the population ordering
-    # (codes x tests). Converters (ObservationMatrixBuilder implementations)
-    # are responsible for translating `execution_results` (ID-keyed) into the
-    # index-based `observation_matrix` expected by Bayesian routines.
-    execution_results: ExecutionResults
-    observation_matrix: np.ndarray
 
 
 @dataclass
@@ -1393,75 +1408,48 @@ class IDatasetTestBlockBuilder(Protocol):
         ...
 
 
-class ICodeTestExecutor(Protocol):
+class IExecutionSystem(Protocol):
     """
     Protocol defining the contract for a code-test executor for the entire population.
+
+    The executor now returns an `InteractionData` object which contains both
+    the detailed `ExecutionResults` (ID-keyed) and an index-aligned
+    `observation_matrix`. This enforces atomic construction of the matrix
+    while the executor iterates through populations (guaranteeing index
+    alignment and eliminating the split-brain problem).
     """
 
     def execute_tests(
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
-    ) -> ExecutionResults:
+    ) -> InteractionData:
         """
-        Executes the given code snippets against the test snippets.
+        Executes the given code snippets against the test snippets and returns
+        a unified `InteractionData` artifact.
 
         Args:
-            code_population: The population of code snippets to be tested.
-            test_population: The population of test snippets to run against the code.
+                code_population: The population of code snippets to be tested.
+                test_population: The population of test snippets to run against the code.
 
         Returns:
-            An ID-keyed `ExecutionResults` mapping containing execution outcomes.
+                An `InteractionData` instance containing both:
+                    - `execution_results`: ID-keyed mapping of execution outcomes
+                    - `observation_matrix`: numpy ndarray with shape
+                        (len(code_population), len(test_population)) such that
+                        `observation_matrix[i, j]` corresponds to
+                        `code_population[i]` vs `test_population[j]`.
 
-            Shape: { code_id: { test_id: UnitTestResult, ... }, ... }
-
-        Note:
-            This method should return results keyed by the individuals' stable IDs
-            (strings). The `IObservationMatrixBuilder` is responsible for
-            translating this ID-based mapping into an index-aligned numpy
-            `observation_matrix` that corresponds to population ordering.
+        Consistency guarantees:
+                - The executor constructs the matrix in the same loop that
+                    produces the `execution_results`, ensuring strict alignment.
 
         Empty State Behavior (size=0):
-            - When test_population is empty (size=0), implementations should return
-              an empty ExecutionResults object with no test results.
-            - When code_population is empty (size=0), implementations should return
-              an empty ExecutionResults object with no code results.
-            - Empty populations are valid inputs (e.g., differential testing starting
-              with 0 tests and bootstrapping over time).
-        """
-        ...
-
-
-class IObservationMatrixBuilder(Protocol):
-    """
-    Protocol defining the contract for building an observation matrix.
-    """
-
-    def build_observation_matrix(
-        self,
-        code_population: "CodePopulation",
-        test_population: "TestPopulation",
-        execution_results: ExecutionResults,
-    ) -> np.ndarray:
-        """
-        Build an index-aligned observation matrix (numpy ndarray) from
-        ID-keyed `execution_results`.
-
-        Args:
-            code_population: Ordered `CodePopulation` instance whose index order
-                             will define the rows of the returned matrix.
-            test_population: Ordered `TestPopulation` instance whose index order
-                             will define the columns of the returned matrix.
-            execution_results: ID-keyed results mapping (see `ExecutionResults`).
-
-        Returns:
-            A numpy ndarray shaped (n_codes, n_tests) where entry (i, j)
-            corresponds to the result for code_population[i] vs test_population[j].
-
-        Implementations must handle missing entries (e.g., absent IDs) by
-        choosing a sensible default (such as `None` or a designated sentinel)
-        and must ensure the returned matrix aligns exactly with the populations'
-        ordering.
+                - When `test_population` is empty, return an `InteractionData` with
+                    an empty `execution_results` and an appropriately shaped empty
+                    numpy array (shape (n_codes, 0)).
+                - When `code_population` is empty, return an `InteractionData` with
+                    empty `execution_results` and an empty numpy array (shape (0, n_tests)).
         """
         ...
 
@@ -1493,8 +1481,6 @@ class ITestBlockRebuilder(Protocol):
         """
         ...
 
-
-class IBeliefInitializer(Protocol):
     """
     Protocol defining the contract for a Bayesian belief initialization strategy.
     """
@@ -1520,7 +1506,6 @@ class IBeliefInitializer(Protocol):
             - This supports differential testing scenarios where populations start
               empty and grow through bootstrapping.
         """
-        ...
 
 
 class IBeliefMaskGenerator(Protocol):
@@ -1637,9 +1622,7 @@ class IBeliefUpdater(Protocol):
 # typically implemented together as cohesive subsystems.
 
 
-class IBayesianSystem(
-    IBeliefInitializer, IBeliefUpdater, IBeliefMaskGenerator, Protocol
-):
+class IBayesianSystem(IBeliefUpdater, IBeliefMaskGenerator, Protocol):
     """
     Unified interface for Bayesian belief management.
 
@@ -1648,17 +1631,4 @@ class IBayesianSystem(
 
     This system is used by the Orchestrator to manage probability updates for both
     code and test populations based on execution results.
-    """
-
-
-class IExecutionSystem(ICodeTestExecutor, IObservationMatrixBuilder, Protocol):
-    """
-    Unified interface for test execution and observation.
-
-    Combines the execution of code against tests and the building of observation
-    matrices into a single cohesive system. Implementations handle both running
-    tests in a sandbox and converting results into matrices for belief updates.
-
-    This system is used by the Orchestrator to evaluate code populations against
-    test populations (generated, public, and private tests).
     """

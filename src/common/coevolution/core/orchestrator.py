@@ -18,7 +18,6 @@ from .interfaces import (
     CodeProfile,
     CoevolutionContext,
     EvolutionConfig,
-    ExecutionResults,
     IBayesianSystem,
     IDatasetTestBlockBuilder,
     IExecutionSystem,
@@ -238,11 +237,10 @@ class Orchestrator:
             problem.private_test_cases, problem.starter_code
         )
 
-        # Initial Private Run (Baseline)
-        _, private_obs = self._get_exec_results_and_obs_matrix(code_pop, private_pop)
-
+        # Initial Private Run (Baseline) - executor returns atomic InteractionData
+        private_interaction = self._get_interaction_data(code_pop, private_pop)
         logging_utils.log_observation_matrix(
-            private_obs, code_pop, private_pop, "private"
+            private_interaction.observation_matrix, code_pop, private_pop, "private"
         )
 
         # Log generation 0 for all evolved test populations
@@ -279,23 +277,21 @@ class Orchestrator:
 
         # Execute evolved test populations
         for test_type, test_pop in evolved_test_pops.items():
-            exec_results, obs_matrix = self._get_exec_results_and_obs_matrix(
-                code_pop, test_pop
-            )
-            interactions[test_type] = InteractionData(exec_results, obs_matrix)
+            interaction = self.execution_system.execute_tests(code_pop, test_pop)
+            interactions[test_type] = interaction
             logging_utils.log_observation_matrix(
-                obs_matrix,
+                interaction.observation_matrix,
                 code_pop,
                 test_pop,
                 test_type,
             )
 
         # Execute public (fixed) test population
-        public_exec, public_obs = self._get_exec_results_and_obs_matrix(
-            code_pop, public_pop
+        public_interaction = self.execution_system.execute_tests(code_pop, public_pop)
+        interactions["public"] = public_interaction
+        logging_utils.log_observation_matrix(
+            public_interaction.observation_matrix, code_pop, public_pop, "public"
         )
-        interactions["public"] = InteractionData(public_exec, public_obs)
-        logging_utils.log_observation_matrix(public_obs, code_pop, public_pop, "public")
 
         return interactions
 
@@ -483,10 +479,10 @@ class Orchestrator:
     ) -> None:
         """Runs final private evaluation and logs closing stats."""
         # Run final private tests
-        _, private_obs = self._get_exec_results_and_obs_matrix(code_pop, private_pop)
+        private_interaction = self._get_interaction_data(code_pop, private_pop)
 
         logging_utils.log_observation_matrix(
-            private_obs, code_pop, private_pop, "private"
+            private_interaction.observation_matrix, code_pop, private_pop, "private"
         )
 
         # Log final survivors for the first evolved test population (for now)
@@ -765,19 +761,16 @@ class Orchestrator:
         logger.debug(f"Successfully bred {len(test_offsprings)} test offspring")
         return test_offsprings
 
-    def _get_exec_results_and_obs_matrix(
+    def _get_interaction_data(
         self,
         code_population: CodePopulation,
         test_population: TestPopulation,
-    ) -> tuple[ExecutionResults, np.ndarray]:
+    ) -> InteractionData:
         """
-        Helper to execute tests and build observation matrix.
-        """
-        exec_results = self.execution_system.execute_tests(
-            code_population, test_population
-        )
-        obs_matrix = self.execution_system.build_observation_matrix(
-            code_population, test_population, exec_results
-        )
+        Helper to execute tests and return an atomic InteractionData artifact.
 
-        return exec_results, obs_matrix
+        Implementations of the execution system construct both the ID-keyed
+        `execution_results` and an index-aligned `observation_matrix` and
+        return them wrapped in an `InteractionData` object.
+        """
+        return self.execution_system.execute_tests(code_population, test_population)

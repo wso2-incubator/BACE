@@ -1,6 +1,6 @@
 # /path/to/your/project/mock.py
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 from loguru import logger
@@ -17,11 +17,13 @@ from .interfaces import (
     BasePopulation,
     BayesianConfig,
     CoevolutionContext,
+    ExecutionResult,
     ExecutionResults,
     IBayesianSystem,
     IEliteSelectionStrategy,
     IExecutionSystem,
     InitialInput,
+    InteractionData,
     IOperator,
     IParentSelectionStrategy,
     IProbabilityAssigner,
@@ -33,6 +35,7 @@ from .interfaces import (
     PopulationConfig,
     Problem,
     Test,
+    TestResult,
 )
 from .population import CodePopulation, TestPopulation
 
@@ -510,33 +513,55 @@ class MockExecutionSystem(IExecutionSystem):
         self,
         code_population: "CodePopulation",
         test_population: "TestPopulation",
-    ) -> ExecutionResults:
-        """Execute all code against all tests."""
-        # Empty state guard: identity operation for empty populations
-        if len(code_population) == 0 or len(test_population) == 0:
-            logger.debug(
-                f"MockExecutionSystem: Empty population detected (code={len(code_population)}, "
-                f"test={len(test_population)}), returning empty ExecutionResults"
-            )
-            return {}
-
-        logger.debug("MockExecutionSystem: 'Running' all tests...")
-
-        execution_results: dict[int, MockUnitTestResult] = {}
+    ) -> InteractionData:
+        """Execute all code against all tests and return atomic InteractionData."""
+        num_code = len(code_population)
         num_tests = len(test_population)
 
-        for code_idx, code_ind in enumerate(code_population):
-            logger.trace(f"Executing generated tests for Code ID {code_ind.id}")
-            is_passing = np.random.rand(num_tests) < code_ind.probability
-            error_messages = [
-                "" if pass_ else "Mock failure message" for pass_ in is_passing
-            ]
-            mock_result: MockUnitTestResult = MockUnitTestResult(
-                is_passing=is_passing.tolist(), error_messages=error_messages
+        # Empty state guard: return properly shaped empty InteractionData
+        if num_code == 0 or num_tests == 0:
+            logger.debug(
+                f"MockExecutionSystem: Empty population detected (code={num_code}, "
+                f"test={num_tests}), returning empty InteractionData"
             )
-            execution_results[code_idx] = mock_result
+            empty_matrix = np.zeros((num_code, num_tests), dtype=int)
+            return InteractionData(
+                execution_results={}, observation_matrix=empty_matrix
+            )
 
-        return execution_results
+        logger.debug("MockExecutionSystem: 'Running' all tests (mock)...")
+
+        execution_results: dict[str, ExecutionResult] = {}
+        observation_matrix = np.zeros((num_code, num_tests), dtype=int)
+
+        # Collect ordered test ids for deterministic mapping
+        test_ids = [t.id for t in test_population]
+
+        for i, code_ind in enumerate(code_population):
+            logger.trace(f"Executing generated tests for Code ID {code_ind.id}")
+            # Determine pass/fail per test (mocked by code probability)
+            is_passing = np.random.rand(num_tests) < code_ind.probability
+
+            # Build TestResult mapping keyed by test individual id
+            test_results_dict: dict[str, TestResult] = {}
+            for j, test_ind in enumerate(test_population):
+                passed = bool(is_passing[j])
+                observation_matrix[i, j] = 1 if passed else 0
+                details = None if passed else "Mock failure message"
+                status = "passed" if passed else "failed"
+                status_lit = cast(Literal["passed", "failed", "error"], status)
+                test_results_dict[test_ind.id] = TestResult(
+                    details=details, status=status_lit
+                )
+
+            exec_result = ExecutionResult(
+                script_error=False, test_results_dict=test_results_dict
+            )
+            execution_results[code_ind.id] = exec_result
+
+        return InteractionData(
+            execution_results=execution_results, observation_matrix=observation_matrix
+        )
 
     def build_observation_matrix(
         self,
@@ -544,24 +569,39 @@ class MockExecutionSystem(IExecutionSystem):
         test_population: "TestPopulation",
         execution_results: ExecutionResults,
     ) -> np.ndarray:
-        """Build observation matrix from execution results."""
-        logger.trace("MockExecutionSystem: Building observation matrix...")
+        """Build observation matrix from ID-keyed ExecutionResults aligned to populations."""
+        logger.trace(
+            "MockExecutionSystem: Building observation matrix from ExecutionResults..."
+        )
         num_code = len(code_population)
         num_tests = len(test_population)
 
-        # Empty state guard: return properly shaped empty matrix
-        # (N,0) for empty test population, (0,N) for empty code population
         if num_code == 0 or num_tests == 0:
             logger.trace(
-                f"MockExecutionSystem: Empty population (code={num_code}, test={num_tests}), "
-                f"returning matrix with shape ({num_code}, {num_tests})"
+                f"MockExecutionSystem: Empty population (code={num_code}, test={num_tests}), returning matrix with shape ({num_code}, {num_tests})"
             )
             return np.zeros((num_code, num_tests), dtype=int)
 
         combined_matrix = np.zeros((num_code, num_tests), dtype=int)
-        for code_idx, result in execution_results.items():
-            for j in range(num_tests):
-                combined_matrix[code_idx, j] = 1 if result.is_passing[j] else 0
+
+        # Map test ids to column indices for alignment
+        test_id_to_idx = {t.id: idx for idx, t in enumerate(test_population)}
+
+        for row_idx, code_ind in enumerate(code_population):
+            code_id = code_ind.id
+            exec_result = execution_results.get(code_id)
+            if exec_result is None:
+                # Missing entry -> leave zeros
+                continue
+            for test_id, test_result in exec_result.test_results_dict.items():
+                col_idx = test_id_to_idx.get(test_id)
+                if col_idx is None:
+                    # unknown test id -> skip
+                    continue
+                combined_matrix[row_idx, col_idx] = (
+                    1 if test_result.status == "passed" else 0
+                )
+
         return combined_matrix
 
 
