@@ -116,6 +116,7 @@ def create_configurations() -> tuple[
         "unittest": PopulationConfig(
             initial_prior=0.5,
             initial_population_size=20,
+            max_population_size=20,
         ),
         "differential": PopulationConfig(
             initial_prior=0.5,
