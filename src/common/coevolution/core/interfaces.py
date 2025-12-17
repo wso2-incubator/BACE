@@ -323,8 +323,7 @@ class EvolutionConfig:
     Top-level configuration for controlling the evolutionary run.
     """
 
-    num_generations: int
-    random_seed: int
+    num_generations: int = 5
     max_workers: int = 1  # Number of parallel workers for breeding (1 = sequential)
 
     def __post_init__(self) -> None:
