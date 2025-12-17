@@ -84,7 +84,10 @@ class LifecycleEvent(Enum):
 
 type ParentProbabilities = list[float]
 type UnitTestResult = Any
-type ExecutionResults = dict[int, UnitTestResult]
+# ExecutionResults is ID-based: maps Code Individual ID -> (Test ID -> UnitTestResult)
+# This allows selection strategies that operate on Individual objects (by id)
+# to look up execution outcomes in O(1) without needing population index lookups.
+type ExecutionResults = dict[str, dict[str, UnitTestResult]]
 
 
 @dataclass(frozen=True)
@@ -471,6 +474,11 @@ class InteractionData:
     code-test population pair, making the data relationship explicit.
     """
 
+    # `execution_results` maps `code_individual.id` -> { `test_individual.id`: UnitTestResult }
+    # The `observation_matrix` is a numpy array aligned to the population ordering
+    # (codes x tests). Converters (ObservationMatrixBuilder implementations)
+    # are responsible for translating `execution_results` (ID-keyed) into the
+    # index-based `observation_matrix` expected by Bayesian routines.
     execution_results: ExecutionResults
     observation_matrix: np.ndarray
 
@@ -1403,7 +1411,15 @@ class ICodeTestExecutor(Protocol):
             test_population: The population of test snippets to run against the code.
 
         Returns:
-            An ExecutionResults object containing the results of the execution.
+            An ID-keyed `ExecutionResults` mapping containing execution outcomes.
+
+            Shape: { code_id: { test_id: UnitTestResult, ... }, ... }
+
+        Note:
+            This method should return results keyed by the individuals' stable IDs
+            (strings). The `IObservationMatrixBuilder` is responsible for
+            translating this ID-based mapping into an index-aligned numpy
+            `observation_matrix` that corresponds to population ordering.
 
         Empty State Behavior (size=0):
             - When test_population is empty (size=0), implementations should return
@@ -1428,23 +1444,24 @@ class IObservationMatrixBuilder(Protocol):
         execution_results: ExecutionResults,
     ) -> np.ndarray:
         """
-        Builds the observation matrix from execution results.
+        Build an index-aligned observation matrix (numpy ndarray) from
+        ID-keyed `execution_results`.
 
         Args:
-            code_population: The population of code snippets.
-            test_population: The population of test snippets.
-            execution_results: The results from executing the code against the tests.
+            code_population: Ordered `CodePopulation` instance whose index order
+                             will define the rows of the returned matrix.
+            test_population: Ordered `TestPopulation` instance whose index order
+                             will define the columns of the returned matrix.
+            execution_results: ID-keyed results mapping (see `ExecutionResults`).
 
         Returns:
-            A 2D numpy array representing the observation matrix.
+            A numpy ndarray shaped (n_codes, n_tests) where entry (i, j)
+            corresponds to the result for code_population[i] vs test_population[j].
 
-        Empty State Behavior (size=0):
-            - When test_population is empty (size=0), should return matrix with
-              shape (N_code, 0) where N_code is the code population size.
-            - When code_population is empty (size=0), should return matrix with
-              shape (0, N_tests) where N_tests is the test population size.
-            - When both are empty, should return matrix with shape (0, 0).
-            - Empty matrices are valid (e.g., differential testing scenarios).
+        Implementations must handle missing entries (e.g., absent IDs) by
+        choosing a sensible default (such as `None` or a designated sentinel)
+        and must ensure the returned matrix aligns exactly with the populations'
+        ordering.
         """
         ...
 
