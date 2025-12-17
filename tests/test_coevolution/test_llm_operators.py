@@ -11,15 +11,17 @@ from common.coevolution.core.interfaces import (
     OPERATION_EDIT,
     OPERATION_INITIAL,
     OPERATION_MUTATION,
+    InitialInput,
     Problem,
 )
-from common.coevolution.llm_operators import (
+from common.coevolution.operators.base_llm_operator import LLMGenerationError
+from common.coevolution.operators.code_llm_operator import (
     CodeCrossoverInput,
     CodeEditInput,
     CodeLLMOperator,
     CodeMutationInput,
-    InitialInput,
-    LLMGenerationError,
+)
+from common.coevolution.operators.unittest_llm_operator import (
     UnittestCrossoverInput,
     UnittestEditInput,
     UnittestLLMOperator,
