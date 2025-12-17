@@ -240,7 +240,7 @@ class PopulationConfig:
 
     initial_prior: float
     initial_population_size: int
-    max_population_size: int | None = None
+    max_population_size: int
     offspring_rate: float = 1.0
     elitism_rate: float = 0.5
     diversity_selection: bool = False
@@ -251,12 +251,6 @@ class PopulationConfig:
             raise ValueError("initial_prior must be in the range (0.0, 1.0)")
         if self.initial_population_size < 0:
             raise ValueError("initial_population_size must be non-negative.")
-
-        # Auto-set max_population_size if not provided (fixed-size behavior)
-        if self.max_population_size is None:
-            object.__setattr__(
-                self, "max_population_size", self.initial_population_size
-            )
 
         # Validate max_population_size
         if self.max_population_size < 0:
@@ -285,11 +279,6 @@ class PopulationConfig:
     def is_fixed_size(self) -> bool:
         """Returns True if this is a fixed-size population configuration."""
         return self.max_population_size == self.initial_population_size
-
-    @property
-    def is_variable_size(self) -> bool:
-        """Returns True if this is a variable-size population configuration."""
-        return self.max_population_size > self.initial_population_size
 
 
 @dataclass(frozen=True)

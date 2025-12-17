@@ -359,7 +359,7 @@ class MockBreedingStrategy:
             f"MockBreedingStrategy: Creating {population_size} initial {self.individual_type} individuals"
         )
         # Call operator's new generate_initial_snippets method
-        from .core.interfaces import InitialInput
+        from .interfaces import InitialInput
 
         operator_output, context_code = self.operator.generate_initial_snippets(
             InitialInput(
@@ -374,12 +374,12 @@ class MockBreedingStrategy:
         individuals = []
         for result in operator_output.results:
             if self.individual_type == "code":
-                individual = CodeIndividual(
+                individual: BaseIndividual = CodeIndividual(
                     snippet=result.snippet,
                     probability=initial_prior,
                     creation_op=OPERATION_INITIAL,
                     generation_born=0,
-                    parents={},
+                    parents={"code": [], "test": []},
                     metadata=result.metadata,
                 )
             else:
@@ -388,7 +388,7 @@ class MockBreedingStrategy:
                     probability=initial_prior,
                     creation_op=OPERATION_INITIAL,
                     generation_born=0,
-                    parents={},
+                    parents={"code": [], "test": []},
                     metadata=result.metadata,
                 )
             individuals.append(individual)
@@ -451,7 +451,7 @@ class MockBreedingStrategy:
                         probability=0.5,
                         creation_op="initial",
                         generation_born=0,
-                        parents={},
+                        parents={"code": [], "test": []},
                     )
                 else:
                     parent_idx = np.random.randint(0, test_population.size)
