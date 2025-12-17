@@ -10,13 +10,7 @@ from typing import List
 
 from loguru import logger
 
-from ...code_preprocessing import (
-    CodeParsingError,
-    analysis,
-    composition,
-    extraction,
-    transformation,
-)
+from ...code_preprocessing import CodeParsingError, analysis, extraction
 from ...code_preprocessing.exceptions import CodeTransformationError
 from ..core.interfaces import (
     BaseOperatorInput,
@@ -31,13 +25,7 @@ from ..prompt_templates import (
     INITIAL_CODE,
     MUTATE_CODE,
 )
-from .base_llm_operator import (
-    BaseLLMOperator,
-    ILanguageModel,
-    LLMGenerationError,
-    UnsupportedOperatorInput,
-    llm_retry,
-)
+from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
 
 @dataclass(frozen=True)
