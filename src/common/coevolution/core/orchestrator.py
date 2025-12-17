@@ -1,8 +1,5 @@
 # src/common/coevolution/orchestrator.py
 
-import random
-
-import numpy as np
 from loguru import logger
 
 from common.code_preprocessing.transformation import extract_test_methods_code
@@ -129,8 +126,6 @@ class Orchestrator:
 
         self.test_block_rebuilder = test_block_rebuilder
         self.dataset_test_block_builder = dataset_test_block_builder
-
-        self._set_random_seed(evo_config.random_seed)
 
     def run(self, problem: Problem) -> tuple[CodePopulation, dict[str, TestPopulation]]:
         """
@@ -494,14 +489,6 @@ class Orchestrator:
     # Helper Methods
     # =========================================================================
 
-    def _set_random_seed(self, seed: int) -> None:
-        """
-        Helper to set random seeds for reproducibility.
-        """
-        np.random.seed(seed)
-        random.seed(seed)
-        logger.info(f"Random seed set to {seed} for reproducibility.")
-
     def _create_initial_code_population(self, problem: Problem) -> CodePopulation:
         """
         Uses the injected breeding strategy to create the initial code population
@@ -514,8 +501,6 @@ class Orchestrator:
         # --- 1. Code Population ---
         code_individuals, context_code = (
             self.code_profile.breeding_strategy.initialize_individuals(
-                self.code_profile.population_config.initial_population_size,
-                self.code_profile.population_config.initial_prior,
                 problem,
             )
         )
@@ -539,8 +524,6 @@ class Orchestrator:
 
         test_individuals, context_code = (
             test_profile.breeding_strategy.initialize_individuals(
-                test_profile.population_config.initial_population_size,
-                test_profile.population_config.initial_prior,
                 problem,
             )
         )

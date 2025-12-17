@@ -1146,8 +1146,6 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
 
     def initialize_individuals(
         self,
-        population_size: int,
-        initial_prior: float,
         problem: Problem,
     ) -> tuple[list[T_self], str | None]:
         """
