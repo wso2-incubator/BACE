@@ -44,7 +44,9 @@ class UnittestCrossoverInput(BaseOperatorInput):
 @dataclass(frozen=True)
 class UnittestEditInput(BaseOperatorInput):
     parent_snippet: str
-    feedback: str
+    passing_code_snippet: str
+    failing_code_snippet: str
+    failing_code_trace: str
 
 
 class UnittestLLMOperator(BaseLLMOperator, IOperator):
@@ -144,8 +146,9 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
     def _handle_edit(self, input_dto: UnittestEditInput) -> OperatorOutput:
         prompt = EDIT_TEST.format(
             question_content=input_dto.question_content,
-            individual=input_dto.parent_snippet,
-            feedback=input_dto.feedback,
+            passing_code_snippet=input_dto.passing_code_snippet,
+            failing_code_snippet=input_dto.failing_code_snippet,
+            failing_code_trace=input_dto.failing_code_trace,
         )
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
