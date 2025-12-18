@@ -17,8 +17,12 @@ from typing import Union
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import (OPERATION_INITIAL, IProbabilityAssigner,
-                              Operation, ParentProbabilities)
+from .core.interfaces import (
+    OPERATION_INITIAL,
+    IProbabilityAssigner,
+    Operation,
+    ParentProbabilities,
+)
 
 
 class AssignmentStrategy(str, Enum):
@@ -209,11 +213,6 @@ class ProbabilityAssigner(IProbabilityAssigner):
             operation: The genetic operation (unused in this strategy)
             parent_probs: Parent probability values
             initial_prior: Default prior (unused in this strategy)
-
-        Returns:
-            Minimum of parent probabilities
-        """
-        return float(np.min(parent_probs))
 
         Returns:
             Minimum of parent probabilities

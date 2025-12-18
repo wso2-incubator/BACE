@@ -164,7 +164,7 @@ class BayesianConfig:
             raise ValueError("learning_rate must be in the range (0.0, 1.0]")
 
 
-@dataclass
+@dataclass(frozen=True)
 class OperatorRatesConfig:
     """
     Configuration for operation selection probabilities.
@@ -223,6 +223,10 @@ class OperatorRatesConfig:
                 f"All breeding should produce new individuals via genetic operations. "
                 f"Elite selection (handled separately) preserves unchanged individuals."
             )
+
+    def __getitem__(self, key: Operation) -> float:
+        """Allows direct access via config['mutation']"""
+        return self.operation_rates[key]
 
 
 @dataclass
