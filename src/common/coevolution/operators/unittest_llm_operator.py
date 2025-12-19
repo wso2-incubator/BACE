@@ -75,6 +75,9 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
     ) -> tuple[OperatorOutput, str | None]:
         """Generate initial test methods and an overall unittest block (context_code)."""
         population_size = input_dto.population_size
+        logger.info(
+            f"Generating {population_size} initial test snippets for question: {input_dto.question_content[:50]}..."
+        )
         prompt: str = INITIAL_TEST_AGENT_CODER_STYLE.format(
             population_size=population_size,
             question_content=input_dto.question_content,
@@ -86,6 +89,10 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         test_block: str = self._extract_unittest_block(extracted_code_block)
         test_methods: list[str] = self._extract_test_methods(test_block)
 
+        logger.debug(
+            f"Extracted {len(test_methods)} test methods from initial response"
+        )
+
         if len(test_methods) != population_size:
             logger.warning(
                 f"Generated {len(test_methods)} test methods, expected {population_size}."
@@ -94,9 +101,11 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         if len(test_methods) > population_size:
             test_methods = test_methods[:population_size]
             test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
+            logger.debug(f"Truncated to {population_size} test methods")
 
         if len(test_methods) < population_size:
             additional_needed = population_size - len(test_methods)
+            logger.info(f"Generating {additional_needed} additional test methods")
             prompt_additional = INITIAL_TEST_AGENT_CODER_STYLE.format(
                 population_size=additional_needed,
                 question_content=input_dto.question_content,
@@ -108,6 +117,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             additional_methods = self._extract_test_methods(additional_block)
             test_methods.extend(additional_methods[:additional_needed])
             test_block = self._rebuild_unittest_with_methods(test_block, test_methods)
+            logger.debug(f"Added {additional_needed} additional test methods")
 
         results = [OperatorResult(snippet=m, metadata={}) for m in test_methods]
         logger.info(f"Successfully generated {len(results)} initial test snippets")
@@ -115,6 +125,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_crossover(self, input_dto: UnittestCrossoverInput) -> OperatorOutput:
+        logger.debug("Performing unittest crossover operation")
         prompt = CROSSOVER_TEST.format(
             question_content=input_dto.question_content,
             parent1=input_dto.parent1_snippet,
@@ -123,12 +134,14 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
         child = self._extract_first_test_method(extracted)
+        logger.debug(f"Generated crossover child with length {len(child)}")
         return OperatorOutput(
             results=[OperatorResult(snippet=child, metadata={"operation": "crossover"})]
         )
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_mutation(self, input_dto: UnittestMutationInput) -> OperatorOutput:
+        logger.debug("Performing unittest mutation operation")
         prompt = MUTATE_TEST.format(
             question_content=input_dto.question_content,
             individual=input_dto.parent_snippet,
@@ -136,6 +149,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
         mutated = self._extract_first_test_method(extracted)
+        logger.debug(f"Generated mutated child with length {len(mutated)}")
         return OperatorOutput(
             results=[
                 OperatorResult(snippet=mutated, metadata={"operation": "mutation"})
@@ -144,6 +158,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_edit(self, input_dto: UnittestEditInput) -> OperatorOutput:
+        logger.debug("Performing unittest edit operation")
         prompt = EDIT_TEST.format(
             question_content=input_dto.question_content,
             passing_code_snippet=input_dto.passing_code_snippet,
@@ -153,22 +168,34 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
         edited = self._extract_first_test_method(extracted)
+        logger.debug(f"Generated edited child with length {len(edited)}")
         return OperatorOutput(
             results=[OperatorResult(snippet=edited, metadata={"operation": "edit"})]
         )
 
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
+        operation = getattr(input_dto, "operation", "unknown")
+        logger.info(
+            f"Applying unittest operator for operation '{operation}' with input type {type(input_dto).__name__}"
+        )
         match input_dto:
             case UnittestMutationInput():
-                return self._handle_mutation(input_dto)
+                result = self._handle_mutation(input_dto)
             case UnittestCrossoverInput():
-                return self._handle_crossover(input_dto)
+                result = self._handle_crossover(input_dto)
             case UnittestEditInput():
-                return self._handle_edit(input_dto)
+                result = self._handle_edit(input_dto)
             case _:
+                logger.error(
+                    f"Unsupported operation input: {type(input_dto)} for operation {operation}"
+                )
                 raise UnsupportedOperatorInput(
                     type(input_dto), getattr(input_dto, "operation", None)
                 )
+        logger.info(
+            f"Successfully applied operation '{operation}', produced {len(result.results)} results"
+        )
+        return result
 
 
 __all__ = [
