@@ -173,7 +173,6 @@ def test_select_complex_groups_multiple_test_types(
     C2   | 1, 0            | 0            | [1, 0, 0] -> Group B
     C3   | 0, 1            | 1            | [0, 1, 1] -> Group C
     """
-    codes = setup_code_pop(mock_context, size=4)
 
     # Public Tests Matrix (2 tests)
     mat_public = [
