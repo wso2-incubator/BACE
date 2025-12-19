@@ -1,8 +1,9 @@
 """Transform existing code into different code structures."""
 
 import ast
+import re
 import textwrap
-from typing import List
+from typing import Any, List
 
 from loguru import logger
 
@@ -661,3 +662,88 @@ def extract_unittest_code(full_code: str) -> str:
     # fall back to ast.unparse when source segments are unavailable.
     full_tree.body = new_body
     return ast.unparse(full_tree)
+
+
+def setup_unittest_class_from_starter_code(starter_code: str) -> str:
+    """
+    Given starter code containing a unittest class,
+    ensure it has the proper imports and structure.
+
+    Args:
+        starter_code: Python source code with unittest class
+
+    Returns:
+        Complete unittest class code with imports
+
+    Raises:
+        CodeParsingError: If starter code has syntax errors
+        CodeTransformationError: If no unittest class found
+    """
+    # Parse the starter code to find class and method names
+    class_match = re.search(r"class\s+(\w+):", starter_code)
+    if not class_match:
+        return "# Error: Could not parse class name from starter code."
+
+    class_name = class_match.group(1)
+
+    # Build the output file string
+    output_lines = [
+        "import unittest",
+        "from typing import * # Import common types for function signatures",
+        "",
+        f"class Test{class_name}(unittest.TestCase):",
+        "    def setUp(self):",
+        f"        self.solution = {class_name}()",
+        "",
+    ]
+
+    return "\n".join(output_lines)
+
+
+def build_test_method_from_io(
+    starter_code: str, io_pairs: list[dict[str, Any]], parent_ids: list[str]
+) -> str:
+    """
+    Given starter code and IO pairs, builds a single test method containing
+    assertions for every IO pair.
+    """
+    # 1. Parse the starter code to find class and method names
+    # Note: Regex assumes standard class/method definitions
+    class_match = re.search(r"class\s+(\w+)", starter_code)
+    method_match = re.search(r"def\s+(\w+)\s*\(\s*self", starter_code)
+
+    if not class_match or not method_match:
+        raise CodeParsingError(
+            "Could not parse class/method names for test generation."
+        )
+
+    method_name = method_match.group(1)
+
+    # 2. Define the test method signature
+    # We join parent IDs to create a unique test name, e.g., test_case_C1_C2
+    suffix = "_".join(parent_ids) if parent_ids else "generated"
+    test_method_signature = f"    def test_case_{suffix}(self):\n"
+
+    # 3. Build the assertions body
+    assertions = []
+
+    for i, io_pair in enumerate(io_pairs):
+        input_dict: dict[str, Any] = io_pair["inputdata"]
+        expected_output = io_pair["output"]
+
+        # Convert dictionary {'n': 4, ...} into keyword args string "n=4, ..."
+        # We use repr() to ensure strings get quotes, lists are formatted correctly, etc.
+        input_args = ", ".join(f"{k}={repr(v)}" for k, v in input_dict.items())
+
+        # Use repr() on output so a string '9' becomes the string literal '9' in code
+        expected_val = repr(expected_output)
+
+        # Append assertion block
+        assertions.append(
+            f"        # Subtest {i + 1}\n"
+            f"        result = self.solution.{method_name}({input_args})\n"
+            f"        self.assertEqual(result, {expected_val})\n"
+        )
+
+    # 4. Combine signature and body
+    return test_method_signature + "\n".join(assertions)

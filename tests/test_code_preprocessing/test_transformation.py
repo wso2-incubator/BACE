@@ -10,6 +10,7 @@ from common.code_preprocessing.exceptions import (
     CodeTransformationError,
 )
 from common.code_preprocessing.transformation import (
+    build_test_method_from_io,
     extract_class_block,
     extract_first_test_method_code,
     extract_function_with_helpers,
@@ -19,6 +20,7 @@ from common.code_preprocessing.transformation import (
     is_unittest_class,
     remove_if_main_block,
     remove_starter_from_code,
+    setup_unittest_class_from_starter_code,
 )
 
 
@@ -1303,3 +1305,207 @@ class TestBar(unittest.TestCase):
         assert "Method docstring should be kept." in result
         assert "# setup comment" in result
         assert "# inline comment" in result
+
+
+# =============================================================================
+# Tests for setup_unittest_class_from_starter_code
+# =============================================================================
+
+
+class TestSetupUnittestClassFromStarterCode:
+    """Test setup_unittest_class_from_starter_code function."""
+
+    def test_setup_unittest_valid_code(self) -> None:
+        """
+        Verify that a standard starter code snippet produces the correct
+        unittest scaffold with imports and setUp method.
+        """
+        starter_code = """
+class Solution:
+    def solve(self, x: int) -> int:
+        return x + 1
+    """
+
+        result = setup_unittest_class_from_starter_code(starter_code)
+
+        # Assert imports are present
+        assert "import unittest" in result
+        assert "from typing import *" in result
+
+        # Assert class inheritance
+        assert "class TestSolution(unittest.TestCase):" in result
+
+        # Assert setUp structure
+        assert "def setUp(self):" in result
+        assert "self.solution = Solution()" in result
+
+    def test_setup_unittest_different_class_name(self) -> None:
+        """Verify it correctly extracts arbitrary class names."""
+        starter_code = "class Calculator:"
+        result = setup_unittest_class_from_starter_code(starter_code)
+        assert "class TestCalculator(unittest.TestCase):" in result
+        assert "self.solution = Calculator()" in result
+
+    def test_setup_unittest_invalid_code(self) -> None:
+        """Verify it returns the error string when no class is found."""
+        starter_code = "def just_a_function(): pass"
+        result = setup_unittest_class_from_starter_code(starter_code)
+        assert "# Error: Could not parse class name" in result
+
+
+# =============================================================================
+# Tests for build_test_method_from_io
+# =============================================================================
+
+
+class TestBuildTestMethodFromIo:
+    """Test build_test_method_from_io function."""
+
+    def test_build_method_basic_integers(self) -> None:
+        """Test standard integer arguments (checking k=v formatting)."""
+        starter_code = """
+class Solution:
+    def add(self, a: int, b: int) -> int: ...
+    """
+        io_pairs = [{"inputdata": {"a": 1, "b": 2}, "output": 3}]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["C1"])
+
+        # Check method name
+        assert "def test_case_C1(self):" in result
+        # Check execution call
+        assert "result = self.solution.add(a=1, b=2)" in result
+        # Check assertion
+        assert "self.assertEqual(result, 3)" in result
+
+    def test_build_method_strings_with_repr(self) -> None:
+        """
+        Test that string inputs are correctly quoted using repr().
+        If repr() wasn't used, output would be 'a=hello' (variable) instead of 'a="hello"' (string).
+        """
+        starter_code = """
+class Solution:
+    def reverse(self, s: str) -> str: ...
+    """
+        io_pairs = [{"inputdata": {"s": "hello"}, "output": "olleh"}]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["C2"])
+
+        # Inputs should be quoted
+        assert "s='hello'" in result or 's="hello"' in result
+        # Output should be quoted
+        assert "self.assertEqual(result, 'olleh')" in result or '"olleh"' in result
+
+    def test_build_method_complex_types_list(self) -> None:
+        """Test that list/complex types are formatted correctly."""
+        starter_code = """
+class Solution:
+    def sort_list(self, nums: list[int]) -> list[int]: ...
+    """
+        io_pairs = [{"inputdata": {"nums": [3, 1, 2]}, "output": [1, 2, 3]}]
+
+        result = build_test_method_from_io(starter_code, io_pairs, [])
+
+        # Check list formatting
+        assert "nums=[3, 1, 2]" in result
+        assert "self.assertEqual(result, [1, 2, 3])" in result
+        # Check default suffix when ID list is empty
+        assert "def test_case_generated(self):" in result
+
+    def test_build_method_multiple_subtests(self) -> None:
+        """Verify that multiple IO pairs create multiple assertions in one method."""
+        starter_code = """
+class Solution:
+    def is_even(self, n: int) -> bool: ...
+    """
+        io_pairs = [
+            {"inputdata": {"n": 2}, "output": True},
+            {"inputdata": {"n": 3}, "output": False},
+        ]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["P1", "P2"])
+
+        assert "def test_case_P1_P2(self):" in result
+        # Both subtests should be present
+        assert "Subtest 1" in result
+        assert "n=2" in result
+        assert "Subtest 2" in result
+        assert "n=3" in result
+
+    def test_build_method_parse_error(self) -> None:
+        """Verify CodeParsingError is raised if starter code is invalid."""
+        invalid_code = "this is not python code"
+        io_pairs = [{"inputdata": {"x": 1}, "output": 1}]
+
+        with pytest.raises(CodeParsingError) as excinfo:
+            build_test_method_from_io(invalid_code, io_pairs, ["ERR"])
+
+        assert "Could not parse class/method names" in str(excinfo.value)
+
+    def test_build_method_input_name_mismatch_is_ignored(self) -> None:
+        """
+        Verify that the builder essentially ignores key names matching.
+        It blindly trusts the dictionary keys match the function signature.
+        (This confirms behavior, even though it results in runtime errors later).
+        """
+        starter_code = """
+class Solution:
+    def add(self, a, b): ...
+    """
+        # The dictionary has 'x', but function has 'a'.
+        # The builder should just write x=1. Python will raise TypeError at RUNTIME,
+        # but the BUILDER should succeed.
+        io_pairs = [{"inputdata": {"x": 1, "y": 2}, "output": 3}]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["MISMATCH"])
+
+        assert "x=1" in result
+        assert "y=2" in result
+
+    def test_build_method_complex_parameters_list_of_lists(self) -> None:
+        """Test method with complex parameters including List[List[int]]."""
+        starter_code = """
+class Solution:
+    def maxSubarrays(self, n: int, conflictingPairs: List[List[int]]) -> int:
+"""
+        io_pairs = [
+            {"inputdata": {"n": 3, "conflictingPairs": [[1, 2], [2, 3]]}, "output": 2}
+        ]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["MAX_SUB"])
+
+        # Check method name
+        assert "def test_case_MAX_SUB(self):" in result
+        # Check execution call with complex parameters
+        assert (
+            "result = self.solution.maxSubarrays(n=3, conflictingPairs=[[1, 2], [2, 3]])"
+            in result
+        )
+        # Check assertion
+        assert "self.assertEqual(result, 2)" in result
+
+    def test_build_method_stdin_style_input_str(self) -> None:
+        """Test method that takes input as a single string (stdin style)."""
+        starter_code = """
+class Solution:
+    def sol(self, input_str: str) -> str:
+        # Input is provided as a single string.
+"""
+        io_pairs = [
+            {
+                "inputdata": {"input_str": "5 6 5\n1 2\n2 4\n3 1\n3 5\n4 3\n5 2"},
+                "output": "4",
+            }
+        ]
+
+        result = build_test_method_from_io(starter_code, io_pairs, ["STDIN"])
+
+        # Check method name
+        assert "def test_case_STDIN(self):" in result
+        # Check execution call with input_str parameter
+        assert (
+            "result = self.solution.sol(input_str='5 6 5\\n1 2\\n2 4\\n3 1\\n3 5\\n4 3\\n5 2')"
+            in result
+        )
+        # Check assertion
+        assert "self.assertEqual(result, '4')" in result
