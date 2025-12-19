@@ -109,6 +109,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
             f"Generating differential input script for {len(input_dto.passing_differential_test_io_pairs)} existing tests"
         )
         prompt = DIFFERENTIAL_INPUT_GENERATOR_PROMPT.format(
+            question_content=input_dto.question_content,
             code_snippet_P=input_dto.equivalent_code_snippet_1,
             code_snippet_Q=input_dto.equivalent_code_snippet_2,
             current_tests=input_dto.passing_differential_test_io_pairs,
