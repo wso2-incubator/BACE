@@ -8,7 +8,6 @@ based on their probability values.
 
 from unittest.mock import Mock
 
-import numpy as np
 import pytest
 
 from common.coevolution.core.individual import CodeIndividual
@@ -63,7 +62,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test selecting a single parent."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         parents = strategy.select_parents(
             sample_code_population,
             count=1,
@@ -79,7 +80,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test selecting two parents for crossover."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         parents = strategy.select_parents(
             sample_code_population,
             count=2,
@@ -95,7 +98,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test selecting multiple parents (more than 2)."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         count = 5
         with pytest.raises(
             ValueError, match="Population size must be at least equal to count"
@@ -112,7 +117,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that same individual can be selected multiple times (sampling with replacement)."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         # Selecting more parents than population size should now raise an error
         with pytest.raises(
             ValueError, match="Population size must be at least equal to count"
@@ -129,7 +136,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that higher probability individuals are selected more often."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
 
         # Run many selections to verify statistical properties
         num_trials = 1000
@@ -174,7 +183,9 @@ class TestRouletteWheelParentSelection:
             )
         ]
         population = CodePopulation(individuals=individuals)
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         # Selecting more parents than population size should raise an error
         with pytest.raises(
             ValueError, match="Population size must be at least equal to count"
@@ -198,7 +209,9 @@ class TestRouletteWheelParentSelection:
             for i in range(3)
         ]
         population = CodePopulation(individuals=individuals)
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
 
         # Should fall back to uniform random selection
         parents = strategy.select_parents(
@@ -214,7 +227,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that count=0 raises ValueError."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
 
         with pytest.raises(ValueError, match="count must be at least 1"):
             strategy.select_parents(
@@ -229,7 +244,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that negative count raises ValueError."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
 
         with pytest.raises(ValueError, match="count must be at least 1"):
             strategy.select_parents(
@@ -238,20 +255,11 @@ class TestRouletteWheelParentSelection:
                 coevolution_context=mock_coevolution_context,
             )
 
-    def test_empty_population_raises_error(
-        self, mock_coevolution_context: CoevolutionContext
-    ) -> None:
-        """Test that empty population raises ValueError."""
-        # Note: We can't actually create an empty population due to validation,
-        # but we can test the error handling
-        strategy = RouletteWheelParentSelection()
-
-        # This test is skipped because BasePopulation doesn't allow empty initialization
-        pytest.skip("BasePopulation cannot be initialized with empty individuals list")
-
     def test_repr(self) -> None:
         """Test string representation."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         assert repr(strategy) == "RouletteWheelParentSelection()"
 
     def test_returns_individual_objects(
@@ -260,7 +268,9 @@ class TestRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that selected parents are Individual objects, not indices."""
-        strategy = RouletteWheelParentSelection()
+        strategy: RouletteWheelParentSelection[CodeIndividual] = (
+            RouletteWheelParentSelection()
+        )
         parents = strategy.select_parents(
             sample_code_population,
             count=2,
@@ -270,4 +280,5 @@ class TestRouletteWheelParentSelection:
         assert all(isinstance(p, CodeIndividual) for p in parents)
         assert all(hasattr(p, "id") for p in parents)
         assert all(hasattr(p, "probability") for p in parents)
+        assert all(hasattr(p, "snippet") for p in parents)
         assert all(hasattr(p, "snippet") for p in parents)

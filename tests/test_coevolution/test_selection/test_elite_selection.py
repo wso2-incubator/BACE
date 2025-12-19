@@ -89,7 +89,7 @@ class TestTopKEliteSelector:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test selecting top-k elites by probability."""
-        selector = TopKEliteSelector()
+        selector: TopKEliteSelector[CodeIndividual] = TopKEliteSelector()
         elites = selector.select_elites(
             sample_code_population, population_config, mock_coevolution_context
         )
@@ -109,7 +109,7 @@ class TestTopKEliteSelector:
         """Test that empty population returns empty elite list."""
         # Create empty population (now supported)
         empty_pop = CodePopulation(individuals=[])
-        selector:  = TopKEliteSelector()
+        selector: TopKEliteSelector[CodeIndividual] = TopKEliteSelector()
         elites = selector.select_elites(
             empty_pop, population_config, mock_coevolution_context
         )
@@ -123,7 +123,7 @@ class TestTopKEliteSelector:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that TopKEliteSelector works with test populations (generic)."""
-        selector = TopKEliteSelector()
+        selector: TopKEliteSelector[TestIndividual] = TopKEliteSelector()
         elites = selector.select_elites(
             sample_test_population, population_config, mock_coevolution_context
         )
@@ -151,7 +151,7 @@ class TestTopKEliteSelector:
             )
         ]
         population = CodePopulation(individuals=individuals)
-        selector = TopKEliteSelector()
+        selector: TopKEliteSelector[CodeIndividual] = TopKEliteSelector()
 
         elites = selector.select_elites(
             population, population_config, mock_coevolution_context
@@ -163,7 +163,7 @@ class TestTopKEliteSelector:
 
     def test_repr(self) -> None:
         """Test string representation."""
-        selector = TopKEliteSelector()
+        selector: TopKEliteSelector[CodeIndividual] = TopKEliteSelector()
         assert repr(selector) == "TopKEliteSelector()"
 
 
@@ -172,7 +172,9 @@ class TestTestDiversityEliteSelector:
 
     def test_initialization(self) -> None:
         """Test selector initialization with test population key."""
-        selector = TestDiversityEliteSelector("unittest")
+        selector: TestDiversityEliteSelector[TestIndividual] = (
+            TestDiversityEliteSelector("unittest")
+        )
         assert selector.test_population_key == "unittest"
         assert "unittest" in repr(selector)
 
@@ -191,7 +193,9 @@ class TestTestDiversityEliteSelector:
         context = Mock(spec=CoevolutionContext)
         context.interactions = {"unittest": Mock()}
 
-        selector = TestDiversityEliteSelector("unittest")
+        selector: TestDiversityEliteSelector[TestIndividual] = (
+            TestDiversityEliteSelector("unittest")
+        )
         elites = selector.select_elites(empty_pop, population_config, context)
 
         assert len(elites) == 0
