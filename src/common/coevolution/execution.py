@@ -171,6 +171,7 @@ class ExecutionSystem(IExecutionSystem):
             # We strictly assume sandbox_result.test_results[i] corresponds to test_population[i]
             for test_idx, sb_test_res in enumerate(sandbox_result.test_results):
                 # --- 1. Fill Matrix (Index-based) ---
+                # TODO: Confirm the status strings are standardized
                 if getattr(sb_test_res, "status", None) == "passed":
                     observation_matrix[code_idx, test_idx] = 1
 
