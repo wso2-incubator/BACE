@@ -16,7 +16,6 @@ from loguru import logger
 
 import common.coevolution.logging_utils as logging_utils
 from common.coevolution.bayesian_system import BayesianSystem
-from common.coevolution.deprecated.orchestrator_builder import OrchestratorBuilder
 from common.coevolution.execution import ExecutionSystem
 from common.coevolution.feedback import CodeFeedbackGenerator, TestFeedbackGenerator
 from common.coevolution.lcb_dataset import (
@@ -27,6 +26,7 @@ from common.coevolution.lcb_dataset import (
     load_code_generation_dataset,
 )
 from common.coevolution.llm_operators import CodeLLMOperator, TestLLMOperator
+from common.coevolution.orchestrator_builder import OrchestratorBuilder
 from common.coevolution.pareto_system import ParetoSystem
 from common.coevolution.probability_assigner import ProbabilityAssigner
 from common.coevolution.selection_strategy import SelectionStrategy
