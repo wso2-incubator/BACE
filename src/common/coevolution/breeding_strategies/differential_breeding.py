@@ -52,7 +52,7 @@ class IFunctionallyEquivalentCodeSelector(Protocol):
     ) -> list[FunctionallyEquivGroup]: ...
 
 
-class DivergenceResult(TypedDict):
+class DifferentialResult(TypedDict):
     """Represents a single input case where two code snippets behaved differently."""
 
     input_data: dict[str, Any]
@@ -60,16 +60,16 @@ class DivergenceResult(TypedDict):
     output_b: Any
 
 
-class IDivergenceFinder(Protocol):
+class IDifferentialFinder(Protocol):
     """Protocol for the execution sandbox."""
 
-    def find_divergence(
+    def find_differential(
         self,
         code_a_snippet: str,
         code_b_snippet: str,
         input_generator_script: str,
         limit: int = 10,
-    ) -> list[DivergenceResult]:
+    ) -> list[DifferentialResult]:
         """
         Executes the generator script and the two code snippets.
         Returns a list of all found divergences (input, output_a, output_b).
@@ -86,7 +86,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
     def __init__(
         self,
         operator: DifferentialLLMOperator,
-        divergence_finder: IDivergenceFinder,
+        differential_finder: IDifferentialFinder,
         op_rates_config: OperatorRatesConfig,
         pop_config: PopulationConfig,
         probability_assigner: IProbabilityAssigner,
@@ -97,7 +97,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         super().__init__(op_rates_config, max_workers)
 
         self.operator = operator
-        self.divergence_finder = divergence_finder
+        self.differential_finder = differential_finder
         self.pop_config = pop_config
         self.probability_assigner = probability_assigner
         self.parent_selector = parent_selector
@@ -180,8 +180,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             logger.warning(f"Differential discovery operator failed: {e}")
             return []
 
-        # Run Divergence Finder (Returns a LIST now)
-        divergences = self.divergence_finder.find_divergence(
+        # Run Differential Finder (Returns a LIST now)
+        divergences = self.differential_finder.find_differential(
             code_a.snippet, code_b.snippet, script
         )
 
@@ -250,7 +250,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         context: CoevolutionContext,
         code_a: CodeIndividual,
         code_b: CodeIndividual,
-        divergences: list[DivergenceResult],
+        divergences: list[DifferentialResult],
     ) -> list[TestIndividual]:
         """
         Creates two competing TestIndividuals.

@@ -5,9 +5,9 @@ import pytest
 
 from common.coevolution.breeding_strategies.differential_breeding import (
     DifferentialBreedingStrategy,
-    DivergenceResult,
+    DifferentialResult,
     FunctionallyEquivGroup,
-    IDivergenceFinder,
+    IDifferentialFinder,
     IFunctionallyEquivalentCodeSelector,
 )
 from common.coevolution.core.individual import CodeIndividual, TestIndividual
@@ -45,9 +45,9 @@ def mock_operator() -> MagicMock:
 
 
 @pytest.fixture
-def mock_divergence_finder() -> MagicMock:
-    """Returns a mock that satisfies the IDivergenceFinder protocol."""
-    return MagicMock(spec=IDivergenceFinder)
+def mock_differential_finder() -> MagicMock:
+    """Returns a mock that satisfies the IDifferentialFinder protocol."""
+    return MagicMock(spec=IDifferentialFinder)
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def mock_context() -> MagicMock:
 @pytest.fixture
 def strategy(
     mock_operator: MagicMock,
-    mock_divergence_finder: MagicMock,
+    mock_differential_finder: MagicMock,
     mock_func_eq_selector: MagicMock,
 ) -> DifferentialBreedingStrategy:
     """
@@ -92,14 +92,14 @@ def strategy(
     # We cast mocks to their concrete types to satisfy the strategy constructor
     return DifferentialBreedingStrategy(
         operator=cast(DifferentialLLMOperator, mock_operator),
-        divergence_finder=cast(IDivergenceFinder, mock_divergence_finder),
+        differential_finder=cast(IDifferentialFinder, mock_differential_finder),
         op_rates_config=OperatorRatesConfig(
             operation_rates={OPERATION_DISCOVERY: 0.8, OPERATION_CROSSOVER: 0.2}
         ),
         pop_config=PopulationConfig(
             initial_population_size=10, initial_prior=0.5, max_population_size=20
         ),
-        probability_assigner=MagicMock(spec=IProbabilityAssigner),
+        probability_assigner=MagicMock(),
         parent_selector=MagicMock(spec=IParentSelectionStrategy),
         functionally_equivalent_code_selector=cast(
             IFunctionallyEquivalentCodeSelector, mock_func_eq_selector
@@ -159,7 +159,7 @@ def test_breed_via_discovery_success(
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
     mock_operator: MagicMock,
-    mock_divergence_finder: MagicMock,
+    mock_differential_finder: MagicMock,
 ) -> None:
     """
     Verify the full discovery pipeline:
@@ -181,13 +181,13 @@ def test_breed_via_discovery_success(
     )
 
     # Mock Divergence Finder returning 1 divergence
-    divergence_result: DivergenceResult = {
+    divergence_result: DifferentialResult = {
         "input_data": {"x": 1},
         "output_a": 10,
         "output_b": 20,
     }
-    # find_divergence returns a LIST of results
-    mock_divergence_finder.find_divergence.return_value = [divergence_result]
+    # find_differential returns a LIST of results
+    mock_differential_finder.find_differential.return_value = [divergence_result]
 
     # Mock Method Builder
     mock_operator.get_test_method_from_io.return_value = "def test_diff(): ..."
@@ -219,7 +219,7 @@ def test_breed_via_discovery_retries_on_failure(
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
     mock_operator: MagicMock,
-    mock_divergence_finder: MagicMock,
+    mock_differential_finder: MagicMock,
 ) -> None:
     """
     Verify the loop retries if:
@@ -242,12 +242,12 @@ def test_breed_via_discovery_retries_on_failure(
     # Setup Finder:
     # Attempt 1: Returns empty list [] (No divergence) -> Strategy should retry
     # Attempt 2: Returns valid list -> Strategy succeeds
-    divergence_result: DivergenceResult = {
+    divergence_result: DifferentialResult = {
         "input_data": {"x": 2},
         "output_a": 1,
         "output_b": 2,
     }
-    mock_divergence_finder.find_divergence.side_effect = [
+    mock_differential_finder.find_differential.side_effect = [
         [],  # Fail
         [divergence_result],  # Success
     ]
@@ -256,7 +256,7 @@ def test_breed_via_discovery_retries_on_failure(
 
     assert len(offspring) == 2
     # Verify finder was called twice because the first time yielded no results
-    assert mock_divergence_finder.find_divergence.call_count == 2
+    assert mock_differential_finder.find_differential.call_count == 2
 
 
 def test_breed_via_crossover(
@@ -289,8 +289,7 @@ def test_breed_via_crossover(
     )
 
     # Configure probability assigner to return a float
-    prob_assigner_mock = cast(MagicMock, strategy.probability_assigner)
-    prob_assigner_mock.assign_probability.return_value = 0.7
+    strategy.probability_assigner.assign_probability = MagicMock(return_value=0.7)  # type: ignore[method-assign]
 
     # Call the private handler directly for unit testing
     offspring = strategy._breed_via_crossover(cast(CoevolutionContext, mock_context))
@@ -333,8 +332,7 @@ def test_breed_flow_switching(
     )
 
     # Configure probability assigner to return a float
-    prob_assigner_mock = cast(MagicMock, strategy.probability_assigner)
-    prob_assigner_mock.assign_probability.return_value = 0.7
+    strategy.probability_assigner.assign_probability = MagicMock(return_value=0.7)  # type: ignore[method-assign]
 
     # Run breed requesting 1 offspring
     # Discovery will return [], remaining_needed = 1.
