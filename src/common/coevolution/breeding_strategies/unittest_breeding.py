@@ -8,7 +8,6 @@ It inherits the robust parallel breeding loop, circuit breakers, and batching lo
 from __future__ import annotations
 
 import random
-from typing import Protocol
 
 from loguru import logger
 
@@ -35,21 +34,6 @@ from ..operators.unittest_llm_operator import (
 from .base_breeding import BaseBreedingStrategy
 
 
-class ITestFeedbackSelector(Protocol):
-    """Protocol for generating feedback for test edits."""
-
-    def select_feedback(
-        self,
-        coevolution_context: CoevolutionContext,
-        test_individual: TestIndividual,
-    ) -> str | None:
-        """
-        Generate feedback for editing a test case.
-        Could be based on code coverage, redundancy, or ability to kill mutants.
-        """
-        ...
-
-
 class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
     """
     Concrete UnittestBreedingStrategy using a UnittestLLMOperator.
@@ -62,7 +46,6 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         pop_config: PopulationConfig,
         probability_assigner: IProbabilityAssigner,
         parent_selector: IParentSelectionStrategy[TestIndividual],
-        feedback_selector: ITestFeedbackSelector,
         max_workers: int = 1,
     ) -> None:
         # Initialize Base Class (sets up op_rates, max_workers, and strategies dict)
@@ -72,7 +55,6 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self.pop_config = pop_config
         self.probability_assigner = probability_assigner
         self.parent_selector = parent_selector
-        self.feedback_selector = feedback_selector
 
         # Validate operations
         for op in self.op_rates_config.operation_rates.keys():
