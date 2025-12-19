@@ -16,7 +16,7 @@ from common.coevolution.core.interfaces import (
     Problem,
     Test,
 )
-from common.coevolution.orchestrator_builder import OrchestratorBuilder
+from common.coevolution.deprecated.orchestrator_builder import OrchestratorBuilder
 
 
 class TestOrchestratorBuilder:

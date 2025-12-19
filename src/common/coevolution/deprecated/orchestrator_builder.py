@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from .core.interfaces import (
+from ..core.interfaces import (
     BayesianConfig,
     CodePopulationConfig,
     EvolutionConfig,
@@ -34,8 +34,8 @@ from .core.interfaces import (
 )
 
 if TYPE_CHECKING:
-    from .core.individual import CodeIndividual, TestIndividual
-    from .core.orchestrator import Orchestrator
+    from ..core.individual import CodeIndividual, TestIndividual
+    from ..core.orchestrator import Orchestrator
 
 
 class OrchestratorBuilder:
@@ -567,7 +567,7 @@ class OrchestratorBuilder:
         self._validate()
 
         # Import here to avoid circular dependency
-        from .core.orchestrator import Orchestrator
+        from ..core.orchestrator import Orchestrator
 
         # All fields are guaranteed to be non-None after _validate()
         assert self._evo_config is not None
