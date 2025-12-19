@@ -23,7 +23,9 @@ from ..core.interfaces import (
 )
 from ..prompt_templates import (
     CROSSOVER_TEST,
-    EDIT_TEST,
+    EDIT_ALL_FAILING_UNITTEST,
+    EDIT_ALL_PASSING_UNITTEST,
+    EDIT_DISCRIMINATING_UNITTEST,
     INITIAL_TEST_AGENT_CODER_STYLE,
     MUTATE_TEST,
 )
@@ -44,9 +46,8 @@ class UnittestCrossoverInput(BaseOperatorInput):
 @dataclass(frozen=True)
 class UnittestEditInput(BaseOperatorInput):
     parent_snippet: str
-    passing_code_snippet: str
-    failing_code_snippet: str
-    failing_code_trace: str
+    passing_code_snippets: list[str]  # snippets only
+    failing_code_snippets_with_traces: list[tuple[str, str]]  # (snippet, trace)
 
 
 class UnittestLLMOperator(BaseLLMOperator, IOperator):
@@ -159,18 +160,56 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_edit(self, input_dto: UnittestEditInput) -> OperatorOutput:
         logger.debug("Performing unittest edit operation")
-        prompt = EDIT_TEST.format(
-            question_content=input_dto.question_content,
-            passing_code_snippet=input_dto.passing_code_snippet,
-            failing_code_snippet=input_dto.failing_code_snippet,
-            failing_code_trace=input_dto.failing_code_trace,
-        )
+
+        edit_operation_type: str
+        if (
+            len(input_dto.passing_code_snippets) > 0
+            and len(input_dto.failing_code_snippets_with_traces) > 0
+        ):
+            edit_operation_type = "discriminating"
+            prompt = EDIT_DISCRIMINATING_UNITTEST.format(
+                question_content=input_dto.question_content,
+                passing_code_snippet=input_dto.passing_code_snippets[0],
+                failing_code_snippet=input_dto.failing_code_snippets_with_traces[0][0],
+                failing_code_trace=input_dto.failing_code_snippets_with_traces[0][1],
+            )
+
+        elif len(input_dto.passing_code_snippets) == 0:
+            edit_operation_type = "all-failing"
+            prompt = EDIT_ALL_FAILING_UNITTEST.format(
+                question_content=input_dto.question_content,
+                failing_code_snippet_P=input_dto.failing_code_snippets_with_traces[0][
+                    0
+                ],
+                failing_code_trace_P=input_dto.failing_code_snippets_with_traces[0][1],
+                failing_code_snippet_Q=input_dto.failing_code_snippets_with_traces[1][
+                    0
+                ],
+                failing_code_trace_Q=input_dto.failing_code_snippets_with_traces[1][1],
+            )
+
+        elif len(input_dto.failing_code_snippets_with_traces) == 0:
+            edit_operation_type = "all-passing"
+            prompt = EDIT_ALL_PASSING_UNITTEST.format(
+                question_content=input_dto.question_content,
+                passing_code_snippet_P=input_dto.passing_code_snippets[0],
+                passing_code_snippet_Q=input_dto.passing_code_snippets[1],
+            )
+
+        else:
+            edit_operation_type = "unknown"
+
+        logger.debug(f"Using edit operation type: {edit_operation_type}")
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
         edited = self._extract_first_test_method(extracted)
         logger.debug(f"Generated edited child with length {len(edited)}")
         return OperatorOutput(
-            results=[OperatorResult(snippet=edited, metadata={"operation": "edit"})]
+            results=[
+                OperatorResult(
+                    snippet=edited, metadata={"operation": edit_operation_type}
+                )
+            ]
         )
 
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:

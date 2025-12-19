@@ -337,7 +337,7 @@ MUTATE_TEST = (
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
-EDIT_TEST = (
+EDIT_DISCRIMINATING_UNITTEST = (
     _TESTER_ROLE + "\n\n"
     "<problem>\n"
     "{question_content}\n"
@@ -358,6 +358,53 @@ EDIT_TEST = (
     "The <current_test> passes for the <passing_code> but fails for the <failing_code>.\n"
     "The <current_test> could not find the bug in the <passing_code>. However, the <passing_code> has a bug that the test did not catch.\n"
     "Your goals is to edit the <current_test> so that it can find bugs in both <passing_code> and <failing_code>.\n"
+    "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
+)
+
+EDIT_ALL_PASSING_UNITTEST = (
+    _TESTER_ROLE + "\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n"
+    "<current_test>\n"
+    "`python\n{parent}\n`\n"
+    "</current_test>\n\n"
+    "<passing_code version='P'>\n"
+    "{passing_code_snippet_P}\n"
+    "</passing_code>\n\n"
+    "<passing_code version='Q'>\n"
+    "{passing_code_snippet_Q}\n"
+    "<task>\n"
+    "The <current_test> could not discriminate between the two passing code versions <passing_code version='P'> and <passing_code version='Q'>.\n"
+    "Your goal is to edit the <current_test> so that it can discriminate between the two passing code versions.\n"
+    "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
+)
+
+EDIT_ALL_FAILING_UNITTEST = (
+    _TESTER_ROLE + "\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n"
+    "<current_test>\n"
+    "`python\n{parent}\n`\n"
+    "</current_test>\n\n"
+    "<failing_code version='P'>\n"
+    "{failing_code_snippet_P}\n"
+    "</failing_code>\n\n"
+    "<error_trace version='P'>\n"
+    "{failing_code_trace_P}\n"
+    "</error_trace>\n\n"
+    "<failing_code version='Q'>\n"
+    "{failing_code_snippet_Q}\n"
+    "</failing_code>\n\n"
+    "<error_trace version='Q'>\n"
+    "{failing_code_trace_Q}\n"
+    "</error_trace>\n\n"
+    "<task>\n"
+    "The <current_test> failed for both <failing_code version='P'> and <failing_code version='Q'>.\n"
+    "Hence, the <current_test> could not discriminate between the two failing code versions <failing_code version='P'> and <failing_code version='Q'>.\n"
+    "Your goal is to edit the <current_test> so that it can discriminate between the two failing code versions.\n"
+    "You are given the error traces for both failing code versions to help you understand why they are failing.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
