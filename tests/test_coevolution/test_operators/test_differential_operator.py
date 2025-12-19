@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
