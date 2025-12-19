@@ -109,14 +109,17 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 op not in self.operator.supported_operations()
                 and op != OPERATION_DISCOVERY
             ):
-                # OPERATION_DISCOVERY is handled via inputs mapping to supported operations
-                pass
+                raise ValueError(
+                    f"DifferentialBreedingStrategy: Operation '{op}' not supported by the operator."
+                )
 
         # Register Handlers
         self._strategies = {
             OPERATION_DISCOVERY: self._breed_via_discovery,
             OPERATION_CROSSOVER: self._breed_via_crossover,
         }
+
+        logger.info("DifferentialBreedingStrategy initialized.")
 
     def initialize_individuals(
         self, problem: Problem
@@ -136,7 +139,6 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         if test_class_block is None:
             logger.error("Failed to setup initial differential test class block.")
             return [], None
-
         return [], test_class_block
 
     # --- Handlers ---
@@ -151,11 +153,16 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         valid_groups = [g for g in groups if len(g.code_individuals) >= 2]
 
         if not valid_groups:
+            logger.debug(
+                "No valid functionally equivalent code groups found for differential discovery."
+            )
             return []
 
         group = random.choice(valid_groups)
         code_a, code_b = random.sample(group.code_individuals, 2)
-
+        logger.debug(
+            f"Selected Code Individuals {code_a.id} and {code_b.id} for differential discovery."
+        )
         # Context building
         diff_tests = group.passing_test_individuals.get("differential", [])
         passing_io_pairs: list[DifferentialInputOutput] = []
@@ -186,10 +193,22 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         )
 
         if not divergences:
+            logger.warning("No divergences found between selected code individuals.")
             return []
 
+        parent_probs = []
+        for _, test_inds in group.passing_test_individuals.items():
+            for ind in test_inds:
+                parent_probs.append(ind.probability)
+
+        prob: float = self.probability_assigner.assign_probability(
+            operation=OPERATION_DISCOVERY,
+            parent_probs=parent_probs,
+            initial_prior=self.pop_config.initial_prior,
+        )
+
         # Create Aggregated Individuals (All pairs in one test)
-        return self._create_divergence_tests(context, code_a, code_b, divergences)
+        return self._create_divergence_tests(context, code_a, code_b, divergences, prob)
 
     def _breed_via_crossover(self, context: CoevolutionContext) -> list[TestIndividual]:
         # ... (Crossover logic remains identical, it handles lists of IO pairs naturally) ...
@@ -199,6 +218,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             coevolution_context=context,
         )
         if len(parents) < 2:
+            logger.warning("Not enough parents selected for differential crossover.")
             return []
 
         p1, p2 = parents[0], parents[1]
@@ -206,6 +226,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         p2_io = p2.metadata.get("io_pairs", [])
 
         if not p1_io or not p2_io:
+            logger.warning("Selected parents lack IO pair metadata for crossover.")
             return []
 
         dto = DifferentialCrossoverInput(
@@ -220,7 +241,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         try:
             output = self.operator.apply(dto)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Differential crossover operator failed: {e}")
             return []
 
         offspring = []
@@ -251,6 +273,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         code_a: CodeIndividual,
         code_b: CodeIndividual,
         divergences: list[DifferentialResult],
+        probability: float,
     ) -> list[TestIndividual]:
         """
         Creates two competing TestIndividuals.
@@ -286,7 +309,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
             ind = TestIndividual(
                 snippet=snippet,
-                probability=self.pop_config.initial_prior,
+                probability=probability,
                 creation_op=OPERATION_DISCOVERY,
                 generation_born=context.code_population.generation + 1,
                 parents={"code": [winner.id, loser.id], "test": []},
