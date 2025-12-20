@@ -1,11 +1,17 @@
 """
-script to run the coevolution orchestrator on LiveCodeBench problems.
+Script to run the coevolution orchestrator on LiveCodeBench problems.
 
-This script demonstrates how to use the new modular architecture with:
-- OrchestratorBuilder for clean dependency injection
-- All new core implementations (BayesianSystem, ExecutionSystem, etc.)
-- LLM-based genetic operators
-- LCB dataset integration
+This script demonstrates the new profile-based orchestrator builder pattern:
+- Profile factory functions for creating standard configurations
+- OrchestratorBuilder with fluent API for flexible assembly
+- Multiple test population types (unittest, differential, public)
+- Clean separation of concerns via dependency injection
+
+The new architecture supports:
+- Multiple evolved test populations with different strategies
+- Configurable breeding, selection, and Bayesian parameters per population
+- Easy customization through profile factories
+- Type-safe configuration with comprehensive validation
 """
 
 from datetime import datetime
@@ -17,7 +23,6 @@ from loguru import logger
 import common.coevolution.logging_utils as logging_utils
 from common.coevolution.bayesian_system import BayesianSystem
 from common.coevolution.execution import ExecutionSystem
-from common.coevolution.feedback import CodeFeedbackGenerator, TestFeedbackGenerator
 from common.coevolution.lcb_dataset import (
     Difficulty,
     LCBCodeGenerationProblem,
@@ -25,11 +30,14 @@ from common.coevolution.lcb_dataset import (
     LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
-from common.coevolution.llm_operators import CodeLLMOperator, TestLLMOperator
-from common.coevolution.orchestrator_builder import OrchestratorBuilder
-from common.coevolution.pareto_system import ParetoSystem
-from common.coevolution.probability_assigner import ProbabilityAssigner
-from common.coevolution.selection_strategy import SelectionStrategy
+from common.coevolution.orchestrator_builder import (
+    OrchestratorBuilder,
+    build_orchestrator_from_config,
+    create_default_code_profile,
+    create_differential_test_profile,
+    create_public_test_profile,
+    create_unittest_test_profile,
+)
 from common.llm_client import create_llm_client
 from common.sandbox import create_safe_test_environment
 
@@ -108,164 +116,199 @@ def main(
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
             logger.info(f"Running coevolution on problem ID: {problem.question_id}")
             logging_utils.log_problem(problem)
+
             # ====================================
-            # Step 3: Instantiate Components
+            # Step 3: Create Infrastructure Components
             # ====================================
-            logger.info("Instantiating coevolution components...")
-
-            # LLM Operators
-            code_operator = CodeLLMOperator(llm=llm_client, problem=problem)
-            test_operator = TestLLMOperator(llm=llm_client, problem=problem)
-
-            # Selection Strategies
-            code_selector = SelectionStrategy("roulette_wheel")
-            test_selector = SelectionStrategy("roulette_wheel")
-
-            # Probability Assigners
-            code_prob_assigner = ProbabilityAssigner("min")
-            test_prob_assigner = ProbabilityAssigner("min")
+            logger.info("Creating infrastructure components...")
 
             # Execution System
             execution_system = ExecutionSystem(
-                enable_multiprocessing=True, num_workers=12
+                sandbox=sandbox,
+                enable_multiprocessing=True,
+                num_workers=12,
             )
 
-            # Bayesian Systems (same implementation for code and test)
-            code_bayesian_system = BayesianSystem()
-            test_bayesian_system = BayesianSystem()
-
-            # Pareto System
-            pareto = ParetoSystem()
+            # Bayesian System (unified for all populations)
+            bayesian_system = BayesianSystem()
 
             # Test Block Rebuilder
             test_block_rebuilder = LCBTestBlockRebuilder()
 
-            # Feedback Generators
-            code_feedback_gen = CodeFeedbackGenerator()
-            test_feedback_gen = TestFeedbackGenerator()
-
             # Dataset Test Block Builder
             dataset_test_block_builder = LCBDatasetTestBlockBuilder()
 
-            logger.info("All components instantiated successfully")
+            logger.info("Infrastructure components created successfully")
 
             # ====================================
-            # Step 4: Build Orchestrator
+            # Step 4: Create Population Profiles
             # ====================================
-            logger.info("Building orchestrator with configuration...")
+            logger.info("Creating population profiles using factory functions...")
 
-            orchestrator = (
+            # Code Profile: Variable-size population with diversity-aware selection
+            code_profile = create_default_code_profile(
+                llm_client=llm_client,
+                sandbox=sandbox,
+                initial_prior=0.2,
+                initial_population_size=10,
+                max_population_size=15,
+                offspring_rate=0.8,
+                elitism_rate=0.3,
+                mutation_rate=0.2,
+                crossover_rate=0.2,
+                edit_rate=0.6,
+                max_workers=10,  # Parallel breeding
+                diversity_enabled=True,
+            )
+
+            # Unittest Profile: Fixed-size population with discrimination-driven edit
+            unittest_profile = create_unittest_test_profile(
+                llm_client=llm_client,
+                initial_prior=0.2,
+                initial_population_size=20,
+                max_population_size=20,  # Fixed size
+                offspring_rate=0.8,
+                elitism_rate=0.4,
+                mutation_rate=0.3,
+                crossover_rate=0.2,
+                edit_rate=0.5,
+                alpha=0.01,
+                beta=0.2,
+                gamma=0.2,
+                learning_rate=0.05,
+                max_workers=10,
+                diversity_enabled=True,
+            )
+
+            # Differential Profile: Bootstrap from empty with discovery-based growth
+            differential_profile = create_differential_test_profile(
+                llm_client=llm_client,
+                sandbox=sandbox,
+                initial_prior=0.5,
+                initial_population_size=0,  # Bootstrap mode
+                max_population_size=10,
+                offspring_rate=0.5,  # Aggressive growth
+                elitism_rate=0.3,
+                discovery_rate=0.8,  # Discovery finds divergent code pairs
+                crossover_rate=0.2,
+                alpha=0.05,  # Lower reliability than unittest
+                beta=0.2,
+                gamma=0.2,
+                learning_rate=0.05,
+                max_workers=1,
+                diversity_enabled=True,
+            )
+
+            # Public Test Profile: Ground-truth anchoring tests
+            public_profile = create_public_test_profile(
+                alpha=0.001,  # Very high reliability
+                beta=0.1,
+                gamma=0.1,
+                learning_rate=0.05,
+            )
+
+            logger.info("All profiles created successfully")
+            logger.info(
+                f"  Code: {code_profile.population_config.initial_population_size} → "
+                f"{code_profile.population_config.max_population_size} individuals"
+            )
+            logger.info(
+                f"  Unittest: {unittest_profile.population_config.initial_population_size} tests (fixed)"
+            )
+            logger.info(
+                f"  Differential: {differential_profile.population_config.initial_population_size} → "
+                f"{differential_profile.population_config.max_population_size} tests (bootstrap)"
+            )
+
+            # ====================================
+            # Step 5: Build Orchestrator Configuration
+            # ====================================
+            logger.info("Building orchestrator configuration...")
+
+            config = (
                 OrchestratorBuilder()
-                # Evolution configuration
-                .with_evolution_config(
-                    num_generations=5,  # Small number for quick testing
-                    random_seed=42,
-                    max_workers=12,
-                )
-                # Code population configuration
-                .with_code_population_config(
-                    initial_prior=0.2,
-                    initial_population_size=10,
-                    max_population_size=15,
-                    elitism_rate=0.5,
-                    offspring_rate=0.75,
-                )
-                # Test population configuration
-                .with_test_population_config(
-                    initial_prior=0.2,
-                    initial_population_size=20,
-                )
-                # Code operator rates
-                .with_code_operator_rates(
-                    crossover_rate=0.2,
-                    mutation_rate=0.2,
-                    edit_rate=0.8,
-                )
-                # Test operator rates
-                .with_test_operator_rates(
-                    crossover_rate=0.5,
-                    mutation_rate=0.2,
-                    edit_rate=0.5,
-                )
-                # Bayesian configuration
-                .with_bayesian_config(
-                    alpha=0.01,  # P(pass | code correct, test incorrect)
-                    beta=0.2,  # P(pass | code incorrect, test correct)
-                    gamma=0.2,  # P(pass | code incorrect, test incorrect)
-                    learning_rate=0.05,
-                )
-                # Problem and sandbox
-                .with_problem(problem)
-                .with_sandbox(sandbox)
-                # Operators
-                .with_code_operator(code_operator)
-                .with_test_operator(test_operator)
-                # Selection strategies
-                .with_code_selector(code_selector)
-                .with_test_selector(test_selector)
-                # Probability assigners
-                .with_code_prob_assigner(code_prob_assigner)
-                .with_test_prob_assigner(test_prob_assigner)
-                # Systems
+                .with_evolution_config(num_generations=5)
+                .with_code_profile(code_profile)
+                .add_test_profile("unittest", unittest_profile)
+                .add_test_profile("differential", differential_profile)
+                .with_public_test_profile(public_profile)
                 .with_execution_system(execution_system)
-                .with_code_bayesian_system(code_bayesian_system)
-                .with_test_bayesian_system(test_bayesian_system)
-                .with_pareto(pareto)
-                # Feedback and rebuilders
+                .with_bayesian_system(bayesian_system)
                 .with_test_block_rebuilder(test_block_rebuilder)
-                .with_code_feedback_gen(code_feedback_gen)
-                .with_test_feedback_gen(test_feedback_gen)
                 .with_dataset_test_block_builder(dataset_test_block_builder)
                 .build()
             )
 
-            logger.info("Orchestrator built successfully")
+            logger.info("Configuration validated and built successfully")
 
             # ====================================
-            # Step 5: Run Coevolution
+            # Step 6: Create Orchestrator
+            # ====================================
+            orchestrator = build_orchestrator_from_config(config)
+            logger.info("Orchestrator created successfully")
+
+            # ====================================
+            # Step 7: Run Coevolution
             # ====================================
             logger.info("Starting coevolution run...")
-            code_population, test_population = orchestrator.run()
+            code_population, evolved_test_populations = orchestrator.run(problem)
 
             # ====================================
-            # Step 6: Display Results
+            # Step 8: Display Results
             # ====================================
             best_code = code_population.get_best_individual()
-            best_test = test_population.get_best_individual()
 
             if best_code:
                 logger.info(f"Best code probability: {best_code.probability:.4f}")
                 logger.info(f"Best code ID: {best_code.id}")
 
-            if best_test:
-                logger.info(f"Best test probability: {best_test.probability:.4f}")
-                logger.info(f"Best test ID: {best_test.id}")
-
             logger.info(f"Final code population size: {code_population.size}")
-            logger.info(f"Final test population size: {test_population.size}")
             logger.info(
                 f"Code population avg probability: {code_population.compute_average_probability():.4f}"
             )
-            logger.info(
-                f"Test population avg probability: {test_population.compute_average_probability():.4f}"
-            )
 
-            # log best solutions
-            logging_utils.log_subsection_header("INFO", "BEST SOLUTION")
+            # Display results for each evolved test population
+            for test_type, test_population in evolved_test_populations.items():
+                best_test = test_population.get_best_individual()
+
+                if best_test:
+                    logger.info(
+                        f"Best {test_type} test probability: {best_test.probability:.4f}"
+                    )
+                    logger.info(f"Best {test_type} test ID: {best_test.id}")
+
+                logger.info(
+                    f"Final {test_type} population size: {test_population.size}"
+                )
+                logger.info(
+                    f"{test_type} population avg probability: "
+                    f"{test_population.compute_average_probability():.4f}"
+                )
+
+            # Log best solutions
+            logging_utils.log_subsection_header("INFO", "BEST CODE SOLUTION")
             if best_code:
                 logger.info(f"ID: {best_code.id}")
                 logger.info(best_code.snippet)
             else:
                 logger.info("No code solution found")
 
-            logging_utils.log_subsection_header("INFO", "BEST TEST CASE")
-            if best_test:
-                logger.info(best_test.snippet)
-            else:
-                logger.info("No test case found")
+            # Log best tests for each type
+            for test_type, test_population in evolved_test_populations.items():
+                best_test = test_population.get_best_individual()
+                logging_utils.log_subsection_header(
+                    "INFO", f"BEST {test_type.upper()} TEST CASE"
+                )
+                if best_test:
+                    logger.info(f"ID: {best_test.id}")
+                    logger.info(best_test.snippet)
+                else:
+                    logger.info(f"No {test_type} test case found")
 
-            logging_utils.log_subsection_header("INFO", "TEST CLASS BLOCK")
-            logger.info(test_population.test_class_block)
+                logging_utils.log_subsection_header(
+                    "INFO", f"{test_type.upper()} TEST CLASS BLOCK"
+                )
+                logger.info(test_population.test_class_block)
 
     logging_utils.log_section_header("INFO", "END OF EXPERIMENT")
 
