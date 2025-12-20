@@ -44,6 +44,7 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning(
                 "Input generator script produced invalid Python code. No test inputs generated."
             )
+            logger.debug(f"Invalid generator script:\n{generator_script}")
             return []
 
         output = self.sandbox.execute_code(generator_script).output.strip()
@@ -55,6 +56,7 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning(
                 f"Failed to parse input generator output: {e}. No test inputs generated."
             )
+            logger.debug(f"Generator output was:\n{output}")
             return []
 
     def find_differential(
@@ -77,9 +79,9 @@ class DifferentialFinder(IDifferentialFinder):
             if code_a_output != code_b_output:
                 logger.debug(f"Test Input {idx + 1}:\n")
                 logger.debug("Discrepancy found!")
-                logger.debug("Test Input:", ti)
-                logger.debug("Code 'a' Output:", code_a_output)
-                logger.debug("Code 'b' Output:", code_b_output)
+                logger.debug(f"Test Input:\n{ti}")
+                logger.debug(f"Code 'a' Output: {code_a_output}")
+                logger.debug(f"Code 'b' Output: {code_b_output}")
                 found_divergences.append(
                     DifferentialResult(
                         input_data=ti,

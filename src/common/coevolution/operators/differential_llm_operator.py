@@ -114,6 +114,8 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
             code_snippet_Q=input_dto.equivalent_code_snippet_2,
             current_tests=input_dto.passing_differential_test_io_pairs,
         )
+
+        logger.debug(f"PROMPT:\n{prompt}")
         logger.debug(f"Generated prompt with length {len(prompt)}")
 
         llm_response = self._llm.generate(prompt)
@@ -126,7 +128,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
             f"\nprint(generate_test_inputs({input_dto.num_inputs_to_generate}))"
         )
         logger.debug(f"Final generated script with length {len(generated_script)}")
-
+        logger.debug(f"Generated differential input script:\n{generated_script}")
         result = OperatorOutput(results=[OperatorResult(snippet=generated_script)])
         logger.info("Successfully generated differential input script")
         return result
@@ -215,9 +217,6 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
                 raise UnsupportedOperatorInput(
                     type(input_dto), getattr(input_dto, "operation", None)
                 )
-        logger.info(
-            f"Successfully applied operation '{operation}', produced {len(result.results)} results"
-        )
         return result
 
 

@@ -1,57 +1,134 @@
-class Solution:
-    def sol(self, input_str: str) -> str:
-        data = list(map(int, input_str.split()))
-        it = iter(data)
-        try:
-            N = next(it)
-        except StopIteration:
-            return "0"
-        A = [next(it) for _ in range(N)]
-        B = [next(it) for _ in range(N)]
-        C = [next(it) for _ in range(N)]
-        mismatches = [i for i in range(N) if A[i] != B[i]]
-        m = len(mismatches)
-        if m == 0:
-            return "0"
-        pos = mismatches
-        Apos = [A[p] for p in pos]
-        Cpos = [C[p] for p in pos]
-        init_sum = sum((A[i] * C[i] for i in range(N)))
-        delta = [(1 - 2 * Apos[j]) * Cpos[j] for j in range(m)]
-        total_states = 1 << m
-        sum_delta = [0] * total_states
-        for state in range(1, total_states):
-            lsb = state & -state
-            j = lsb.bit_length() - 1
-            prev = state ^ lsb
-            sum_delta[state] = sum_delta[prev] + delta[j]
-        INF = 10**30
-        dp = [INF] * total_states
-        dp[0] = 0
-        for state in range(total_states):
-            if dp[state] == INF:
-                continue
-            cur_sum = init_sum + sum_delta[state]
-            rem = ~state & total_states - 1
-            s = rem
-            while s:
-                lsb = s & -s
-                j = lsb.bit_length() - 1
-                next_state = state | lsb
-                cost_of_op = cur_sum + delta[j]
-                new_cost = dp[state] + cost_of_op
-                if new_cost < dp[next_state]:
-                    dp[next_state] = new_cost
-                s ^= lsb
-        ans = dp[total_states - 1]
-        return str(ans)
+import random
 
 
-# Execute solution
-sol = Solution()
-print(
-    sol.sol("""20
-1 1 1 1 0 0 1 1 0 0 0 1 0 1 0 1 1 0 1 0
-0 0 0 1 1 1 0 1 1 0 0 0 0 0 0 1 0 1 0 0
-52 73 97 72 54 15 79 67 13 55 65 22 36 90 84 46 1 2 27 8""")
-)
+def generate_test_inputs(num_inputs: int) -> list[dict]:
+    """
+    Generate test inputs for the teeth-fitting problem that aim to differentiate between two solution variants.
+    Each test is returned as a dict with key "input_str" containing the full stdin string.
+
+    Strategy to produce diverse and challenging cases (not hardcoded):
+    - Randomly choose N across small and larger values within constraints.
+    - Choose X from small (1) to very large (1e9).
+    - Generate U_i and D_i with several patterns:
+        * Uniform S = U_i + D_i for all i (already fits) and slight perturbations.
+        * Large values near upper bound to test 64-bit sums.
+        * Alternating large/small to stress adjacency constraints.
+        * Monotonic sequences to force propagation of +/-X constraints.
+        * Randomized with occasional forced impossible H for some S values.
+    - No test is hardcoded; all are generated via pseudorandom choices.
+    """
+    tests = []
+    rng = random.Random(1234567)
+
+    def make_input(N, X, U, D):
+        parts = [f"{N} {X}"]
+        for u, d in zip(U, D):
+            parts.append(f"{u} {d}")
+        return {"input_str": "\n".join(parts) + "\n"}
+
+    for t in range(num_inputs):
+        r = rng.random()
+        if r < 0.5:
+            N = rng.randint(2, 6)
+        elif r < 0.85:
+            N = rng.randint(7, 50)
+        else:
+            N = rng.randint(100, 300)
+        X_choice = rng.choice([1, rng.randint(1, 10), rng.randint(10, 1000), 10**9])
+        X = X_choice
+        U = [0] * N
+        D = [0] * N
+        pattern = rng.choice(
+            [
+                "uniform_S",
+                "all_large",
+                "alternating",
+                "monotonic",
+                "random",
+                "edge_case_small_D_or_U",
+                "tight_X_constraints",
+            ]
+        )
+        if pattern == "uniform_S":
+            S_val = (
+                rng.randint(1, 10**6)
+                if rng.random() < 0.7
+                else rng.randint(10**6, 10**9)
+            )
+            for i in range(N):
+                u = rng.randint(1, S_val - 1) if S_val > 1 else 1
+                U[i] = u
+                D[i] = S_val - u
+            for _ in range(max(1, N // 4)):
+                idx = rng.randrange(N)
+                delta = rng.randint(0, min(10, 10**5))
+                U[idx] = min(10**9, U[idx] + delta)
+                D[idx] = max(1, D[idx] - delta)
+        elif pattern == "all_large":
+            for i in range(N):
+                u = rng.randint(10**8, 10**9)
+                d = rng.randint(10**8, 10**9)
+                U[i] = u
+                D[i] = d
+            if rng.random() < 0.5:
+                idx = rng.randrange(N)
+                U[idx] = rng.randint(1, 10)
+                D[idx] = rng.randint(1, 10)
+        elif pattern == "alternating":
+            big = rng.randint(10**6, 10**9)
+            small = rng.randint(1, 100)
+            for i in range(N):
+                if i % 2 == 0:
+                    U[i] = big
+                    D[i] = rng.randint(1, 1000)
+                else:
+                    U[i] = rng.randint(1, 1000)
+                    D[i] = big
+        elif pattern == "monotonic":
+            start = rng.randint(1, 1000)
+            up = rng.choice([True, False])
+            step = rng.randint(0, 1000)
+            for i in range(N):
+                if up:
+                    val = start + i * step + rng.randint(0, 10)
+                else:
+                    val = max(1, start + (N - i - 1) * step - rng.randint(0, 10))
+                U[i] = min(10**9, val)
+                D[i] = rng.randint(1, 10**6)
+        elif pattern == "random":
+            for i in range(N):
+                U[i] = rng.randint(1, 10**9)
+                D[i] = rng.randint(1, 10**9)
+        elif pattern == "edge_case_small_D_or_U":
+            for i in range(N):
+                if rng.random() < 0.6:
+                    U[i] = 1
+                    D[i] = rng.randint(1, 10**6)
+                else:
+                    U[i] = rng.randint(1, 10**6)
+                    D[i] = 1
+            for _ in range(max(1, N // 5)):
+                idx = rng.randrange(N)
+                U[idx] = rng.randint(1, 10**9)
+                D[idx] = rng.randint(1, 10**9)
+        elif pattern == "tight_X_constraints":
+            if X == 10**9:
+                X = rng.randint(1, 5)
+            base = rng.randint(1, 1000)
+            for i in range(N):
+                U[i] = base + i * rng.randint(0, max(1, X))
+                D[i] = rng.randint(1, 1000)
+        for i in range(N):
+            if U[i] < 1:
+                U[i] = 1
+            if D[i] < 1:
+                D[i] = 1
+            if U[i] > 10**9:
+                U[i] = 10**9
+            if D[i] > 10**9:
+                D[i] = 10**9
+        tests.append(make_input(N, X, U, D))
+    return tests
+
+
+print(generate_test_inputs(100))
