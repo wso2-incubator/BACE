@@ -233,9 +233,9 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         passing_code_inds = [code_pop[i] for i in passing_code_indices]
         failing_code_inds = [code_pop[i] for i in failing_code_indices]
 
-        if not passing_code_inds or not failing_code_inds:
-            logger.warning(
-                f"Not enough diversity in test results for test ID {parent.id}. Skipping edit."
+        if not passing_code_inds and not failing_code_inds:
+            logger.error(
+                f"No passing or failing code individuals for test ID: {parent.id}. Skipping edit."
             )
             return []
 

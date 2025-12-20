@@ -169,6 +169,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             edit_operation_type = "discriminating"
             prompt = EDIT_DISCRIMINATING_UNITTEST.format(
                 question_content=input_dto.question_content,
+                current_test_snippet=input_dto.parent_snippet,
                 passing_code_snippet=input_dto.passing_code_snippets[0],
                 failing_code_snippet=input_dto.failing_code_snippets_with_traces[0][0],
                 failing_code_trace=input_dto.failing_code_snippets_with_traces[0][1],
@@ -178,6 +179,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             edit_operation_type = "all-failing"
             prompt = EDIT_ALL_FAILING_UNITTEST.format(
                 question_content=input_dto.question_content,
+                current_test_snippet=input_dto.parent_snippet,
                 failing_code_snippet_P=input_dto.failing_code_snippets_with_traces[0][
                     0
                 ],
@@ -192,6 +194,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             edit_operation_type = "all-passing"
             prompt = EDIT_ALL_PASSING_UNITTEST.format(
                 question_content=input_dto.question_content,
+                current_test_snippet=input_dto.parent_snippet,
                 passing_code_snippet_P=input_dto.passing_code_snippets[0],
                 passing_code_snippet_Q=input_dto.passing_code_snippets[1],
             )
