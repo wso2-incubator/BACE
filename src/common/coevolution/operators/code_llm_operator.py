@@ -22,7 +22,7 @@ from ..core.interfaces import (
 from ..prompt_templates import (
     CROSSOVER_CODE,
     EDIT_CODE_FIX_FAIL_ONLY,
-    INITIAL_CODE,
+    INITIAL_CODE_POPULATION,
     MUTATE_CODE,
 )
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
@@ -67,7 +67,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         problem_description = input_dto.question_content
         starter_code = input_dto.starter_code
 
-        prompt: str = INITIAL_CODE.format(
+        prompt: str = INITIAL_CODE_POPULATION.format(
             population_size=population_size,
             question_content=problem_description,
             starter_code=starter_code,

@@ -132,29 +132,41 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         of (individuals, context_code).
         """
 
-        initial_outputs, _ = self.operator.generate_initial_snippets(
-            InitialInput(
-                operation=OPERATION_INITIAL,
-                question_content=problem.question_content,
-                starter_code=problem.starter_code,
-                population_size=self.pop_config.initial_population_size,
-            )
-        )
         individuals: list[CodeIndividual] = []
-        if not initial_outputs:
-            logger.error(
-                "CodeBreedingStrategy.initialize_individuals: No initial snippets generated"
-            )
-            raise RuntimeError("Failed to generate initial code snippets")
+        initial_pop_size = self.pop_config.initial_population_size
+        pop_batch_size: int = 2
 
-        for operator_result in initial_outputs.results:
-            individual = CodeIndividual(
-                snippet=operator_result.snippet,
-                probability=self.pop_config.initial_prior,
-                creation_op=OPERATION_INITIAL,
-                generation_born=0,
+        while len(individuals) < initial_pop_size:
+            initial_outputs, _ = self.operator.generate_initial_snippets(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=problem.question_content,
+                    starter_code=problem.starter_code,
+                    population_size=pop_batch_size,
+                )
             )
-            individuals.append(individual)
+            if not initial_outputs:
+                logger.error(
+                    "CodeBreedingStrategy.initialize_individuals: No initial snippets generated"
+                )
+                raise RuntimeError("Failed to generate initial code snippets")
+
+            for operator_result in initial_outputs.results:
+                individual = CodeIndividual(
+                    snippet=operator_result.snippet,
+                    probability=self.pop_config.initial_prior,
+                    creation_op=OPERATION_INITIAL,
+                    generation_born=0,
+                )
+                individuals.append(individual)
+
+            logger.debug(
+                f"Generated {len(individuals)} / {initial_pop_size} initial code individuals"
+            )
+
+        # Trim excess individuals if any
+        if len(individuals) > initial_pop_size:
+            individuals = individuals[:initial_pop_size]
 
         return individuals, None
 
