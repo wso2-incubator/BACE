@@ -187,8 +187,12 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
     def _breed_via_edit(self, context: CoevolutionContext) -> list[TestIndividual]:
         """
-        Full-cycle handler for Edit (Discrimination-driven).
-        Fixes logic errors regarding variable scope.
+        Full-cycle handler for Edit. The operator will handle three scenarios:
+        - All passing codes: Edit to create a discriminating test.
+        - All failing codes: Edit to create a discriminating test or correct test.
+        - Mixed passing/failing codes: Edit to fail the passing codes and fail the failing ones.
+
+        We only require maximum of two code parent: one passing and one failing, or two passing/failing.
         """
         # 1. Select Parent Test
         parents = self.parent_selector.select_parents(
@@ -218,48 +222,43 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         passing_code_indices = [i for i, res in enumerate(test_results_col) if res == 1]
         failing_code_indices = [i for i, res in enumerate(test_results_col) if res == 0]
 
-        code_parent_ids: list[str] = []
+        # 4. Sample up to 2 passing and 2 failing code individuals
+        passing_code_indices = random.sample(
+            passing_code_indices, min(2, len(passing_code_indices))
+        )
+        failing_code_indices = random.sample(
+            failing_code_indices, min(2, len(failing_code_indices))
+        )
 
-        passing_snippet = "No passing code available."
-        failing_snippet = "No failing code available."
-        error_trace = "No error trace available."
+        passing_code_inds = [code_pop[i] for i in passing_code_indices]
+        failing_code_inds = [code_pop[i] for i in failing_code_indices]
 
-        if passing_code_indices:
-            passing_code_idx = random.choice(passing_code_indices)  # Use random.choice
-            passing_code_ind = code_pop[passing_code_idx]
-            passing_snippet = passing_code_ind.snippet
-            code_parent_ids.append(passing_code_ind.id)
+        if not passing_code_inds or not failing_code_inds:
+            logger.warning(
+                f"Not enough diversity in test results for test ID {parent.id}. Skipping edit."
+            )
+            return []
 
-        if failing_code_indices:
-            failing_code_idx = random.choice(failing_code_indices)  # Use random.choice
-            failing_code_ind = code_pop[failing_code_idx]
-            failing_snippet = failing_code_ind.snippet
-            code_parent_ids.append(failing_code_ind.id)
+        error_traces: list[str] = []
+        for failing_code_ind in failing_code_inds:
+            error_trace = (
+                interactions.execution_results[failing_code_ind.id]
+                .test_results[parent.id]
+                .details
+            )
+            if not error_trace:
+                error_trace = "No error trace available."
+            error_traces.append(error_trace)
 
-            # Get Error Trace
-            try:
-                result = interactions.execution_results[
-                    failing_code_ind.id
-                ].test_results[parent.id]
-                error_trace = result.details or "No error trace available."
-            except (KeyError, AttributeError):
-                logger.error(
-                    f"Error trace not found for code ID {failing_code_ind.id} "
-                    f"and test ID {parent.id}."
-                )
-                raise ValueError(
-                    f"Error trace not found for code ID {failing_code_ind.id} "
-                    f"and test ID {parent.id}."
-                )
-
-        # 4. Prepare DTO
         dto = UnittestEditInput(
             operation=OPERATION_EDIT,
             question_content=context.problem.question_content,
             parent_snippet=parent.snippet,
-            passing_code_snippet=passing_snippet,
-            failing_code_snippet=failing_snippet,
-            failing_code_trace=error_trace,
+            passing_code_snippets=[ind.snippet for ind in passing_code_inds],
+            failing_code_snippets_with_traces=[
+                (ind.snippet, trace)
+                for ind, trace in zip(failing_code_inds, error_traces)
+            ],
         )
 
         try:
@@ -268,7 +267,6 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             logger.warning(f"Unittest edit operator failed: {e}")
             return []
 
-        # 5. Construct Offspring
         offspring = []
         for res in output.results:
             prob = self.probability_assigner.assign_probability(
@@ -282,7 +280,12 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                     probability=prob,
                     creation_op=OPERATION_EDIT,
                     generation_born=context.test_populations["unittest"].generation + 1,
-                    parents={"code": code_parent_ids, "test": [parent.id]},
+                    parents={
+                        "code": [
+                            ind.id for ind in passing_code_inds + failing_code_inds
+                        ],
+                        "test": [parent.id],
+                    },
                     metadata=res.metadata,
                 )
             )
