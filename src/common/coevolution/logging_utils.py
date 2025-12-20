@@ -285,13 +285,13 @@ def log_belief_update_start(
 
 
 def log_prior_statistics(population_type: str, probs: "np.ndarray") -> None:
-    """
-    Log statistics about prior beliefs.
+    """Logs statistics about the prior probabilities."""
 
-    Args:
-        population_type: Either "code" or "test"
-        probs: Array of prior probabilities
-    """
+    # Guard clause for empty arrays
+    if probs.size == 0:
+        logger.debug(f"Prior {population_type} beliefs: [Empty Population]")
+        return
+
     import numpy as np
 
     mean_prob = np.mean(probs)
@@ -313,6 +313,11 @@ def log_posterior_statistics(
         prior_probs: Array of prior probabilities
         posterior_probs: Array of posterior probabilities
     """
+    # add guard clause for empty arrays
+    if prior_probs.size == 0 or posterior_probs.size == 0:
+        logger.debug(f"Posterior {population_type} beliefs: [Empty Population]")
+        return
+
     import numpy as np
 
     prior_mean = np.mean(prior_probs)
@@ -340,6 +345,13 @@ def log_belief_changes(
         prior_probs: Array of prior probabilities
         posterior_probs: Array of posterior probabilities
     """
+    # guard clause for empty arrays
+    if prior_probs.size == 0 or posterior_probs.size == 0:
+        logger.debug(
+            f"{population_type.capitalize()} belief changes: [Empty Population]"
+        )
+        return
+
     import numpy as np
 
     deltas = posterior_probs - prior_probs
@@ -361,7 +373,13 @@ def _compute_pass_rates(matrix: "np.ndarray") -> "np.ndarray":
     Returns:
         1D numpy array of pass rates for each row (fraction of columns that are 1)
     """
+
     import numpy as np
+
+    # add guard clause for empty matrix
+    if matrix.size == 0:
+        logger.warning("Matrix is empty. Returning empty pass rates.")
+        return np.array([], dtype=float)
 
     num_rows, num_cols = matrix.shape
 
