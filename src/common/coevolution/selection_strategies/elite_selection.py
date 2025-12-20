@@ -338,7 +338,7 @@ class TestDiversityEliteSelector[T: TestIndividual](IEliteSelectionStrategy[T]):
         return f"TestDiversityEliteSelector(test_population_key='{self.test_population_key}')"
 
 
-class CodeDiversityEliteSelector[T: CodeIndividual](IEliteSelectionStrategy[T]):
+class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
     """
     Diversity-based elite selection for code populations.
 
@@ -384,10 +384,10 @@ class CodeDiversityEliteSelector[T: CodeIndividual](IEliteSelectionStrategy[T]):
 
     def select_elites(
         self,
-        population: BasePopulation[T],
+        population: BasePopulation[CodeIndividual],
         population_config: PopulationConfig,
         coevolution_context: CoevolutionContext,
-    ) -> list[T]:
+    ) -> list[CodeIndividual]:
         """
         Select diverse elite code individuals with quality guarantee.
 
@@ -603,9 +603,9 @@ class CodeDiversityEliteSelector[T: CodeIndividual](IEliteSelectionStrategy[T]):
 
     def _fallback_top_k_selection(
         self,
-        population: BasePopulation[T],
+        population: BasePopulation[CodeIndividual],
         num_elites: int,
-    ) -> list[T]:
+    ) -> list[CodeIndividual]:
         """
         Fallback to simple top-k selection when matrix analysis is unavailable.
 
