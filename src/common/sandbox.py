@@ -403,7 +403,7 @@ class SafeCodeSandbox:
             "compile(",
             "open(",
             "file(",
-            "input(",
+            # "input(",
             "raw_input(",
             "__builtins__",
             "__globals__",
