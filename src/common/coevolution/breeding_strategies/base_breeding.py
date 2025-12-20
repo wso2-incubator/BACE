@@ -69,7 +69,7 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
         # Optimization: Bypass overhead if single-threaded
         if self.max_workers <= 1:
             failures = 0
-            max_failures = max(5, num_offsprings * 3)  # Circuit breaker limit
+            max_failures = 10  # TODO: make configurable
 
             while len(offspring_list) < num_offsprings:
                 new_inds = self._attempt_breeding(coevolution_context)
