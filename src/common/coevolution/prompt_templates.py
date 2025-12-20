@@ -37,7 +37,7 @@ _CODE_FORMAT_INSTRUCTION = (
 # Code Generation Prompts
 # ==========================================
 
-INITIAL_CODE = (
+INITIAL_CODE_POPULATION = (
     _CODER_ROLE + "\n\n"
     "<task>\n"
     "- Write {population_size} distinct solutions to solve the problem described below.\n"
@@ -46,6 +46,20 @@ INITIAL_CODE = (
     "- Maintain good code qualities and adhere to coding best practices.\n"
     "- Write a concise docstring for each solution with a clear explanation of its approach and reasoning.\n"
     "- Return each solution in a separate Python code block.\n"
+    "</task>\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n" + _STARTER_CODE_BLOCK + "\n\n"
+)
+
+INITIAL_CODE_SINGLE_SOLUTION = (
+    _CODER_ROLE + "\n\n"
+    "<task>\n"
+    "- Write a solution to solve the problem described below.\n"
+    "- The code should strictly follow the starter code structure provided in <starter_code>\n"
+    "- Maintain good code qualities and adhere to coding best practices.\n"
+    "- Write a concise docstring for the solution with a clear explanation of its approach and reasoning.\n"
+    "- Return the solution in a separate Python code block.\n"
     "</task>\n\n"
     "<problem>\n"
     "{question_content}\n"
@@ -528,7 +542,8 @@ if input is functional, each dict should be of the form:
 
 __all__ = [
     "INITIAL_TEST_AGENT_CODER_STYLE",
-    "INITIAL_CODE",
+    "INITIAL_CODE_POPULATION",
+    "INITIAL_CODE_SINGLE_SOLUTION",
     "CROSSOVER_CODE",
     "MUTATE_CODE",
     "EDIT_CODE",
