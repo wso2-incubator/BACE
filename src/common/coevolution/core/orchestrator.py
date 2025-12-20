@@ -97,10 +97,6 @@ class Orchestrator:
         # --- Store Top-Level Config ---
         self.evo_config = evo_config
 
-        # --- Store max_workers for parallel breeding ---
-        self.max_workers = evo_config.max_workers
-        logger.info(f"Parallel breeding configured with max_workers={self.max_workers}")
-
         # --- Infer Test Population Types ---
         # Fixed populations are always public and private
         self.fixed_test_types = {"public", "private"}
