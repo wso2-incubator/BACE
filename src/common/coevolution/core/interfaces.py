@@ -942,7 +942,9 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         removed individuals about their death before calling this method.
         """
         if not new_individuals:
-            raise ValueError("Cannot set an empty population for the next generation.")
+            logger.warning(
+                "set_next_generation called with an empty list of new individuals."
+            )
 
         # Logging the differences between old and new populations
         old_ids_map = {ind.id: ind for ind in self._individuals}
