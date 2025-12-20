@@ -100,6 +100,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         probability_assigner: IProbabilityAssigner,
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         failing_test_selector: IFailingTestSelector,
+        max_workers: int = 1,
     ) -> None:
         self.operator = operator
         self.op_rates_config = op_rates_config
@@ -107,7 +108,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         self.probability_assigner = probability_assigner
         self.parent_selector = parent_selector
         self.failing_test_selector = failing_test_selector
-
+        self.max_workers = max_workers
         # validate operations in rates config are supported by the operator
         for op in self.op_rates_config.operation_rates.keys():
             if op not in self.operator.supported_operations():
