@@ -722,7 +722,7 @@ def build_test_method_from_io(
     # 2. Define the test method signature
     # We join parent IDs to create a unique test name, e.g., test_case_C1_C2
     suffix = "_".join(parent_ids) if parent_ids else "generated"
-    test_method_signature = f"    def test_case_{suffix}(self):\n"
+    test_method_signature = f"def test_case_{suffix}(self):\n"
 
     # 3. Build the assertions body
     assertions = []
@@ -740,9 +740,9 @@ def build_test_method_from_io(
 
         # Append assertion block
         assertions.append(
-            f"        # Subtest {i + 1}\n"
-            f"        result = self.solution.{method_name}({input_args})\n"
-            f"        self.assertEqual(result, {expected_val})\n"
+            f"   # Subtest {i + 1}\n"
+            f"   result = self.solution.{method_name}({input_args})\n"
+            f"   self.assertEqual(result, {expected_val})\n"
         )
 
     # 4. Combine signature and body
