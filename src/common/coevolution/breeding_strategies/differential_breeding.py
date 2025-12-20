@@ -196,16 +196,21 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             logger.warning("No divergences found between selected code individuals.")
             return []
 
+        # TODO: Probability assignment should be more sophisticated
         parent_probs = []
-        for _, test_inds in group.passing_test_individuals.items():
-            for ind in test_inds:
-                parent_probs.append(ind.probability)
+        for test_type, test_inds in group.passing_test_individuals.items():
+            if test_type == "differential":
+                for ind in test_inds:
+                    parent_probs.append(ind.probability)
 
-        prob: float = self.probability_assigner.assign_probability(
-            operation=OPERATION_DISCOVERY,
-            parent_probs=parent_probs,
-            initial_prior=self.pop_config.initial_prior,
-        )
+        if parent_probs:
+            prob = self.probability_assigner.assign_probability(
+                operation=OPERATION_DISCOVERY,
+                parent_probs=parent_probs,
+                initial_prior=self.pop_config.initial_prior,
+            )
+        else:
+            prob = self.pop_config.initial_prior
 
         # Create Aggregated Individuals (All pairs in one test)
         return self._create_divergence_tests(context, code_a, code_b, divergences, prob)
