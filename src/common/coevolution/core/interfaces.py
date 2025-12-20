@@ -328,13 +328,10 @@ class EvolutionConfig:
     """
 
     num_generations: int = 5
-    max_workers: int = 1  # Number of parallel workers for breeding (1 = sequential)
 
     def __post_init__(self) -> None:
         if self.num_generations <= 0:
             raise ValueError("num_generations must be positive.")
-        if self.max_workers < 1:
-            raise ValueError("max_workers must be at least 1.")
 
 
 @dataclass(frozen=True)
@@ -1485,28 +1482,6 @@ class ITestBlockRebuilder(Protocol):
     """
     Protocol defining the contract for a Bayesian belief initialization strategy.
     """
-
-    def initialize_beliefs(
-        self,
-        population_size: int,
-        initial_probability: float,
-    ) -> np.ndarray:
-        """
-        Initializes the prior probabilities for a population.
-
-        Args:
-            population_size: The size of the population.
-            initial_probability: The initial probability to assign to each individual.
-
-        Returns:
-            A numpy array of shape (population_size,) with the initialized probabilities.
-
-        Empty State Behavior (size=0):
-            - When population_size is 0, should return an empty numpy array with
-              shape (0,) representing an empty prior distribution.
-            - This supports differential testing scenarios where populations start
-              empty and grow through bootstrapping.
-        """
 
 
 class IBeliefMaskGenerator(Protocol):
