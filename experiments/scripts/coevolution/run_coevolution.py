@@ -158,7 +158,7 @@ def main(
                 crossover_rate=0.2,
                 edit_rate=0.6,
                 max_workers=10,  # Parallel breeding
-                diversity_enabled=True,
+                diversity_enabled=False,  # use top-k selection based on elitism rate only
             )
 
             # Unittest Profile: Fixed-size population with discrimination-driven edit
@@ -172,9 +172,9 @@ def main(
                 mutation_rate=0.3,
                 crossover_rate=0.2,
                 edit_rate=0.5,
-                alpha=0.01,
+                alpha=0.2,
                 beta=0.2,
-                gamma=0.2,
+                gamma=0.1,
                 learning_rate=0.05,
                 max_workers=10,
                 diversity_enabled=True,
@@ -184,18 +184,18 @@ def main(
             differential_profile = create_differential_test_profile(
                 llm_client=llm_client,
                 sandbox=sandbox,
-                initial_prior=0.5,
+                initial_prior=0.2,
                 initial_population_size=0,  # Bootstrap mode
-                max_population_size=10,
+                max_population_size=5,
                 offspring_rate=0.5,  # Aggressive growth
                 elitism_rate=0.3,
-                discovery_rate=0.8,  # Discovery finds divergent code pairs
-                crossover_rate=0.2,
-                alpha=0.05,  # Lower reliability than unittest
-                beta=0.2,
-                gamma=0.2,
+                discovery_rate=1.0,  # Discovery finds divergent code pairs
+                crossover_rate=0.0,
+                alpha=0.3,  # Lower reliability than unittest
+                beta=0.5,
+                gamma=0.5,
                 learning_rate=0.05,
-                max_workers=1,
+                max_workers=10,
                 diversity_enabled=True,
             )
 
