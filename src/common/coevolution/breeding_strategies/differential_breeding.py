@@ -229,7 +229,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         else:
             prob = self.pop_config.initial_prior
 
-        # Create Aggregated Individuals (All pairs in one test)
+        # Create TestIndividual per Input Divergence for BOTH scenarios
         return self._create_divergence_tests(context, code_a, code_b, divergences, prob)
 
     def _breed_via_crossover(self, context: CoevolutionContext) -> list[TestIndividual]:
@@ -334,30 +334,30 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         for winner, loser, io_pairs, winner_outputs in scenarios:
             # Generate the Python Test Method (Contains assertions for ALL pairs)
-            snippet = self.operator.get_test_method_from_io(
-                context.problem.starter_code, io_pairs, [winner.id, loser.id]
-            )
-
-            ind = TestIndividual(
-                snippet=snippet,
-                probability=probability,
-                creation_op=OPERATION_DISCOVERY,
-                generation_born=context.code_population.generation + 1,
-                parents={"code": [winner.id, loser.id], "test": []},
-                metadata={
-                    "io_pairs": io_pairs,
-                    # We store lists in metadata now to track the batch
-                    "divergence_outputs": {
-                        winner.id: winner_outputs,
-                        # The loser's outputs are the complement set
-                        loser.id: [
-                            d["output_b"] if winner == code_a else d["output_a"]
-                            for d in divergences
-                        ],
+            for io_pair in io_pairs:
+                snippet = self.operator.get_test_method_from_io(
+                    context.problem.starter_code, [io_pair], [winner.id, loser.id]
+                )
+                ind = TestIndividual(
+                    snippet=snippet,
+                    probability=probability,
+                    creation_op=OPERATION_DISCOVERY,
+                    generation_born=context.code_population.generation + 1,
+                    parents={"code": [winner.id, loser.id], "test": []},
+                    metadata={
+                        "io_pairs": io_pairs,
+                        # We store lists in metadata now to track the batch
+                        "divergence_outputs": {
+                            winner.id: winner_outputs,
+                            # The loser's outputs are the complement set
+                            loser.id: [
+                                d["output_b"] if winner == code_a else d["output_a"]
+                                for d in divergences
+                            ],
+                        },
                     },
-                },
-            )
-            results.append(ind)
+                )
+                results.append(ind)
 
         return results
 
