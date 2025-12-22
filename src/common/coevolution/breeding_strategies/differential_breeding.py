@@ -122,6 +122,10 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Cache of pairs that have already been checked for divergence and found none.
         # Stores tuples of (min_id, max_id) to ensure order independence.
         self._checked_equivalence_cache: set[tuple[str, str]] = set()
+
+        # Cache of pairs that were already crossed over.
+        self._crossover_cache: set[tuple[str, str]] = set()
+
         logger.info("DifferentialBreedingStrategy initialized.")
 
     def initialize_individuals(
@@ -240,6 +244,13 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             return []
 
         p1, p2 = parents[0], parents[1]
+
+        if self._check_crossover_done(p1, p2):
+            logger.debug(
+                f"Test Individuals {p1.id} and {p2.id} have already undergone crossover. Skipping."
+            )
+            return []
+
         p1_io = p1.metadata.get("io_pairs", [])
         p2_io = p2.metadata.get("io_pairs", [])
 
@@ -283,6 +294,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 )
             )
 
+        if offspring:
+            self._mark_as_crossover_done(p1, p2)
         return offspring
 
     def _create_divergence_tests(
@@ -370,6 +383,27 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         """
         pair_key = tuple(sorted((code_a.id, code_b.id)))
         return pair_key in self._checked_equivalence_cache
+
+    def _mark_as_crossover_done(
+        self, test_a: TestIndividual, test_b: TestIndividual
+    ) -> None:
+        """
+        Cache the fact that these two test individuals were already crossed over.
+        Uses a sorted tuple key to handle symmetry (A,B) == (B,A).
+        """
+        pair_key = tuple(sorted((test_a.id, test_b.id)))
+        self._crossover_cache.add(cast(tuple[str, str], pair_key))
+
+        logger.debug(f"Cached crossover for {test_a.id} and {test_b.id}.")
+
+    def _check_crossover_done(
+        self, test_a: TestIndividual, test_b: TestIndividual
+    ) -> bool:
+        """
+        Returns True if these two test individuals were already crossed over.
+        """
+        pair_key = tuple(sorted((test_a.id, test_b.id)))
+        return pair_key in self._crossover_cache
 
 
 __all__ = ["DifferentialBreedingStrategy"]
