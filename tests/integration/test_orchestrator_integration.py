@@ -37,7 +37,6 @@ from common.coevolution.core.mock import (
     MockDatasetTestBlockBuilder,
     MockEliteSelector,
     MockExecutionSystem,
-    MockInteractionLedger,
     MockTestBlockRebuilder,
     MockTestOperator,
     get_mock_problem,
