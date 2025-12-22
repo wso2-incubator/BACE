@@ -37,6 +37,7 @@ Exports:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol
 
 from loguru import logger
@@ -125,44 +126,66 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
     def initialize_individuals(
         self, problem: Problem
     ) -> tuple[list[CodeIndividual], str | None]:
-        """Create initial individuals.
+        """Create initial individuals using parallel execution.
 
-        call `self.operator.generate_initial_snippets(InitialInput(...))`
-        and wrap `OperatorResult` into `CodeIndividual` objects. Return a tuple
-        of (individuals, context_code).
+        Submits multiple batch generation tasks to a ThreadPoolExecutor.
         """
-
         individuals: list[CodeIndividual] = []
         initial_pop_size = self.pop_config.initial_population_size
         pop_batch_size: int = 2
 
-        while len(individuals) < initial_pop_size:
-            initial_outputs, _ = self.operator.generate_initial_snippets(
-                InitialInput(
-                    operation=OPERATION_INITIAL,
-                    question_content=problem.question_content,
-                    starter_code=problem.starter_code,
-                    population_size=pop_batch_size,
-                )
-            )
-            if not initial_outputs:
-                logger.error(
-                    "CodeBreedingStrategy.initialize_individuals: No initial snippets generated"
-                )
-                raise RuntimeError("Failed to generate initial code snippets")
+        # Calculate number of batches needed
+        # equivalent to math.ceil(initial_pop_size / pop_batch_size)
+        num_batches = (initial_pop_size + pop_batch_size - 1) // pop_batch_size
 
-            for operator_result in initial_outputs.results:
-                individual = CodeIndividual(
-                    snippet=operator_result.snippet,
-                    probability=self.pop_config.initial_prior,
-                    creation_op=OPERATION_INITIAL,
-                    generation_born=0,
-                )
-                individuals.append(individual)
+        input_dto = InitialInput(
+            operation=OPERATION_INITIAL,
+            question_content=problem.question_content,
+            starter_code=problem.starter_code,
+            population_size=pop_batch_size,
+        )
 
-            logger.debug(
-                f"Generated {len(individuals)} / {initial_pop_size} initial code individuals"
+        logger.info(
+            f"Initializing population of size {initial_pop_size} in {num_batches} parallel batches."
+        )
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all batch tasks at once
+            future_to_batch = {
+                executor.submit(self.operator.generate_initial_snippets, input_dto): i
+                for i in range(num_batches)
+            }
+
+            for future in as_completed(future_to_batch):
+                try:
+                    initial_outputs, _ = future.result()
+
+                    if not initial_outputs or not initial_outputs.results:
+                        logger.warning("A batch task returned no results.")
+                        continue
+
+                    for operator_result in initial_outputs.results:
+                        individual = CodeIndividual(
+                            snippet=operator_result.snippet,
+                            probability=self.pop_config.initial_prior,
+                            creation_op=OPERATION_INITIAL,
+                            generation_born=0,
+                        )
+                        individuals.append(individual)
+
+                    logger.debug(
+                        f"Population progress: {len(individuals)}/{initial_pop_size}"
+                    )
+
+                except Exception as e:
+                    logger.error(f"Error in initialization batch: {e}")
+
+        # Validation: Ensure we generated at least some individuals
+        if not individuals:
+            logger.error(
+                "CodeBreedingStrategy.initialize_individuals: No initial snippets generated"
             )
+            raise RuntimeError("Failed to generate initial code snippets")
 
         # Trim excess individuals if any
         if len(individuals) > initial_pop_size:
