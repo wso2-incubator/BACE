@@ -526,19 +526,21 @@ class OrchestratorBuilder:
     def with_evolution_config(
         self,
         num_generations: int = 5,
+        epoch_length: int = 1,
     ) -> "OrchestratorBuilder":
         """
         Set top-level evolution configuration.
 
         Args:
             num_generations: Number of generations to evolve (default: 5)
-            max_workers: Parallel workers for breeding (default: 1)
+            epoch_length: Number of generations per epoch (default: 1)
 
         Returns:
             Self for method chaining
         """
         self._evo_config = EvolutionConfig(
             num_generations=num_generations,
+            epoch_length=epoch_length,
         )
         return self
 
