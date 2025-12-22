@@ -30,11 +30,8 @@ Interface Organization:
        - ITestBlockRebuilder: test class block reconstruction
        - IIndividualFactory: individual creation
 
-    4. Grouped Protocols (Systems):
-       These combine related functionality typically implemented together:
-       - IBayesianSystem: Belief initialization + updating + mask generation
 
-    5. Context-Based Architecture:
+    4. Context-Based Architecture:
        The system uses context objects to pass state:
        - CoevolutionContext: Complete system state (all populations + interactions)
        - InteractionData: Encapsulates code-test interaction (execution + observation)
@@ -88,6 +85,7 @@ type ParentProbabilities = list[float]
 # to avoid evaluation order issues at import time and mark it as a TypeAlias
 # for clearer typing semantics.
 ExecutionResults: TypeAlias = dict[str, "ExecutionResult"]
+InteractionKey: TypeAlias = tuple[str, str, str, str]
 
 
 @dataclass(frozen=True)
@@ -1490,39 +1488,23 @@ class ITestBlockRebuilder(Protocol):
     """
 
 
-class IBeliefMaskGenerator(Protocol):
-    """
-    Protocol defining the contract for generating the mask for belief updates.
-    This is to not update beliefs on the same observation repeatedly across generations.
-    """
+class IInteractionLedger(Protocol):
+    def get_new_interaction_mask(
+        self, code_ids: list[str], test_ids: list[str], test_type: str, target: str
+    ) -> np.ndarray: ...
 
-    # New explicit public wrappers to disambiguate orientation
-    def get_code_update_mask_generation(
+    def commit_interactions(
         self,
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        """
-        Returns a mask suitable for updating code beliefs. Shape is
-        (n_code, n_tests) with rows corresponding to code individuals and
-        columns to tests.
-        """
-        ...
+        code_ids: list[str],
+        test_ids: list[str],
+        test_type: str,
+        target: str,
+        mask: np.ndarray,
+    ) -> None: ...
 
-    def get_test_update_mask_generation(
-        self,
-        updating_ind_born_generations: list[int],
-        other_ind_born_generations: list[int],
-        current_generation: int,
-    ) -> np.ndarray:
-        """
-        Returns a mask suitable for updating test beliefs. Shape is
-        (n_tests, n_code) with rows corresponding to tests and columns to code
-        individuals. Implementations may return the transpose of the code
-        update mask.
-        """
-        ...
+
+class LedgerFactory(Protocol):
+    def __call__(self) -> IInteractionLedger: ...
 
 
 class IBeliefUpdater(Protocol):
@@ -1595,22 +1577,3 @@ class IBeliefUpdater(Protocol):
             - This supports differential testing where test population may start empty.
         """
         ...
-
-
-# ============================================
-# === GROUPED PROTOCOLS (SYSTEMS)
-# ============================================
-# These protocols combine related fine-grained protocols that are
-# typically implemented together as cohesive subsystems.
-
-
-class IBayesianSystem(IBeliefUpdater, IBeliefMaskGenerator, Protocol):
-    """
-    Unified interface for Bayesian belief management.
-
-    Combines initialization and updating of beliefs into a single cohesive system.
-    Implementations handle both setting initial priors and performing posterior updates.
-
-    This system is used by the Orchestrator to manage probability updates for both
-    code and test populations based on execution results.
-    """
