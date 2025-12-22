@@ -1488,6 +1488,7 @@ class ITestBlockRebuilder(Protocol):
     """
 
 
+# TODO: This was implemented in a hurry, revisit and refine later.
 class IInteractionLedger(Protocol):
     def get_new_interaction_mask(
         self, code_ids: list[str], test_ids: list[str], test_type: str, target: str
