@@ -15,7 +15,7 @@ architectural improvements for the protocol-based system.
 import numpy as np
 from loguru import logger
 
-from .core.interfaces import BayesianConfig, IBayesianSystem, IBeliefMaskGenerator
+from .core.interfaces import BayesianConfig, IBeliefUpdater
 from .logging_utils import (
     log_belief_changes,
     log_belief_update_start,
@@ -30,103 +30,7 @@ from .logging_utils import (
 _NUMERICAL_STABILITY_EPSILON = 1e-9
 
 
-class UpdateMaskGenerator(IBeliefMaskGenerator):
-    """
-    Implementation of IBeliefMaskGenerator to generate update masks
-    based on individuals' generation born.
-    """
-
-    @staticmethod
-    def _get_update_mask(
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        """
-        Generate a mask for belief updates based on generations born.
-
-        An individual can update its belief about another individual only if:
-        - It was born in the current generation or later (All observations are new to it), or
-        - The other individual was born in the current generation. (Only the observations from individuals born in the current generation are new to it)
-
-        Args:
-            updating_population: The population that is being updated.
-            other_population: The opposing population.
-            current_generation: The current generation number.
-
-        Returns:
-            A numpy array representing the update mask.
-        """
-        upd_gen = np.array(updating_ind_born_generations)
-        oth_gen = np.array(other_ind_born_generations)
-
-        # raise error if any generation is negative
-        if np.any(upd_gen < 0) or np.any(oth_gen < 0):
-            raise ValueError("Generation born values must be non-negative integers")
-
-        # raise error if current_generation is negative
-        if current_generation < 0:
-            raise ValueError("Current generation must be a non-negative integer")
-
-        # raise error if current_generation is less than any generation in upd_gen or oth_gen
-        if np.any(upd_gen > current_generation) or np.any(oth_gen > current_generation):
-            raise ValueError(
-                "Current generation must be greater than or equal to all generation born values"
-            )
-
-        mask = (upd_gen[:, None] == current_generation) | (
-            oth_gen[None, :] == current_generation
-        ).astype(int)
-        return np.asarray(mask, dtype=int)
-
-    @staticmethod
-    def get_code_update_mask_generation(
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        """
-        Generate code update mask based on generations born.
-
-        Args:
-            updating_ind_born_generations: Generations born of code individuals.
-            other_ind_born_generations: Generations born of test individuals.
-            current_generation: The current generation number.
-
-        Returns:
-            A numpy array representing the code update mask.
-        """
-        return UpdateMaskGenerator._get_update_mask(
-            updating_ind_born_generations,
-            other_ind_born_generations,
-            current_generation,
-        )
-
-    @staticmethod
-    def get_test_update_mask_generation(
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        """
-        Generate test update mask based on generations born.
-
-        Args:
-            updating_ind_born_generations: Generations born of test individuals.
-            other_ind_born_generations: Generations born of code individuals.
-            current_generation: The current generation number.
-
-        Returns:
-            A numpy array representing the test update mask.
-        """
-        return UpdateMaskGenerator._get_update_mask(
-            updating_ind_born_generations,
-            other_ind_born_generations,
-            current_generation,
-        ).T
-
-
-class BayesianSystem(IBayesianSystem, UpdateMaskGenerator):
+class BayesianSystem(IBeliefUpdater):
     """
     Static implementation of the IBayesianSystem protocol.
 

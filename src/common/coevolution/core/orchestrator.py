@@ -15,11 +15,13 @@ from .interfaces import (
     CodeProfile,
     CoevolutionContext,
     EvolutionConfig,
-    IBayesianSystem,
+    IBeliefUpdater,
     IDatasetTestBlockBuilder,
     IExecutionSystem,
+    IInteractionLedger,
     InteractionData,
     ITestBlockRebuilder,
+    LedgerFactory,
     Problem,
     PublicTestProfile,
     Test,
@@ -58,9 +60,10 @@ class Orchestrator:
         public_test_profile: PublicTestProfile,
         # --- Global Infrastructure ---
         execution_system: IExecutionSystem,
-        bayesian_system: IBayesianSystem,
+        bayesian_system: IBeliefUpdater,
         test_block_rebuilder: ITestBlockRebuilder,
         dataset_test_block_builder: IDatasetTestBlockBuilder,
+        ledger_factory: LedgerFactory,
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
@@ -119,6 +122,7 @@ class Orchestrator:
         # --- Store Injected Components ---
         self.execution_system = execution_system
         self.bayesian_system = bayesian_system
+        self.ledger_factory = ledger_factory
 
         self.test_block_rebuilder = test_block_rebuilder
         self.dataset_test_block_builder = dataset_test_block_builder
@@ -142,6 +146,9 @@ class Orchestrator:
         code_pop, evolved_test_pops, public_pop, private_pop = (
             self._initialize_evolution(problem)
         )
+
+        # Create ledger for tracking interactions
+        ledger = self.ledger_factory()
 
         # 2. Main Loop
         for gen in range(self.evo_config.num_generations + 1):
@@ -167,7 +174,7 @@ class Orchestrator:
             )
 
             # B. Update Beliefs - mutates population probabilities in context
-            self._perform_cooperative_updates(context)
+            self._perform_cooperative_updates(context, ledger)
 
             # C. Evolve - mutates population individuals in context
             if gen < self.evo_config.num_generations:
@@ -296,6 +303,7 @@ class Orchestrator:
     def _perform_cooperative_updates(
         self,
         context: CoevolutionContext,
+        ledger: IInteractionLedger,
     ) -> None:
         """
         Performs the Bayesian belief updates in a specific order to prevent
@@ -325,17 +333,17 @@ class Orchestrator:
 
         # Extract populations and interactions
         code_pop = context.code_population
+        code_ids = [ind.id for ind in code_pop.individuals]
         public_pop = context.test_populations["public"]
+        public_ids = [ind.id for ind in public_pop.individuals]
         public_obs_matrix = context.interactions["public"].observation_matrix
 
         # 1. Get Masks - considering ALL evolved test populations (except private)
         logger.debug("Getting mask matrices for updates...")
 
         # Code update mask for public tests only
-        code_mask_public = self.bayesian_system.get_code_update_mask_generation(
-            updating_ind_born_generations=[ind.generation_born for ind in code_pop],
-            other_ind_born_generations=[ind.generation_born for ind in public_pop],
-            current_generation=code_pop.generation,
+        mask_pub = ledger.get_new_interaction_mask(
+            code_ids, public_ids, "public", "CODE"
         )
 
         # 2. ANCHOR: Update Code based on Public Tests first
@@ -344,35 +352,32 @@ class Orchestrator:
             prior_code_probs=code_pop.probabilities,
             prior_test_probs=public_pop.probabilities,
             observation_matrix=public_obs_matrix,
-            code_update_mask_matrix=code_mask_public,
+            code_update_mask_matrix=mask_pub,
             config=self.public_test_profile.bayesian_config,
         )
         code_pop.update_probabilities(code_post_public)
-
+        ledger.commit_interactions(code_ids, public_ids, "public", "CODE", mask_pub)
         # 3 & 4. For each evolved test population: Calculate and Apply updates
         for test_type in self.evolved_test_types:
             test_pop = context.test_populations[test_type]
+            test_ids = [ind.id for ind in test_pop.individuals]
             test_obs_matrix = context.interactions[test_type].observation_matrix
             test_profile = self.evolved_test_profiles[test_type]
 
             # Get test update mask - tests updated based on ALL code individuals
-            test_mask = self.bayesian_system.get_test_update_mask_generation(
-                updating_ind_born_generations=[ind.generation_born for ind in test_pop],
-                other_ind_born_generations=[ind.generation_born for ind in code_pop],
-                current_generation=test_pop.generation,
+            test_mask = ledger.get_new_interaction_mask(
+                code_ids,
+                test_ids,
+                test_type,
+                "TEST",
             )
 
             # Get code update mask for this specific test population
-            code_mask_for_this_test = (
-                self.bayesian_system.get_code_update_mask_generation(
-                    updating_ind_born_generations=[
-                        ind.generation_born for ind in code_pop
-                    ],
-                    other_ind_born_generations=[
-                        ind.generation_born for ind in test_pop
-                    ],
-                    current_generation=code_pop.generation,
-                )
+            code_mask_for_this_test = ledger.get_new_interaction_mask(
+                code_ids,
+                test_ids,
+                test_type,
+                "CODE",
             )
 
             logger.debug(
@@ -400,6 +405,10 @@ class Orchestrator:
             # Apply updates
             test_pop.update_probabilities(test_post)
             code_pop.update_probabilities(code_evolved_post)
+            ledger.commit_interactions(code_ids, test_ids, test_type, "TEST", test_mask)
+            ledger.commit_interactions(
+                code_ids, test_ids, test_type, "CODE", code_mask_for_this_test
+            )
 
     # =========================================================================
     # Lifecycle Phase 2C: Evolution (Selection & Breeding)

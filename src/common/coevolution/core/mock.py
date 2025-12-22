@@ -19,9 +19,10 @@ from .interfaces import (
     CoevolutionContext,
     ExecutionResult,
     ExecutionResults,
-    IBayesianSystem,
+    IBeliefUpdater,
     IEliteSelectionStrategy,
     IExecutionSystem,
+    IInteractionLedger,
     InitialInput,
     InteractionData,
     IOperator,
@@ -340,16 +341,12 @@ class MockBreedingStrategy:
 
     def initialize_individuals(
         self,
-        population_size: int,
-        initial_prior: float,
         problem: Problem,
     ) -> tuple[list[Any], str | None]:
         """
         Create initial population by delegating to operator.
 
         Args:
-            population_size: Number of individuals to create
-            initial_prior: Initial probability value for individuals
             problem: The problem context to pass through to operator
 
         Returns:
@@ -357,6 +354,10 @@ class MockBreedingStrategy:
             Breeder passes this through; orchestrator interprets context_code.
         """
         from .individual import CodeIndividual, TestIndividual
+
+        # Hardcoded for mock
+        population_size = 10
+        initial_prior = 0.5
 
         logger.debug(
             f"MockBreedingStrategy: Creating {population_size} initial {self.individual_type} individuals"
@@ -666,30 +667,8 @@ def _generic_belief_update(
     return np.asarray(np.clip(new_probs, 0.01, 0.99))
 
 
-class MockBayesianSystem(IBayesianSystem):
-    """Single mock Bayesian system used for both code and test updates.
-
-    This class centralizes the logic previously split between separate
-    code/test implementations. It provides both `update_code_beliefs` and
-    `update_test_beliefs` as required by the protocol, and exposes the
-    mask generation helpers (code/test/backwards-compatible) plus a private
-    helper `_get_update_mask_generation`.
-    """
-
-    def initialize_beliefs(
-        self,
-        population_size: int,
-        initial_probability: float,
-    ) -> np.ndarray:
-        # Empty state guard: identity operation for size=0
-        if population_size == 0:
-            logger.trace(
-                "MockBayesianSystem: population_size=0, returning empty belief array"
-            )
-            return np.array([])
-
-        logger.trace("MockBayesianSystem: Initializing beliefs")
-        return np.full(population_size, initial_probability)
+class MockBeliefUpdater(IBeliefUpdater):
+    """Mock belief updater for testing purposes."""
 
     def update_code_beliefs(
         self,
@@ -702,12 +681,12 @@ class MockBayesianSystem(IBayesianSystem):
         # Empty state guard: identity operation when no tests (N,0) or no code (0,N)
         if observation_matrix.shape[1] == 0 or observation_matrix.shape[0] == 0:
             logger.trace(
-                f"MockBayesianSystem: Empty observation matrix {observation_matrix.shape}, "
+                f"MockBeliefUpdater: Empty observation matrix {observation_matrix.shape}, "
                 "returning prior_code_probs unchanged (identity operation)"
             )
             return prior_code_probs.copy()
 
-        logger.trace("MockBayesianSystem: Updating code beliefs")
+        logger.trace("MockBeliefUpdater: Updating code beliefs")
 
         mask_arr = np.asarray(code_update_mask_matrix, dtype=bool)
         if mask_arr.shape != observation_matrix.shape:
@@ -740,12 +719,12 @@ class MockBayesianSystem(IBayesianSystem):
         # Empty state guard: identity operation when no code (0,N) or no tests (N,0)
         if observation_matrix.shape[0] == 0 or observation_matrix.shape[1] == 0:
             logger.trace(
-                f"MockBayesianSystem: Empty observation matrix {observation_matrix.shape}, "
+                f"MockBeliefUpdater: Empty observation matrix {observation_matrix.shape}, "
                 "returning prior_test_probs unchanged (identity operation)"
             )
             return prior_test_probs.copy()
 
-        logger.trace("MockBayesianSystem: Updating test beliefs")
+        logger.trace("MockBeliefUpdater: Updating test beliefs")
 
         mask_arr = np.asarray(test_update_mask_matrix, dtype=bool)
         if mask_arr.shape != observation_matrix.shape:
@@ -771,60 +750,37 @@ class MockBayesianSystem(IBayesianSystem):
 
         return new_probs
 
-    # Mask generation helpers
-    def get_code_update_mask_generation(
-        self,
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
+
+class MockInteractionLedger(IInteractionLedger):
+    """
+    Mock ledger that always permits updates (returns all 1s).
+    Use this to bypass history checks in unit tests.
+    """
+
+    def __init__(self) -> None:
+        self.committed_history: list[tuple[str, str, int]] = []
+
+    def get_new_interaction_mask(
+        self, code_ids: list[str], test_ids: list[str], test_type: str, target: str
     ) -> np.ndarray:
-        return self._get_update_mask_generation(
-            updating_ind_born_generations,
-            other_ind_born_generations,
-            current_generation,
-        )
+        # Return a mask of all 1s (allow everything)
+        return np.ones((len(code_ids), len(test_ids)), dtype=int)
 
-    def get_test_update_mask_generation(
+    def commit_interactions(
         self,
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        return self._get_update_mask_generation(
-            updating_ind_born_generations,
-            other_ind_born_generations,
-            current_generation,
-        ).T
-
-    def _get_update_mask_generation(
-        self,
-        updating_ind_born_generations: list[int] | np.ndarray,
-        other_ind_born_generations: list[int] | np.ndarray,
-        current_generation: int,
-    ) -> np.ndarray:
-        rows = len(updating_ind_born_generations)
-        cols = len(other_ind_born_generations)
-        mask = np.zeros((rows, cols), dtype=bool)
-
-        upd_gens = np.asarray(updating_ind_born_generations, dtype=int)
-        oth_gens = np.asarray(other_ind_born_generations, dtype=int)
-
-        new_rows = upd_gens == int(current_generation)
-        if new_rows.any():
-            mask[new_rows, :] = True
-
-        old_rows = ~new_rows
-        if old_rows.any():
-            cols_this_gen = oth_gens == int(current_generation)
-            if cols_this_gen.any():
-                mask[old_rows[:, None] & cols_this_gen[None, :]] = True
-
-        return mask
+        code_ids: list[str],
+        test_ids: list[str],
+        test_type: str,
+        target: str,
+        mask: np.ndarray,
+    ) -> None:
+        # Optionally track what was committed for assertions
+        self.committed_history.append((test_type, target, np.sum(mask)))
 
 
-# Backwards compatible aliases
-MockCodeBayesianSystem = MockBayesianSystem
-MockTestBayesianSystem = MockBayesianSystem
+# Factory for injection
+def mock_ledger_factory() -> IInteractionLedger:
+    return MockInteractionLedger()
 
 
 class MockDatasetTestBlockBuilder:

@@ -31,15 +31,17 @@ from common.coevolution.core.interfaces import (
     TestProfile,
 )
 from common.coevolution.core.mock import (
-    MockBayesianSystem,
+    MockBeliefUpdater,
     MockBreedingStrategy,
     MockCodeOperator,
     MockDatasetTestBlockBuilder,
     MockEliteSelector,
     MockExecutionSystem,
+    MockInteractionLedger,
     MockTestBlockRebuilder,
     MockTestOperator,
     get_mock_problem,
+    mock_ledger_factory,
 )
 from common.coevolution.core.orchestrator import Orchestrator
 from common.coevolution.core.population import CodePopulation, TestPopulation
@@ -90,8 +92,6 @@ def create_configurations() -> tuple[
     # Evolution configuration
     evo_config = EvolutionConfig(
         num_generations=5,  # Run for 5 generations
-        random_seed=42,
-        max_workers=1,  # Sequential execution for deterministic testing
     )
 
     # Code population configuration
@@ -167,7 +167,7 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     code_operator = MockCodeOperator()
 
     # Create single bayesian system (not separate for code/test)
-    bayesian_system = MockBayesianSystem()
+    bayesian_system = MockBeliefUpdater()
 
     # Create code breeding strategy and elite selector
     code_breeding_strategy = MockBreedingStrategy(
@@ -361,6 +361,7 @@ def test_orchestrator_full_run(
         public_test_profile=public_test_profile,
         execution_system=mock_components["execution_system"],
         bayesian_system=mock_components["bayesian_system"],
+        ledger_factory=mock_ledger_factory,
         test_block_rebuilder=mock_components["test_block_rebuilder"],
         dataset_test_block_builder=mock_components["dataset_test_block_builder"],
     )
@@ -472,6 +473,7 @@ def main() -> None:
         public_test_profile=public_test_profile,
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
+        ledger_factory=mock_ledger_factory,
         test_block_rebuilder=components["test_block_rebuilder"],
         dataset_test_block_builder=components["dataset_test_block_builder"],
     )
