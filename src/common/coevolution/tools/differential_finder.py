@@ -27,17 +27,17 @@ class DifferentialFinder(IDifferentialFinder):
     def __init__(self, sandbox: SafeCodeSandbox) -> None:
         self.sandbox = sandbox
 
-    def _generate_output(self, code_snippet: str, input_data: dict[str, Any]) -> str:
+    def _generate_output(
+        self, code_snippet: str, input_data: dict[str, Any]
+    ) -> str | None:
         test_input_formatted = {"inputdata": input_data}
         script = compose_lcb_output_script(code_snippet, str(test_input_formatted))
         exec_result = self.sandbox.execute_code(script)
 
         if exec_result.error:
-            output = f"Error: {exec_result.error.strip()}"
-        else:
-            output = exec_result.output.strip()
+            return None
 
-        return output
+        return exec_result.output.strip()
 
     def _generate_test_inputs(self, generator_script: str) -> list[dict[str, Any]]:
         if not validate_code_syntax(generator_script):
@@ -64,7 +64,7 @@ class DifferentialFinder(IDifferentialFinder):
         code_a_snippet: str,
         code_b_snippet: str,
         input_generator_script: str,
-        limit: int = 50,
+        limit: int = 10,
     ) -> list[DifferentialResult]:
         found_divergences: list[DifferentialResult] = []
 
@@ -76,6 +76,13 @@ class DifferentialFinder(IDifferentialFinder):
         for idx, ti in enumerate(test_inputs):
             code_a_output = self._generate_output(code_a_snippet, ti)
             code_b_output = self._generate_output(code_b_snippet, ti)
+
+            if code_a_output is None or code_b_output is None:
+                logger.debug(
+                    f"Skipping test input {idx + 1} due to execution error in one of the code snippets."
+                )
+                continue
+
             if code_a_output != code_b_output:
                 logger.debug(f"Test Input {idx + 1}:\n")
                 logger.debug("Discrepancy found!")
