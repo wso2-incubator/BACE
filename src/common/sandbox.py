@@ -540,7 +540,7 @@ class SafeCodeSandbox:
             temp_file.write(code)
             temp_file_path = temp_file.name
 
-        logger.debug(
+        logger.trace(
             f"Executing code in sandbox: temp_file={temp_file_path} capture_output={capture_output} code_len={len(code)}",
         )
 
@@ -556,7 +556,7 @@ class SafeCodeSandbox:
                 cwd=tempfile.gettempdir(),  # Run in temp directory
             )
 
-            logger.debug(f"Execution finished: returncode={result.returncode}")
+            logger.trace(f"Execution finished: returncode={result.returncode}")
 
             execution_time = time.time() - start_time
 
@@ -1001,6 +1001,7 @@ class TestExecutor:
 
 def create_safe_test_environment(
     test_method_timeout: Optional[int] = 30,
+    script_timeout: int = 300,  # 300 seconds (5 mins) max for entire script
 ) -> SafeCodeSandbox:
     """
     Create a default safe test environment.
@@ -1012,7 +1013,7 @@ def create_safe_test_environment(
         Configured SafeCodeSandbox instance
     """
     return SafeCodeSandbox(
-        timeout=300,  # 300 seconds (5 mins) max for entire script
+        timeout=script_timeout,
         max_memory_mb=100,  # 100MB max memory
         max_output_size=1_000_000,  # 1MB max output
         test_method_timeout=test_method_timeout,  # 30 seconds max per test method
