@@ -33,6 +33,7 @@ Example Usage:
     ...     .with_public_test_profile(public_profile)
     ...     .with_execution_system(execution_system)
     ...     .with_bayesian_system(bayesian_system)
+    ...     .with_ledger_factory(ledger_factory)
     ...     .with_test_block_rebuilder(test_rebuilder)
     ...     .with_dataset_test_block_builder(dataset_builder)
     ...     .build()
@@ -47,6 +48,7 @@ Example Usage:
     ...     public_test_profile=config.public_test_profile,
     ...     execution_system=config.execution_system,
     ...     bayesian_system=config.bayesian_system,
+    ...     ledger_factory=config.ledger_factory,
     ...     test_block_rebuilder=config.test_block_rebuilder,
     ...     dataset_test_block_builder=config.dataset_test_block_builder,
     ... )
@@ -67,16 +69,18 @@ from .core.interfaces import (
     BayesianConfig,
     CodeProfile,
     EvolutionConfig,
-    IBayesianSystem,
+    IBeliefUpdater,
     IDatasetTestBlockBuilder,
     IEliteSelectionStrategy,
     IExecutionSystem,
     ITestBlockRebuilder,
+    LedgerFactory,
     OperatorRatesConfig,
     PopulationConfig,
     PublicTestProfile,
     TestProfile,
 )
+from .ledger import InteractionLedger
 from .operators.code_llm_operator import CodeLLMOperator
 from .operators.differential_llm_operator import DifferentialLLMOperator
 from .operators.unittest_llm_operator import UnittestLLMOperator
@@ -495,6 +499,7 @@ class OrchestratorBuilder:
         ...     .with_public_test_profile(public_profile)
         ...     .with_execution_system(execution_system)
         ...     .with_bayesian_system(bayesian_system)
+        ...     .with_ledger_factory(ledger_factory)
         ...     .with_test_block_rebuilder(test_rebuilder)
         ...     .with_dataset_test_block_builder(dataset_builder)
         ...     .build()
@@ -513,7 +518,8 @@ class OrchestratorBuilder:
 
         # Infrastructure
         self._execution_system: IExecutionSystem | None = None
-        self._bayesian_system: IBayesianSystem | None = None
+        self._bayesian_system: IBeliefUpdater | None = None
+        self._ledger_factory: LedgerFactory = InteractionLedger  # Default factory
         self._test_block_rebuilder: ITestBlockRebuilder | None = None
         self._dataset_test_block_builder: IDatasetTestBlockBuilder | None = None
 
@@ -610,7 +616,7 @@ class OrchestratorBuilder:
         return self
 
     def with_bayesian_system(
-        self, bayesian_system: IBayesianSystem
+        self, bayesian_system: IBeliefUpdater
     ) -> "OrchestratorBuilder":
         """
         Set Bayesian system for belief updates.
@@ -622,6 +628,21 @@ class OrchestratorBuilder:
             Self for method chaining
         """
         self._bayesian_system = bayesian_system
+        return self
+
+    def with_ledger_factory(
+        self, ledger_factory: LedgerFactory
+    ) -> "OrchestratorBuilder":
+        """
+        Set ledger factory for creating interaction ledgers.
+
+        Args:
+            ledger_factory: Factory for creating fresh interaction ledgers
+
+        Returns:
+            Self for method chaining
+        """
+        self._ledger_factory = ledger_factory
         return self
 
     def with_test_block_rebuilder(
@@ -721,6 +742,7 @@ class OrchestratorBuilder:
         assert self._public_test_profile is not None
         assert self._execution_system is not None
         assert self._bayesian_system is not None
+        assert self._ledger_factory is not None
         assert self._test_block_rebuilder is not None
         assert self._dataset_test_block_builder is not None
 
@@ -731,6 +753,7 @@ class OrchestratorBuilder:
             public_test_profile=self._public_test_profile,
             execution_system=self._execution_system,
             bayesian_system=self._bayesian_system,
+            ledger_factory=self._ledger_factory,
             test_block_rebuilder=self._test_block_rebuilder,
             dataset_test_block_builder=self._dataset_test_block_builder,
         )
@@ -772,6 +795,7 @@ def build_orchestrator_from_config(config: OrchestratorConfig) -> Any:
         public_test_profile=config.public_test_profile,
         execution_system=config.execution_system,
         bayesian_system=config.bayesian_system,
+        ledger_factory=config.ledger_factory,
         test_block_rebuilder=config.test_block_rebuilder,
         dataset_test_block_builder=config.dataset_test_block_builder,
     )

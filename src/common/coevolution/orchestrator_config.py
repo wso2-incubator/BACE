@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from .core.interfaces import (
     CodeProfile,
     EvolutionConfig,
-    IBayesianSystem,
+    IBeliefUpdater,
     IDatasetTestBlockBuilder,
     IExecutionSystem,
     ITestBlockRebuilder,
+    LedgerFactory,
     PublicTestProfile,
     TestProfile,
 )
@@ -39,6 +40,7 @@ class OrchestratorConfig:
         public_test_profile: Configuration for public/ground-truth tests
         execution_system: System for running code against tests
         bayesian_system: System for belief updates
+        ledger_factory: Factory for creating fresh interaction ledgers
         test_block_rebuilder: Rebuilds test class blocks from method snippets
         dataset_test_block_builder: Builds test blocks from dataset test cases
 
@@ -53,6 +55,7 @@ class OrchestratorConfig:
             public_test_profile=public_profile,
             execution_system=execution_system,
             bayesian_system=bayesian_system,
+            ledger_factory=my_ledger_factory,
             test_block_rebuilder=test_rebuilder,
             dataset_test_block_builder=dataset_builder,
         )
@@ -64,6 +67,7 @@ class OrchestratorConfig:
             public_test_profile=config.public_test_profile,
             execution_system=config.execution_system,
             bayesian_system=config.bayesian_system,
+            ledger_factory=config.ledger_factory,
             test_block_rebuilder=config.test_block_rebuilder,
             dataset_test_block_builder=config.dataset_test_block_builder,
         )
@@ -79,6 +83,7 @@ class OrchestratorConfig:
 
     # Global infrastructure systems
     execution_system: IExecutionSystem
-    bayesian_system: IBayesianSystem
+    bayesian_system: IBeliefUpdater
+    ledger_factory: LedgerFactory
     test_block_rebuilder: ITestBlockRebuilder
     dataset_test_block_builder: IDatasetTestBlockBuilder
