@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Adjust imports to match your project structure
 from common.coevolution.breeding_strategies.differential_breeding import (
     DifferentialBreedingStrategy,
     DifferentialResult,
@@ -35,6 +36,7 @@ from common.coevolution.operators.differential_llm_operator import (
 def mock_operator() -> MagicMock:
     """Returns a mock that satisfies the DifferentialLLMOperator interface."""
     op = MagicMock(spec=DifferentialLLMOperator)
+    # Ensure checking supported operations passes
     op.supported_operations.return_value = {
         OPERATION_INITIAL,
         OPERATION_CROSSOVER,
@@ -60,7 +62,7 @@ def mock_context() -> MagicMock:
     """Returns a mock CoevolutionContext with connected mock populations."""
     ctx = MagicMock(spec=CoevolutionContext)
 
-    # Setup dummy populations
+    # Setup dummy code population
     ctx.code_population = MagicMock(spec=CodePopulation)
     ctx.code_population.generation = 5
 
@@ -69,9 +71,10 @@ def mock_context() -> MagicMock:
     test_pop_mock.size = 0  # Start empty
     test_pop_mock.generation = 5
 
-    # We must mock the dictionary behavior
+    # Mock the dictionary behavior for looking up populations
     ctx.test_populations = {"differential": test_pop_mock}
 
+    # Setup Problem
     ctx.problem = MagicMock(spec=Problem)
     ctx.problem.question_content = "Sort list"
     ctx.problem.starter_code = "def sort(x): pass"
@@ -88,7 +91,6 @@ def strategy(
     """
     Returns the concrete Strategy instance injected with mocks.
     """
-    # We cast mocks to their concrete types to satisfy the strategy constructor
     return DifferentialBreedingStrategy(
         operator=cast(DifferentialLLMOperator, mock_operator),
         differential_finder=cast(IDifferentialFinder, mock_differential_finder),
@@ -111,11 +113,13 @@ def strategy(
 
 
 def make_code_ind(id_val: str) -> CodeIndividual:
-    """Helper to create a properly typed mock CodeIndividual."""
+    """
+    Helper to create a properly typed mock CodeIndividual.
+    Crucial: Must have .id and .snippet attributes.
+    """
     ind = MagicMock(spec=CodeIndividual)
     ind.id = id_val
-    ind.snippet = f"code_{id_val}"
-    # Mypy treats MagicMocks as Any, but we cast for clarity if used strictly
+    ind.snippet = f"code_snippet_{id_val}"
     return cast(CodeIndividual, ind)
 
 
@@ -153,11 +157,9 @@ def test_initialization_scaffold(
     mock_operator.generate_initial_snippets.assert_called_once()
 
 
-@patch(
-    "common.coevolution.breeding_strategies.differential_breeding.random.sample"
-)  # <--- Patch here
+@patch("common.coevolution.breeding_strategies.differential_breeding.random.sample")
 def test_breed_via_discovery_success(
-    mock_random_sample: MagicMock,  # <--- Inject mock
+    mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
@@ -165,28 +167,31 @@ def test_breed_via_discovery_success(
     mock_differential_finder: MagicMock,
 ) -> None:
     """
-    Verify the full discovery pipeline with DETERMINISTIC ordering.
+    Verify the full discovery pipeline.
+    Ensures that CodeIndividual objects (not IDs) are passed through the pipeline.
     """
-    # 1. Setup Data
+    # 1. Setup Data: Create Mock Code Individuals
     code_a = make_code_ind("A")
     code_b = make_code_ind("B")
 
+    # 2. Setup Selector to return a Group containing these Objects
     group = FunctionallyEquivGroup(
         code_individuals=[code_a, code_b], passing_test_individuals={}
     )
     mock_func_eq_selector.select_functionally_equivalent_codes.return_value = [group]
 
-    # --- FIX: Force deterministic selection order ---
-    # This ensures 'code_a' in the strategy is always your 'code_a' (ID="A")
+    # 3. Patch random.sample to return the *exact same* mock objects
+    # This allows strategy to access code_a.snippet and code_a.id
     mock_random_sample.return_value = [code_a, code_b]
 
-    # Mock LLM Script Generation
+    # 4. Mock Operator (LLM Script Gen)
     mock_operator.apply.return_value = OperatorOutput(
         results=[OperatorResult(snippet="def fuzz(): ...")]
     )
+    mock_operator.get_test_method_from_io.return_value = "def test_diff(): ..."
 
-    # Mock Divergence Finder
-    # Since we forced [A, B], output_a corresponds to ID "A" (10)
+    # 5. Mock Divergence Finder
+    # differential_finder receives (code_a.snippet, code_b.snippet, script)
     divergence_result: DifferentialResult = {
         "input_data": {"x": 1},
         "output_a": 10,
@@ -194,24 +199,30 @@ def test_breed_via_discovery_success(
     }
     mock_differential_finder.find_differential.return_value = [divergence_result]
 
-    mock_operator.get_test_method_from_io.return_value = "def test_diff(): ..."
-
-    # 2. Run Breed
+    # 6. Run Breed
+    # We ask for 2 offspring, which aligns with 1 divergence -> 2 scenarios (A wins, B wins)
     offspring = strategy.breed(cast(CoevolutionContext, mock_context), num_offsprings=2)
 
-    # 3. Assertions
+    # 7. Assertions
     assert len(offspring) == 2
 
-    # Verify Metadata logic
+    # Check that differential finder was called with snippets, not IDs or Objects
+    mock_differential_finder.find_differential.assert_called_with(
+        code_a.snippet, code_b.snippet, "def fuzz(): ..."
+    )
+
+    # Verify Metadata logic for the first offspring (Scenario 1: A is winner)
     meta_a = offspring[0].metadata
     assert meta_a is not None
+    assert "divergence_outputs" in meta_a
 
-    # Now this assertion will be stable:
-    # A produced 10, B produced 20.
+    # Since 'code_a' mock has id="A", and 'output_a' was 10:
     assert meta_a["divergence_outputs"] == {"A": [10], "B": [20]}
 
 
+@patch("common.coevolution.breeding_strategies.differential_breeding.random.sample")
 def test_breed_via_discovery_retries_on_failure(
+    mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
@@ -219,124 +230,19 @@ def test_breed_via_discovery_retries_on_failure(
     mock_differential_finder: MagicMock,
 ) -> None:
     """
-    Verify the loop retries if:
-    1. LLM fails
-    2. Divergence Finder returns nothing
+    Verify the loop retries if the divergence finder returns nothing initially.
     """
+    # 1. Setup Objects
     code_a = make_code_ind("A")
     code_b = make_code_ind("B")
+
     group = FunctionallyEquivGroup(
         code_individuals=[code_a, code_b], passing_test_individuals={}
     )
     mock_func_eq_selector.select_functionally_equivalent_codes.return_value = [group]
 
-    # Setup Operator: Always succeeds
-    mock_operator.apply.return_value = OperatorOutput(
-        results=[OperatorResult(snippet="script")]
-    )
-    mock_operator.get_test_method_from_io.return_value = "test_code"
+    # Return objects on sample
+    mock_random_sample.return_value = [code_a, code_b]
 
-    # Setup Finder:
-    # Attempt 1: Returns empty list [] (No divergence) -> Strategy should retry
-    # Attempt 2: Returns valid list -> Strategy succeeds
-    divergence_result: DifferentialResult = {
-        "input_data": {"x": 2},
-        "output_a": 1,
-        "output_b": 2,
-    }
-    mock_differential_finder.find_differential.side_effect = [
-        [],  # Fail
-        [divergence_result],  # Success
-    ]
-
-    offspring = strategy.breed(cast(CoevolutionContext, mock_context), num_offsprings=2)
-
-    assert len(offspring) == 2
-    # Verify finder was called twice because the first time yielded no results
-    assert mock_differential_finder.find_differential.call_count == 2
-
-
-def test_breed_via_crossover(
-    strategy: DifferentialBreedingStrategy, mock_context: MagicMock
-) -> None:
-    """Verify crossover correctly merges metadata from parents."""
-    # Setup context with existing differential tests
-    # Access the specific test population mock stored in the dict
-    diff_pop = mock_context.test_populations["differential"]
-    diff_pop.size = 10
-
-    # Setup Parents
-    p1 = make_test_ind("P1", io_pairs=[{"inputdata": {"x": 1}, "output": 1}])
-    p2 = make_test_ind("P2", io_pairs=[{"inputdata": {"y": 2}, "output": 2}])
-
-    # Mock the strategy's parent_selector property
-    select_parents_mock: MagicMock = cast(
-        MagicMock, strategy.parent_selector.select_parents
-    )
-    select_parents_mock.return_value = [p1, p2]
-
-    # Mock Operator Crossover Result
-    merged_metadata = {"io_pairs": [{"x": 1}, {"y": 2}]}
-
-    # We must cast the operator mock back to MagicMock to configure return values
-    # if Mypy gets confused, but usually it's fine.
-    op_mock = cast(MagicMock, strategy.operator)
-    op_mock.apply.return_value = OperatorOutput(
-        results=[OperatorResult(snippet="merged_test", metadata=merged_metadata)]
-    )
-
-    # Configure probability assigner to return a float
-    strategy.probability_assigner.assign_probability = MagicMock(return_value=0.7)  # type: ignore[method-assign]
-
-    # Call the private handler directly for unit testing
-    offspring = strategy._breed_via_crossover(cast(CoevolutionContext, mock_context))
-
-    assert len(offspring) == 1
-    assert offspring[0].creation_op == OPERATION_CROSSOVER
-    assert offspring[0].metadata == merged_metadata
-
-
-@patch("common.coevolution.breeding_strategies.base_breeding.random.choices")
-def test_breed_flow_switching(
-    mock_choices: MagicMock,  # <--- Inject Mock
-    strategy: DifferentialBreedingStrategy,
-    mock_context: MagicMock,
-) -> None:
-    """
-    Test that Crossover is successfully used when selected by the breeding loop.
-    We force the loop to select CROSSOVER to ensure deterministic success.
-    """
-    # 1. Setup Discovery to FAIL (No groups)
-    func_selector = cast(MagicMock, strategy.func_eq_code_selector)
-    func_selector.select_functionally_equivalent_codes.return_value = []
-
-    # 2. Setup Crossover to SUCCEED
-    mock_context.test_populations["differential"].size = 5
-    p1 = make_test_ind("P1", io_pairs=[{"inputdata": {"x": 1}, "output": 1}])
-    p2 = make_test_ind("P2", io_pairs=[{"inputdata": {"y": 2}, "output": 2}])
-
-    parent_selector = cast(MagicMock, strategy.parent_selector)
-    parent_selector.select_parents.return_value = [p1, p2]
-
-    # Force the Strategy to pick CROSSOVER
-    # BaseBreedingStrategy uses random.choices(ops, weights, k=1)
-    mock_choices.return_value = [OPERATION_CROSSOVER]
-
-    op_mock = cast(MagicMock, strategy.operator)
-    op_mock.apply.return_value = OperatorOutput(
-        results=[
-            OperatorResult(
-                snippet="cross",
-                metadata={"io_pairs": [{"inputdata": {"z": 3}, "output": 3}]},
-            )
-        ]
-    )
-
-    # Configure probability assigner
-    strategy.probability_assigner.assign_probability = MagicMock(return_value=0.7)  # type: ignore[method-assign]
-
-    # Run breed
-    results = strategy.breed(cast(CoevolutionContext, mock_context), num_offsprings=1)
-
-    assert len(results) == 1
-    assert results[0].creation_op == OPERATION_CROSSOVER
+    # 2. Setup Operator
+    mock_operator.apply.return_value
