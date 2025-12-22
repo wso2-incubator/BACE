@@ -119,6 +119,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             OPERATION_CROSSOVER: self._breed_via_crossover,
         }
 
+        # Cache of pairs that have already been checked for divergence and found none.
+        # Stores tuples of (min_id, max_id) to ensure order independence.
+        self._checked_equivalence_cache: set[tuple[str, str]] = set()
         logger.info("DifferentialBreedingStrategy initialized.")
 
     def initialize_individuals(
@@ -160,6 +163,13 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         group = random.choice(valid_groups)
         code_a, code_b = random.sample(group.code_individuals, 2)
+
+        if self._check_equivalence(code_a, code_b):
+            logger.debug(
+                f"Code Individuals {code_a.id} and {code_b.id} are already marked as functionally equivalent. Skipping discovery."
+            )
+            return []
+
         logger.debug(
             f"Selected Code Individuals {code_a.id} and {code_b.id} for differential discovery."
         )
@@ -177,7 +187,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             equivalent_code_snippet_1=code_a.snippet,
             equivalent_code_snippet_2=code_b.snippet,
             passing_differential_test_io_pairs=passing_io_pairs,
-            num_inputs_to_generate=100,
+            num_inputs_to_generate=100,  # TODO: make configurable
         )
 
         try:
@@ -192,8 +202,11 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             code_a.snippet, code_b.snippet, script
         )
 
+        # No Divergences Found
         if not divergences:
             logger.warning("No divergences found between selected code individuals.")
+            # Mark as equivalent to avoid future redundant checks
+            self._mark_as_equivalent(code_a, code_b)
             return []
 
         # TODO: Probability assignment should be more sophisticated
@@ -334,6 +347,29 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             results.append(ind)
 
         return results
+
+    def _mark_as_equivalent(
+        self, code_a: CodeIndividual, code_b: CodeIndividual
+    ) -> None:
+        """
+        Cache the fact that these two individuals were checked and no divergence was found.
+        Uses a sorted tuple key to handle symmetry (A,B) == (B,A).
+        """
+        # Create a consistent key regardless of order
+        pair_key = tuple(sorted((code_a.id, code_b.id)))
+        self._checked_equivalence_cache.add(cast(tuple[str, str], pair_key))
+
+        logger.debug(f"Cached equivalence check for {code_a.id} and {code_b.id}.")
+
+    def _check_equivalence(
+        self, code_a: CodeIndividual, code_b: CodeIndividual
+    ) -> bool:
+        """
+        Returns True if we have already checked these two for divergence
+        and failed to find any.
+        """
+        pair_key = tuple(sorted((code_a.id, code_b.id)))
+        return pair_key in self._checked_equivalence_cache
 
 
 __all__ = ["DifferentialBreedingStrategy"]
