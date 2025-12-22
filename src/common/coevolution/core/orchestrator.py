@@ -542,6 +542,13 @@ class Orchestrator:
         Returns:
             Tuple of (evolve_tests, evolve_code)
         """
+        if self.evo_config.epoch_length is None:
+            # Default: Always evolve both
+            logger.info(
+                "No epoch_length set - evolving both code and tests every generation."
+            )
+            return True, True
+
         epoch_idx = gen // self.evo_config.epoch_length
         is_test_epoch = epoch_idx % 2 == 0
 
