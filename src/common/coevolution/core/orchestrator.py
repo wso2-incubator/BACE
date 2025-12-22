@@ -150,6 +150,9 @@ class Orchestrator:
                 f"GENERATION {gen} / {self.evo_config.num_generations}",
             )
 
+            # Determine evolution phase (which populations to evolve this generation)
+            evolve_tests, evolve_code = self._determine_evolution_phase(gen)
+
             # A. Execute - returns new interaction data (pure function)
             interactions = self._execute_all_interactions(
                 code_pop, evolved_test_pops, public_pop
@@ -168,7 +171,7 @@ class Orchestrator:
 
             # C. Evolve - mutates population individuals in context
             if gen < self.evo_config.num_generations:
-                self._produce_next_generation(context)
+                self._produce_next_generation(context, evolve_code, evolve_tests)
 
             # D. Log generation summary
             logging_utils.log_generation_summary(
@@ -405,6 +408,8 @@ class Orchestrator:
     def _produce_next_generation(
         self,
         context: CoevolutionContext,
+        evolve_code: bool,
+        evolve_tests: bool,
     ) -> None:
         """
         Handles the full evolution cycle: Selection, Breeding, and Transition.
@@ -419,43 +424,74 @@ class Orchestrator:
         """
         code_pop = context.code_population
 
-        # 1. Select Elites
-        logger.debug("Step 3: Selecting elites...")
-        code_elites, test_elites_dict = self._select_elites(context)
-        self._notify_elites(code_elites, code_pop.generation)
+        # --- 1. Evolve Code (If Active) ---
+        if evolve_code:
+            logger.debug("Active Phase: Evolving Code Population...")
 
-        # Notify test elites for each type
-        for test_type, test_elites in test_elites_dict.items():
-            test_pop = context.test_populations[test_type]
-            self._notify_elites(test_elites, test_pop.generation)
-
-        # 2. Breed Code
-        logger.debug("Step 4: Generating offspring...")
-        code_offsprings = self._breed_code(context, len(code_elites))
-
-        # 3. Breed Tests for each evolved type
-        test_offsprings_dict: dict[str, list[TestIndividual]] = {}
-        for test_type in self.evolved_test_types:
-            test_elites = test_elites_dict[test_type]
-            test_offsprings_dict[test_type] = self._breed_tests(
-                context, test_type, len(test_elites)
+            # Select Elites
+            logger.debug("Selecting code elites...")
+            code_elites = self.code_profile.elite_selector.select_elites(
+                population=code_pop,
+                coevolution_context=context,
+                population_config=self.code_profile.population_config,
             )
 
-        # 4. Transition Code Population
-        logger.debug("Step 5: Setting next generation...")
-        new_code_gen = code_elites + code_offsprings
-        self._notify_removed_individuals(code_pop, new_code_gen)
-        code_pop.set_next_generation(new_code_gen)
+            logger.debug(f"Selected {len(code_elites)} code elites.")
+            self._notify_elites(code_elites, code_pop.generation)
 
-        # 5. Transition Test Populations
-        for test_type in self.evolved_test_types:
-            test_pop = context.test_populations[test_type]
-            test_elites = test_elites_dict[test_type]
-            test_offsprings = test_offsprings_dict[test_type]
+            # Breed Offspring
+            code_offsprings = self._breed_code(context, len(code_elites))
+            logger.debug(f"Generated {len(code_offsprings)} code offsprings.")
 
-            new_test_gen = test_elites + test_offsprings
-            self._notify_removed_individuals(test_pop, new_test_gen)
-            test_pop.set_next_generation(new_test_gen)
+            # Transition
+            new_code_gen = code_elites + code_offsprings
+            self._notify_removed_individuals(code_pop, new_code_gen)
+            code_pop.set_next_generation(new_code_gen)
+            logger.info(
+                f"Code Population transitioned to generation {code_pop.generation}."
+            )
+        else:
+            logger.debug("Frozen Phase: Code Population is static this generation.")
+
+        # --- 2. Evolve Tests (If Active) ---
+        if evolve_tests:
+            logger.debug("Active Phase: Evolving Test Populations...")
+
+            # We select elites here to ensure we breed from the best *current* tests
+            for test_type in self.evolved_test_types:
+                logger.info(f"Evolving {test_type} test elites...")
+                test_pop = context.test_populations[test_type]
+                test_elites = self.evolved_test_profiles[
+                    test_type
+                ].elite_selector.select_elites(
+                    population=test_pop,
+                    coevolution_context=context,
+                    population_config=self.evolved_test_profiles[
+                        test_type
+                    ].population_config,
+                )
+
+                logger.debug(f"Selected {len(test_elites)} {test_type} test elites.")
+
+                # Notify Elites
+                self._notify_elites(test_elites, test_pop.generation)
+
+                # Breed
+                test_offsprings = self._breed_tests(
+                    context, test_type, len(test_elites)
+                )
+                logger.debug(
+                    f"Generated {len(test_offsprings)} {test_type} test offsprings."
+                )
+                # Transition
+                new_test_gen = test_elites + test_offsprings
+                self._notify_removed_individuals(test_pop, new_test_gen)
+                test_pop.set_next_generation(new_test_gen)
+                logger.info(
+                    f"{test_type.capitalize()} Test Population transitioned to generation {test_pop.generation}."
+                )
+        else:
+            logger.debug("Frozen Phase: Test Populations are static this generation.")
 
     # =========================================================================
     # Lifecycle Phase 3: Finalization
@@ -484,6 +520,30 @@ class Orchestrator:
     # =========================================================================
     # Helper Methods
     # =========================================================================
+
+    def _determine_evolution_phase(self, gen: int) -> tuple[bool, bool]:
+        """
+        Determines whether to evolve code and/or tests based on generation number.
+
+        Even Epochs (0, 2..): Evolve Tests, Freeze Code
+        Odd Epochs (1, 3..): Evolve Code, Freeze Tests
+
+        Args:
+            gen: Current generation number
+        Returns:
+            Tuple of (evolve_tests, evolve_code)
+        """
+        epoch_idx = gen // self.evo_config.epoch_length
+        is_test_epoch = epoch_idx % 2 == 0
+
+        evolve_tests = is_test_epoch
+        evolve_code = not is_test_epoch
+
+        logger.info(
+            f"Determined Evolution Phase - Evolve Tests: {evolve_tests}, Evolve Code: {evolve_code}"
+        )
+
+        return evolve_tests, evolve_code
 
     def _create_initial_code_population(self, problem: Problem) -> CodePopulation:
         """

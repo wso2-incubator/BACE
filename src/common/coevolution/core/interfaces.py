@@ -328,10 +328,14 @@ class EvolutionConfig:
     """
 
     num_generations: int = 5
+    epoch_length: int = 1  # 1 -> Alternative Evolution: Freeze code evolve tests, freeze tests evolve code...
 
     def __post_init__(self) -> None:
         if self.num_generations <= 0:
             raise ValueError("num_generations must be positive.")
+
+        if self.epoch_length <= 0:
+            raise ValueError("epoch_length must be positive.")
 
 
 @dataclass(frozen=True)
