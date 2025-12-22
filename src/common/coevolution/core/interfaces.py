@@ -334,7 +334,7 @@ class EvolutionConfig:
         if self.num_generations <= 0:
             raise ValueError("num_generations must be positive.")
 
-        if self.epoch_length is not None and self.epoch_length <= 1:
+        if self.epoch_length is not None and self.epoch_length <= 0:
             raise ValueError("epoch_length must be positive.")
 
 
