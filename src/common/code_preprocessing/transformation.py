@@ -701,7 +701,9 @@ def setup_unittest_class_from_starter_code(starter_code: str) -> str:
 
 
 def build_test_method_from_io(
-    starter_code: str, io_pairs: list[dict[str, Any]], parent_ids: list[str]
+    starter_code: str,
+    io_pairs: list[dict[str, Any]],
+    suffix: str,
 ) -> str:
     """
     Given starter code and IO pairs, builds a single test method containing
@@ -720,8 +722,10 @@ def build_test_method_from_io(
     method_name = method_match.group(1)
 
     # 2. Define the test method signature
-    # We join parent IDs to create a unique test name, e.g., test_case_C1_C2
-    suffix = "_".join(parent_ids) if parent_ids else "generated"
+    # e.g., test_case_C1_C2
+    if not suffix:
+        suffix = "generated"
+
     test_method_signature = f"def test_case_{suffix}(self):\n"
 
     # 3. Build the assertions body

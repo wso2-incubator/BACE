@@ -1369,7 +1369,7 @@ class Solution:
     """
         io_pairs = [{"inputdata": {"a": 1, "b": 2}, "output": 3}]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["C1"])
+        result = build_test_method_from_io(starter_code, io_pairs, "C1")
 
         # Check method name
         assert "def test_case_C1(self):" in result
@@ -1389,7 +1389,7 @@ class Solution:
     """
         io_pairs = [{"inputdata": {"s": "hello"}, "output": "olleh"}]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["C2"])
+        result = build_test_method_from_io(starter_code, io_pairs, "C2")
 
         # Inputs should be quoted
         assert "s='hello'" in result or 's="hello"' in result
@@ -1404,7 +1404,7 @@ class Solution:
     """
         io_pairs = [{"inputdata": {"nums": [3, 1, 2]}, "output": [1, 2, 3]}]
 
-        result = build_test_method_from_io(starter_code, io_pairs, [])
+        result = build_test_method_from_io(starter_code, io_pairs, "")
 
         # Check list formatting
         assert "nums=[3, 1, 2]" in result
@@ -1423,7 +1423,7 @@ class Solution:
             {"inputdata": {"n": 3}, "output": False},
         ]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["P1", "P2"])
+        result = build_test_method_from_io(starter_code, io_pairs, "P1_P2")
 
         assert "def test_case_P1_P2(self):" in result
         # Both subtests should be present
@@ -1438,7 +1438,7 @@ class Solution:
         io_pairs = [{"inputdata": {"x": 1}, "output": 1}]
 
         with pytest.raises(CodeParsingError) as excinfo:
-            build_test_method_from_io(invalid_code, io_pairs, ["ERR"])
+            build_test_method_from_io(invalid_code, io_pairs, "ERR")
 
         assert "Could not parse class/method names" in str(excinfo.value)
 
@@ -1457,7 +1457,7 @@ class Solution:
         # but the BUILDER should succeed.
         io_pairs = [{"inputdata": {"x": 1, "y": 2}, "output": 3}]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["MISMATCH"])
+        result = build_test_method_from_io(starter_code, io_pairs, "MISMATCH")
 
         assert "x=1" in result
         assert "y=2" in result
@@ -1472,7 +1472,7 @@ class Solution:
             {"inputdata": {"n": 3, "conflictingPairs": [[1, 2], [2, 3]]}, "output": 2}
         ]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["MAX_SUB"])
+        result = build_test_method_from_io(starter_code, io_pairs, "MAX_SUB")
 
         # Check method name
         assert "def test_case_MAX_SUB(self):" in result
@@ -1498,7 +1498,7 @@ class Solution:
             }
         ]
 
-        result = build_test_method_from_io(starter_code, io_pairs, ["STDIN"])
+        result = build_test_method_from_io(starter_code, io_pairs, "STDIN")
 
         # Check method name
         assert "def test_case_STDIN(self):" in result
