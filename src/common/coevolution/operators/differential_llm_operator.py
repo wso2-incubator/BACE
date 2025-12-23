@@ -33,15 +33,6 @@ class DifferentialInputOutput(TypedDict):
 
 
 @dataclass(frozen=True)
-class DifferentialCrossoverInput(BaseOperatorInput):
-    starter_code: str
-    differential_parent_1_io_pairs: list[DifferentialInputOutput]
-    differential_parent_1_id: str
-    differential_parent_2_io_pairs: list[DifferentialInputOutput]
-    differential_parent_2_id: str
-
-
-@dataclass(frozen=True)
 class DifferentialGenScriptInput(BaseOperatorInput):
     equivalent_code_snippet_1: str
     equivalent_code_snippet_2: str
@@ -85,6 +76,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         starter_code: str,
         io_pairs: list[DifferentialInputOutput],
         code_parent_ids: list[str],
+        io_index: int,
     ) -> str:
         """Build a test method from differential input-output pairs.
         Note: This is not a LLM operation. or a genetic operation.
@@ -93,8 +85,9 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         logger.debug(
             f"Building test method from {len(io_pairs)} IO pairs for parents {code_parent_ids}"
         )
+        suffix = f"{'_'.join(code_parent_ids)}_{io_index}"
         method_code = transformation.build_test_method_from_io(
-            starter_code, cast(list[dict[str, Any]], io_pairs), code_parent_ids
+            starter_code, cast(list[dict[str, Any]], io_pairs), suffix
         )
         logger.debug(f"Built test method with length {len(method_code)}")
         return method_code
@@ -133,81 +126,12 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         logger.info("Successfully generated differential input script")
         return result
 
-    def _handle_crossover(
-        self, input_dto: DifferentialCrossoverInput
-    ) -> OperatorOutput:
-        """
-        No LLM crossover for differential tests; simply cross combines test methods from both parents.
-        Produces two children by swapping half the methods.
-        """
-
-        logger.info(
-            f"Performing crossover between differential parents {input_dto.differential_parent_1_id} and {input_dto.differential_parent_2_id}"
-        )
-        parent_1_io_pairs = input_dto.differential_parent_1_io_pairs
-        parent_2_io_pairs = input_dto.differential_parent_2_io_pairs
-
-        split_idx_1 = len(parent_1_io_pairs) // 2
-        split_idx_2 = len(parent_2_io_pairs) // 2
-
-        child_1_io_pairs = (
-            parent_1_io_pairs[:split_idx_1] + parent_2_io_pairs[split_idx_2:]
-        )
-        child_2_io_pairs = (
-            parent_2_io_pairs[:split_idx_2] + parent_1_io_pairs[split_idx_1:]
-        )
-
-        logger.debug(
-            f"Child 1 IO pairs: {len(child_1_io_pairs)}, Child 2 IO pairs: {len(child_2_io_pairs)}"
-        )
-
-        child_1_test_method = transformation.build_test_method_from_io(
-            starter_code=input_dto.starter_code,
-            io_pairs=cast(list[dict[str, Any]], child_1_io_pairs),
-            parent_ids=[
-                input_dto.differential_parent_1_id,
-                input_dto.differential_parent_2_id,
-                input_dto.operation,
-            ],
-        )
-        child_2_test_method = transformation.build_test_method_from_io(
-            starter_code=input_dto.starter_code,
-            io_pairs=cast(list[dict[str, Any]], child_2_io_pairs),
-            parent_ids=[
-                input_dto.differential_parent_2_id,
-                input_dto.differential_parent_1_id,
-                input_dto.operation,
-            ],
-        )
-
-        logger.debug(
-            f"Generated child 1 test method with length {len(child_1_test_method)}"
-        )
-        logger.debug(
-            f"Generated child 2 test method with length {len(child_2_test_method)}"
-        )
-
-        result = OperatorOutput(
-            results=[
-                OperatorResult(
-                    snippet=child_1_test_method, metadata={"io_pairs": child_1_io_pairs}
-                ),
-                OperatorResult(
-                    snippet=child_2_test_method, metadata={"io_pairs": child_2_io_pairs}
-                ),
-            ]
-        )
-        logger.info("Successfully performed differential crossover")
-        return result
-
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
         operation = getattr(input_dto, "operation", "unknown")
         logger.info(
             f"Applying differential operator for operation '{operation}' with input type {type(input_dto).__name__}"
         )
         match input_dto:
-            case DifferentialCrossoverInput():
-                result = self._handle_crossover(input_dto)
             case DifferentialGenScriptInput():
                 result = self._handle_generation_script(input_dto)
             case _:
@@ -223,6 +147,5 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
 __all__ = [
     "DifferentialInputOutput",
     "DifferentialGenScriptInput",
-    "DifferentialCrossoverInput",
     "DifferentialLLMOperator",
 ]

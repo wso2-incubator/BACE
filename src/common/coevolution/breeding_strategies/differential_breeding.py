@@ -15,7 +15,6 @@ from loguru import logger
 
 from ..core.individual import CodeIndividual, TestIndividual
 from ..core.interfaces import (
-    OPERATION_CROSSOVER,
     OPERATION_INITIAL,
     CoevolutionContext,
     InitialInput,
@@ -27,7 +26,6 @@ from ..core.interfaces import (
 )
 from ..operators.differential_llm_operator import (
     OPERATION_DISCOVERY,
-    DifferentialCrossoverInput,
     DifferentialGenScriptInput,
     DifferentialInputOutput,
     DifferentialLLMOperator,
@@ -116,15 +114,11 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Register Handlers
         self._strategies = {
             OPERATION_DISCOVERY: self._breed_via_discovery,
-            OPERATION_CROSSOVER: self._breed_via_crossover,
         }
 
         # Cache of pairs that have already been checked for divergence and found none.
         # Stores tuples of (min_id, max_id) to ensure order independence.
         self._checked_equivalence_cache: set[tuple[str, str]] = set()
-
-        # Cache of pairs that were already crossed over.
-        self._crossover_cache: set[tuple[str, str]] = set()
 
         logger.info("DifferentialBreedingStrategy initialized.")
 
@@ -232,72 +226,6 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Create TestIndividual per Input Divergence for BOTH scenarios
         return self._create_divergence_tests(context, code_a, code_b, divergences, prob)
 
-    def _breed_via_crossover(self, context: CoevolutionContext) -> list[TestIndividual]:
-        # ... (Crossover logic remains identical, it handles lists of IO pairs naturally) ...
-        parents = self.parent_selector.select_parents(
-            context.test_populations["differential"],
-            count=2,
-            coevolution_context=context,
-        )
-        if len(parents) < 2:
-            logger.warning("Not enough parents selected for differential crossover.")
-            return []
-
-        p1, p2 = parents[0], parents[1]
-
-        if self._check_crossover_done(p1, p2):
-            logger.debug(
-                f"Test Individuals {p1.id} and {p2.id} have already undergone crossover. Skipping."
-            )
-            return []
-
-        p1_io = p1.metadata.get("io_pairs", [])
-        p2_io = p2.metadata.get("io_pairs", [])
-
-        if not p1_io or not p2_io:
-            logger.warning("Selected parents lack IO pair metadata for crossover.")
-            return []
-
-        dto = DifferentialCrossoverInput(
-            operation=OPERATION_CROSSOVER,
-            question_content=context.problem.question_content,
-            starter_code=context.problem.starter_code,
-            differential_parent_1_io_pairs=cast(list[DifferentialInputOutput], p1_io),
-            differential_parent_1_id=p1.id,
-            differential_parent_2_io_pairs=cast(list[DifferentialInputOutput], p2_io),
-            differential_parent_2_id=p2.id,
-        )
-
-        try:
-            output = self.operator.apply(dto)
-        except Exception as e:
-            logger.warning(f"Differential crossover operator failed: {e}")
-            return []
-
-        offspring = []
-        for res in output.results:
-            prob = self.probability_assigner.assign_probability(
-                operation=OPERATION_CROSSOVER,
-                parent_probs=[p1.probability, p2.probability],
-                initial_prior=self.pop_config.initial_prior,
-            )
-
-            offspring.append(
-                TestIndividual(
-                    snippet=res.snippet,
-                    probability=prob,
-                    creation_op=OPERATION_CROSSOVER,
-                    generation_born=context.test_populations["differential"].generation
-                    + 1,
-                    parents={"code": [], "test": [p1.id, p2.id]},
-                    metadata={"io_pairs": res.metadata["io_pairs"]},
-                )
-            )
-
-        if offspring:
-            self._mark_as_crossover_done(p1, p2)
-        return offspring
-
     def _create_divergence_tests(
         self,
         context: CoevolutionContext,
@@ -334,9 +262,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         for winner, loser, io_pairs, winner_outputs in scenarios:
             # Generate the Python Test Method (Contains assertions for ALL pairs)
-            for io_pair in io_pairs:
+            for i, io_pair in enumerate(io_pairs):
                 snippet = self.operator.get_test_method_from_io(
-                    context.problem.starter_code, [io_pair], [winner.id, loser.id]
+                    context.problem.starter_code, [io_pair], [winner.id, loser.id], i
                 )
                 ind = TestIndividual(
                     snippet=snippet,
@@ -383,27 +311,6 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         """
         pair_key = tuple(sorted((code_a.id, code_b.id)))
         return pair_key in self._checked_equivalence_cache
-
-    def _mark_as_crossover_done(
-        self, test_a: TestIndividual, test_b: TestIndividual
-    ) -> None:
-        """
-        Cache the fact that these two test individuals were already crossed over.
-        Uses a sorted tuple key to handle symmetry (A,B) == (B,A).
-        """
-        pair_key = tuple(sorted((test_a.id, test_b.id)))
-        self._crossover_cache.add(cast(tuple[str, str], pair_key))
-
-        logger.debug(f"Cached crossover for {test_a.id} and {test_b.id}.")
-
-    def _check_crossover_done(
-        self, test_a: TestIndividual, test_b: TestIndividual
-    ) -> bool:
-        """
-        Returns True if these two test individuals were already crossed over.
-        """
-        pair_key = tuple(sorted((test_a.id, test_b.id)))
-        return pair_key in self._crossover_cache
 
 
 __all__ = ["DifferentialBreedingStrategy"]

@@ -327,8 +327,7 @@ def create_differential_test_profile(
     max_population_size: int = 20,
     offspring_rate: float = 1.0,
     elitism_rate: float = 0.3,
-    discovery_rate: float = 0.8,
-    crossover_rate: float = 0.2,
+    discovery_rate: float = 1.0,
     alpha: float = 0.05,
     beta: float = 0.3,
     gamma: float = 0.3,
@@ -369,7 +368,7 @@ def create_differential_test_profile(
         ValueError: If rates don't sum to 1.0 or parameters are invalid
     """
     # Validate rates
-    total_rate = discovery_rate + crossover_rate
+    total_rate = discovery_rate
     if not (0.99 <= total_rate <= 1.01):
         raise ValueError(f"Operation rates must sum to 1.0, got {total_rate:.4f}")
 
@@ -390,7 +389,6 @@ def create_differential_test_profile(
     operator_rates = OperatorRatesConfig(
         operation_rates={
             "discovery": discovery_rate,
-            "crossover": crossover_rate,
         }
     )
 
