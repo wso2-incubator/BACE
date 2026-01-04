@@ -5,11 +5,11 @@ import textwrap
 
 import pytest
 
-from common.code_preprocessing.exceptions import (
+from infrastructure.code_preprocessing.exceptions import (
     CodeParsingError,
     CodeTransformationError,
 )
-from common.code_preprocessing.transformation import (
+from infrastructure.code_preprocessing.transformation import (
     build_test_method_from_io,
     extract_class_block,
     extract_first_test_method_code,

@@ -17,9 +17,9 @@ from typing import Any
 import pytest
 from loguru import logger
 
-import common.coevolution.logging_utils as logging_utils
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import (
+import coevolution.logging_utils as logging_utils
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import (
     BayesianConfig,
     CodeProfile,
     EvolutionConfig,
@@ -30,7 +30,7 @@ from common.coevolution.core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
-from common.coevolution.core.mock import (
+from coevolution.core.mock import (
     MockBeliefUpdater,
     MockBreedingStrategy,
     MockCodeOperator,
@@ -42,8 +42,8 @@ from common.coevolution.core.mock import (
     get_mock_problem,
     mock_ledger_factory,
 )
-from common.coevolution.core.orchestrator import Orchestrator
-from common.coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.core.orchestrator import Orchestrator
+from coevolution.core.population import CodePopulation, TestPopulation
 
 
 def create_profiles(

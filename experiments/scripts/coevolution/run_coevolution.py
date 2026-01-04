@@ -20,17 +20,18 @@ from typing import Optional
 import typer
 from loguru import logger
 
-import common.coevolution.logging_utils as logging_utils
-from common.coevolution.bayesian_system import BayesianSystem
-from common.coevolution.execution import ExecutionSystem
-from common.coevolution.lcb_dataset import (
+import coevolution.logging_utils as logging_utils
+from coevolution.bayesian_system import BayesianSystem
+from coevolution.core.scheduling import ScheduleBuilder
+from coevolution.execution import ExecutionSystem
+from coevolution.lcb_dataset import (
     Difficulty,
     LCBCodeGenerationProblem,
     LCBDatasetTestBlockBuilder,
     LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
-from common.coevolution.orchestrator_builder import (
+from coevolution.orchestrator_builder import (
     OrchestratorBuilder,
     build_orchestrator_from_config,
     create_default_code_profile,
@@ -38,8 +39,8 @@ from common.coevolution.orchestrator_builder import (
     create_public_test_profile,
     create_unittest_test_profile,
 )
-from common.llm_client import create_llm_client
-from common.sandbox import SafeCodeSandbox, create_safe_test_environment
+from infrastructure.llm_client import create_llm_client
+from infrastructure.sandbox import SafeCodeSandbox, create_safe_test_environment
 
 
 def load_problems() -> list[LCBCodeGenerationProblem]:
@@ -230,7 +231,13 @@ def main(
 
             config = (
                 OrchestratorBuilder()
-                .with_evolution_config(num_generations=10, epoch_length=1)
+                .with_evolution_config(
+                    schedule=ScheduleBuilder()
+                    .alternating(
+                        total_duration=10, code_step=1, test_step=1, start_with="test"
+                    )
+                    .build()
+                )
                 .with_code_profile(code_profile)
                 .add_test_profile("unittest", unittest_profile)
                 .add_test_profile("differential", differential_profile)

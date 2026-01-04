@@ -10,10 +10,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from common.coevolution.core.individual import CodeIndividual
-from common.coevolution.core.interfaces import OPERATION_INITIAL, CoevolutionContext
-from common.coevolution.core.population import CodePopulation
-from common.coevolution.selection_strategies.parent_selection import (
+from coevolution.core.individual import CodeIndividual
+from coevolution.core.interfaces import OPERATION_INITIAL, CoevolutionContext
+from coevolution.core.population import CodePopulation
+from coevolution.selection_strategies.parent_selection import (
     RouletteWheelParentSelection,
 )
 

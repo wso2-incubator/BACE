@@ -4,7 +4,7 @@ import pandas as pd
 import typer
 from loguru import logger
 
-from common.coevolution.logging_utils import parse_complete_coevolution_log
+from coevolution.logging_utils import parse_complete_coevolution_log
 
 
 def parse_problem_ids(value: str) -> list[str]:

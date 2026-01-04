@@ -4,15 +4,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Adjust imports to match your project structure
-from common.coevolution.breeding_strategies.differential_breeding import (
+from coevolution.breeding_strategies.differential_breeding import (
     DifferentialBreedingStrategy,
     DifferentialResult,
     FunctionallyEquivGroup,
     IDifferentialFinder,
     IFunctionallyEquivalentCodeSelector,
 )
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     OPERATION_INITIAL,
     CoevolutionContext,
@@ -23,8 +23,8 @@ from common.coevolution.core.interfaces import (
     PopulationConfig,
     Problem,
 )
-from common.coevolution.core.population import CodePopulation, TestPopulation
-from common.coevolution.operators.differential_llm_operator import (
+from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.operators.differential_llm_operator import (
     OPERATION_DISCOVERY,
     DifferentialLLMOperator,
 )
@@ -157,7 +157,7 @@ def test_initialization_scaffold(
     mock_operator.generate_initial_snippets.assert_called_once()
 
 
-@patch("common.coevolution.breeding_strategies.differential_breeding.random.sample")
+@patch("coevolution.breeding_strategies.differential_breeding.random.sample")
 def test_breed_via_discovery_success(
     mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,
@@ -220,7 +220,7 @@ def test_breed_via_discovery_success(
     assert meta_a["divergence_outputs"] == {"A": [10], "B": [20]}
 
 
-@patch("common.coevolution.breeding_strategies.differential_breeding.random.sample")
+@patch("coevolution.breeding_strategies.differential_breeding.random.sample")
 def test_breed_via_discovery_retries_on_failure(
     mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,

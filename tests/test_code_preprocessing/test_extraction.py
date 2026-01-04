@@ -2,8 +2,8 @@
 
 import pytest
 
-from common.code_preprocessing.exceptions import CodeParsingError
-from common.code_preprocessing.extraction import (
+from infrastructure.code_preprocessing.exceptions import CodeParsingError
+from infrastructure.code_preprocessing.extraction import (
     extract_all_code_blocks_from_response,
     extract_code_block_from_response,
     extract_code_structure,
@@ -81,10 +81,10 @@ class TestExtractAllCodeBlocksFromResponse:
         assert blocks[1] == "second"
 
     def test_extracts_single_block(self) -> None:
-        response = "```python\nonly one\n```"
+        response = '```python\nprint("hi")\n```'
         blocks = extract_all_code_blocks_from_response(response)
         assert len(blocks) == 1
-        assert blocks[0] == "only one"
+        assert blocks[0] == 'print("hi")'
 
     def test_raises_error_when_no_blocks(self) -> None:
         response = "No code here"

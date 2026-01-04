@@ -3,13 +3,13 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from common.coevolution.breeding_strategies.differential_breeding import (
+from coevolution.breeding_strategies.differential_breeding import (
     FunctionallyEquivGroup,
 )
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import CoevolutionContext, InteractionData
-from common.coevolution.core.population import CodePopulation, TestPopulation
-from common.coevolution.selection_strategies.functionally_eq_selection import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import CoevolutionContext, InteractionData
+from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.selection_strategies.functionally_eq_selection import (
     FunctionallyEqSelector,
 )
 

@@ -2,12 +2,12 @@
 
 import pytest
 
-from common.code_preprocessing.composition import (
+from infrastructure.code_preprocessing.composition import (
     compose_lcb_output_script,
     compose_lcb_test_script,
     rebuild_unittest_with_methods,
 )
-from common.code_preprocessing.exceptions import (
+from infrastructure.code_preprocessing.exceptions import (
     CodeParsingError,
     CodeTransformationError,
 )

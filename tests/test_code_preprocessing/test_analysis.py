@@ -2,14 +2,14 @@
 
 import pytest
 
-from common.code_preprocessing.analysis import (
+from infrastructure.code_preprocessing.analysis import (
     analyze_code_classes,
     analyze_code_functions,
     analyze_code_imports,
     analyze_test_methods,
     contains_starter_code,
 )
-from common.code_preprocessing.exceptions import CodeParsingError
+from infrastructure.code_preprocessing.exceptions import CodeParsingError
 
 
 class TestAnalyzeTestMethods:

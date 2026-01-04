@@ -4,12 +4,12 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import CoevolutionContext, InteractionData
-from common.coevolution.selection_strategies.failing_test_selection import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import CoevolutionContext, InteractionData
+from coevolution.selection_strategies.failing_test_selection import (
     FailingTestSelector,
 )
-from common.sandbox import TestExecutionResult, TestResult
+from infrastructure.sandbox import TestExecutionResult, TestResult
 
 
 class TestFailingTestSelector(unittest.TestCase):

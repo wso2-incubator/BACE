@@ -16,8 +16,8 @@ from typing import Callable
 import numpy as np
 import pytest
 
-from common.coevolution.bayesian_system import BayesianSystem
-from common.coevolution.core.interfaces import BayesianConfig
+from coevolution.bayesian_system import BayesianSystem
+from coevolution.core.interfaces import BayesianConfig
 
 
 class TestBeliefInitialization:

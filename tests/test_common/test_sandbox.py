@@ -7,7 +7,7 @@ enhanced error categorization features.
 
 import pytest
 
-from common.sandbox import (
+from infrastructure.sandbox import (
     BasicExecutionResult,
     PytestXmlAnalyzer,
     SafeCodeSandbox,

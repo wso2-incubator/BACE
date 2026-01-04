@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from common.coevolution.ledger import InteractionLedger
+from coevolution.ledger import InteractionLedger
 
 
 class TestInteractionLedger(unittest.TestCase):

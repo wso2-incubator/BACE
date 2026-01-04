@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from loguru import logger
 
-from common.coevolution.breeding_strategies.base_breeding import BaseBreedingStrategy
-from common.coevolution.core.interfaces import (
+from coevolution.breeding_strategies.base_breeding import BaseBreedingStrategy
+from coevolution.core.interfaces import (
     BaseIndividual,
     CoevolutionContext,
     OperatorRatesConfig,

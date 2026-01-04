@@ -1,20 +1,22 @@
-from common.code_preprocessing.extraction import extract_code_block_from_response
-from common.code_preprocessing.transformation import extract_test_methods_code
-from common.coevolution import lcb_dataset
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import Operations
-from common.coevolution.core.mock import MockPareto, MockTestBlockRebuilder
-from common.coevolution.core.population import CodePopulation, TestPopulation
-from common.coevolution.execution import ExecutionSystem
-from common.coevolution.feedback import CodeFeedbackGenerator
-from common.coevolution.prompt_templates import (
+from coevolution import lcb_dataset
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import Operations
+from coevolution.core.mock import MockPareto, MockTestBlockRebuilder
+from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.execution import ExecutionSystem
+from coevolution.feedback import CodeFeedbackGenerator
+from coevolution.prompt_templates import (
     _CODE_FORMAT_INSTRUCTION,
     _CODER_ROLE,
     _STARTER_CODE_BLOCK,
     _STARTER_CODE_NOTE,
 )
-from common.llm_client import create_llm_client
-from common.sandbox import create_safe_test_environment
+from infrastructure.code_preprocessing.extraction import (
+    extract_code_block_from_response,
+)
+from infrastructure.code_preprocessing.transformation import extract_test_methods_code
+from infrastructure.llm_client import create_llm_client
+from infrastructure.sandbox import create_safe_test_environment
 
 EDIT_CODE = (
     _CODER_ROLE + "\n\n"
@@ -196,6 +198,9 @@ class Solution:
     for test_result in exec_results[0].test_results:
         print(f"{test_result.status}: {test_result.details}")
 
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()

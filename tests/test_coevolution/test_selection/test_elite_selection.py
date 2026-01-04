@@ -11,15 +11,15 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import (
     OPERATION_INITIAL,
     CoevolutionContext,
     InteractionData,
     PopulationConfig,
 )
-from common.coevolution.core.population import CodePopulation, TestPopulation
-from common.coevolution.selection_strategies.elite_selection import (
+from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.selection_strategies.elite_selection import (
     CodeDiversityEliteSelector,
     TestDiversityEliteSelector,
     TopKEliteSelector,

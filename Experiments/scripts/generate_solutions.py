@@ -10,12 +10,12 @@ from typing import Any, Dict
 from human_eval.data import read_problems, write_jsonl
 from tqdm import tqdm
 
-from common.code_preprocessing.parsers import (
+from infrastructure.code_preprocessing.parsers import (
     extract_code_block_from_response,
     extract_function_name_from_problem,
 )
-from common.code_preprocessing.transformers import extract_function_with_helpers
-from common.llm_client import LLMClient, create_llm_client
+from infrastructure.code_preprocessing.transformers import extract_function_with_helpers
+from infrastructure.llm_client import LLMClient, create_llm_client
 
 
 def generate_one_completion(problem_prompt: str, client: LLMClient) -> str:

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     OPERATION_EDIT,
     OPERATION_INITIAL,
@@ -287,7 +287,7 @@ class TestCodeIndividual:
             repr_str = repr(individual)
             assert f"op={op}" in repr_str
 
-    @patch("common.coevolution.core.individual.logger")
+    @patch("coevolution.core.individual.logger")
     def test_creation_logs_debug_message(self, mock_logger: MagicMock) -> None:
         """Test that individual creation logs debug message."""
         _ = CodeIndividual(
@@ -334,7 +334,7 @@ class TestTestIndividual:
         ids = [ind.id for ind in individuals]
         assert len(ids) == len(set(ids))  # All IDs are unique
 
-    @patch("common.coevolution.core.individual.logger")
+    @patch("coevolution.core.individual.logger")
     def test_creation_logs_debug_message(self, mock_logger: MagicMock) -> None:
         """Test that individual creation logs debug message."""
         _ = TestIndividual(

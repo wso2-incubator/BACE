@@ -3,7 +3,7 @@ from typing import Any, Tuple
 
 from openai import OpenAI
 
-import common.llm_client as llm_client
+import infrastructure.llm_client as llm_client
 
 
 class LLMInterface(ABC):

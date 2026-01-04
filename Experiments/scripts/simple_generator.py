@@ -20,8 +20,8 @@ import fire
 from human_eval.data import read_problems, write_jsonl
 from tqdm import tqdm
 
-from common import CodeProcessor, SimpleConfig
-from common.llm_client import create_llm_client
+from infrastructure import CodeProcessor, SimpleConfig
+from infrastructure.llm_client import create_llm_client
 
 
 class SimpleGenerator:

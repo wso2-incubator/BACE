@@ -12,14 +12,14 @@ This module tests the ProbabilityAssigner implementation, including:
 import numpy as np
 import pytest
 
-from common.coevolution.core.interfaces import (
+from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     OPERATION_EDIT,
     OPERATION_INITIAL,
     OPERATION_MUTATION,
     OPERATION_REPRODUCTION,
 )
-from common.coevolution.probability_assigner import (
+from coevolution.probability_assigner import (
     AssignmentStrategy,
     ProbabilityAssigner,
 )

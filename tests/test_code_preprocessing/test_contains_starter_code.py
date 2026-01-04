@@ -2,7 +2,7 @@
 Test cases for contains_starter_code function with real LCB dataset examples.
 """
 
-from common.code_preprocessing.analysis import contains_starter_code
+from infrastructure.code_preprocessing.analysis import contains_starter_code
 
 
 class TestContainsStarterCode:

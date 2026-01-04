@@ -2,8 +2,8 @@
 Script to test contains_starter_code function with real LCB dataset starter codes.
 """
 
-from common.code_preprocessing.analysis import contains_starter_code
-from common.coevolution.lcb_dataset import Difficulty, load_code_generation_dataset
+from coevolution.lcb_dataset import Difficulty, load_code_generation_dataset
+from infrastructure.code_preprocessing.analysis import contains_starter_code
 
 
 def main() -> None:

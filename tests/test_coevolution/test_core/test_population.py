@@ -10,14 +10,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from common.coevolution.core.individual import CodeIndividual, TestIndividual
-from common.coevolution.core.interfaces import (
+from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     OPERATION_INITIAL,
     OPERATION_MUTATION,
     OPERATION_REPRODUCTION,
 )
-from common.coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.core.population import CodePopulation, TestPopulation
 
 # ============================================================================
 # FIXTURES
@@ -336,7 +336,7 @@ class TestBasePopulationSharedBehavior:
                 probability=0.95,
                 creation_op=OPERATION_MUTATION,
                 generation_born=1,
-                parents={"C0": "code"},
+                parents={"code": ["C0"]},
             )
         ]
 
@@ -348,11 +348,13 @@ class TestBasePopulationSharedBehavior:
     def test_set_next_generation_with_empty_list(
         self, sample_code_population: CodePopulation
     ) -> None:
-        """Test set_next_generation with empty list raises ValueError."""
-        with pytest.raises(ValueError, match="Cannot set an empty population"):
-            sample_code_population.set_next_generation([])
+        """Test set_next_generation with empty list results in empty population."""
+        sample_code_population.set_next_generation([])
 
-    @patch("common.coevolution.core.interfaces.logger")
+        assert sample_code_population.size == 0
+        assert len(sample_code_population.individuals) == 0
+
+    @patch("coevolution.core.interfaces.logger")
     def test_set_next_generation_logs_changes(
         self,
         mock_logger: MagicMock,
@@ -680,7 +682,7 @@ class TestPopulationIntegration:
                     probability=ind.probability,
                     creation_op=OPERATION_REPRODUCTION,
                     generation_born=gen + 1,
-                    parents={ind.id: "code"},
+                    parents={"code": [ind.id]},
                 )
                 for ind in top_5
             ]

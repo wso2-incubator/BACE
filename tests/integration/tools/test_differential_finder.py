@@ -1,6 +1,6 @@
 # Integration test for DifferentialFinder using the real SafeCodeSandbox.
-from common.coevolution.tools.differential_finder import DifferentialFinder
-from common.sandbox import SafeCodeSandbox
+from coevolution.tools.differential_finder import DifferentialFinder
+from infrastructure.sandbox import SafeCodeSandbox
 
 
 def test_integration_differential_finder_real_execution() -> None:
