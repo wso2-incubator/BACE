@@ -201,7 +201,9 @@ if __name__ == "__main__":
     # 4. Assertions
     # The DifferentialFinder skips test inputs that cause execution errors
     # (returns None from _generate_output), so we only get the logical divergence
-    assert len(results) == 1, f"Expected 1 divergence (crash skipped), found {len(results)}"
+    assert len(results) == 1, (
+        f"Expected 1 divergence (crash skipped), found {len(results)}"
+    )
 
     # Check Logical Divergence ("Racecar")
     res_logic = results[0]
