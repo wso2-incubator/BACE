@@ -150,45 +150,61 @@ class Orchestrator:
         # Create ledger for tracking interactions
         ledger = self.ledger_factory()
 
-        # 2. Main Loop
-        for gen in range(self.evo_config.num_generations + 1):
-            logging_utils.log_subsection_header(
-                "INFO",
-                f"GENERATION {gen} / {self.evo_config.num_generations}",
+        # Global counters
+        global_gen = 0
+        total_gens = self.evo_config.num_generations
+        schedule = self.evo_config.schedule
+
+        # 2. Main Loop: Iterate over Phases -> Generations
+        for phase in schedule.phases:
+            logger.info(
+                f"=== Starting Phase: {phase.name} (Duration: {phase.duration}) ==="
+            )
+            logger.info(
+                f"    [Rules] Evolve Code: {phase.evolve_code} | Evolve Tests: {phase.evolve_tests}"
             )
 
-            # Determine evolution phase (which populations to evolve this generation)
-            evolve_tests, evolve_code = self._determine_evolution_phase(gen)
+            for _ in range(phase.duration):
+                logging_utils.log_subsection_header(
+                    "INFO",
+                    f"GENERATION {global_gen} / {total_gens} [Phase: {phase.name}]",
+                )
 
-            # A. Execute - returns new interaction data (pure function)
-            interactions = self._execute_all_interactions(
-                code_pop, evolved_test_pops, public_pop
-            )
+                # A. Execute - returns new interaction data (pure function)
+                interactions = self._execute_all_interactions(
+                    code_pop, evolved_test_pops, public_pop
+                )
 
-            # Build context with current populations and new interactions
-            context = CoevolutionContext(
-                problem=problem,
-                code_population=code_pop,
-                test_populations={**evolved_test_pops, "public": public_pop},
-                interactions=interactions,
-            )
+                # Build context with current populations and new interactions
+                context = CoevolutionContext(
+                    problem=problem,
+                    code_population=code_pop,
+                    test_populations={**evolved_test_pops, "public": public_pop},
+                    interactions=interactions,
+                )
 
-            # B. Update Beliefs - mutates population probabilities in context
-            self._perform_cooperative_updates(context, ledger)
+                # B. Update Beliefs - mutates population probabilities in context
+                self._perform_cooperative_updates(context, ledger)
 
-            # C. Evolve - mutates population individuals in context
-            if gen < self.evo_config.num_generations:
-                self._produce_next_generation(context, evolve_code, evolve_tests)
+                # C. Evolve - mutates population individuals in context
+                if global_gen < total_gens:
+                    self._produce_next_generation(
+                        context,
+                        evolve_code=phase.evolve_code,
+                        evolve_tests=phase.evolve_tests,
+                    )
 
-            # D. Log generation summary
-            logging_utils.log_generation_summary(
-                context.code_population,
-                {
-                    k: v
-                    for k, v in context.test_populations.items()
-                    if k in self.evolved_test_types
-                },
-            )
+                # D. Log generation summary
+                logging_utils.log_generation_summary(
+                    context.code_population,
+                    {
+                        k: v
+                        for k, v in context.test_populations.items()
+                        if k in self.evolved_test_types
+                    },
+                )
+
+                global_gen += 1
 
         # 3. Finalization
         code_pop = context.code_population
@@ -529,37 +545,6 @@ class Orchestrator:
     # =========================================================================
     # Helper Methods
     # =========================================================================
-
-    def _determine_evolution_phase(self, gen: int) -> tuple[bool, bool]:
-        """
-        Determines whether to evolve code and/or tests based on generation number.
-
-        Even Epochs (0, 2..): Evolve Tests, Freeze Code
-        Odd Epochs (1, 3..): Evolve Code, Freeze Tests
-
-        Args:
-            gen: Current generation number
-        Returns:
-            Tuple of (evolve_tests, evolve_code)
-        """
-        if self.evo_config.epoch_length is None:
-            # Default: Always evolve both
-            logger.info(
-                "No epoch_length set - evolving both code and tests every generation."
-            )
-            return True, True
-
-        epoch_idx = gen // self.evo_config.epoch_length
-        is_test_epoch = epoch_idx % 2 == 0
-
-        evolve_tests = is_test_epoch
-        evolve_code = not is_test_epoch
-
-        logger.info(
-            f"Determined Evolution Phase - Evolve Tests: {evolve_tests}, Evolve Code: {evolve_code}"
-        )
-
-        return evolve_tests, evolve_code
 
     def _create_initial_code_population(self, problem: Problem) -> CodePopulation:
         """

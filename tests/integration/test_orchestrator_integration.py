@@ -89,9 +89,7 @@ def create_configurations() -> tuple[
     """Create all configuration objects for the experiment."""
 
     # Evolution configuration
-    evo_config = EvolutionConfig(
-        num_generations=5,  # Run for 5 generations
-    )
+    evo_config = EvolutionConfig.simple(generations=5)
 
     # Code population configuration
     code_pop_config = PopulationConfig(

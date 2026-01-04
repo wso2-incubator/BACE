@@ -80,6 +80,7 @@ from .core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
+from .core.scheduling import ScheduleBuilder
 from .ledger import InteractionLedger
 from .operators.code_llm_operator import CodeLLMOperator
 from .operators.differential_llm_operator import DifferentialLLMOperator
@@ -536,10 +537,21 @@ class OrchestratorBuilder:
         Returns:
             Self for method chaining
         """
-        self._evo_config = EvolutionConfig(
-            num_generations=num_generations,
-            epoch_length=epoch_length,
-        )
+        if epoch_length is None:
+            schedule = ScheduleBuilder().simultaneous(num_generations).build()
+        else:
+            schedule = (
+                ScheduleBuilder()
+                .alternating(
+                    total_duration=num_generations,
+                    code_step=epoch_length,
+                    test_step=epoch_length,
+                    start_with="test",
+                )
+                .build()
+            )
+
+        self._evo_config = EvolutionConfig(schedule=schedule)
         return self
 
     def with_code_profile(self, profile: CodeProfile) -> "OrchestratorBuilder":

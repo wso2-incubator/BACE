@@ -19,8 +19,8 @@ Usage Patterns:
 
 1. Direct submodule access (recommended):
     import common.coevolution as coevo
-    config = coevo.config.CoevolutionConfig(num_generations=50)
-    orchestrator = coevo.orchestrator.CoevolutionOrchestrator(config, problem, llm, sandbox)
+    config = coevo.core.interfaces.EvolutionConfig.simple(generations=50)
+    orchestrator = coevo.core.orchestrator.Orchestrator(config, ...)
     selector = coevo.selection.SelectionStrategy(method="binary_tournament")
     code_pop = coevo.population.CodePopulation(...)
 

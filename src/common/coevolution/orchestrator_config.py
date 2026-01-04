@@ -46,7 +46,7 @@ class OrchestratorConfig:
 
     Example:
         config = OrchestratorConfig(
-            evo_config=EvolutionConfig(num_generations=10, max_workers=4),
+            evo_config=EvolutionConfig.simple(generations=10),
             code_profile=my_code_profile,
             evolved_test_profiles={
                 "unittest": unittest_profile,
