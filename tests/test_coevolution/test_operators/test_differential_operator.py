@@ -103,8 +103,9 @@ def test_get_test_method_from_io(
         starter_code, sample_io_pairs, parent_ids, io_index=0
     )
 
+    # Implementation passes suffix string (P1_P2_0) not parent_ids list
     mock_transform.build_test_method_from_io.assert_called_once_with(
-        starter_code, sample_io_pairs, parent_ids
+        starter_code, sample_io_pairs, "P1_P2_0"
     )
 
 

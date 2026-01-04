@@ -1,11 +1,9 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 import numpy as np
 import pytest
 
-from coevolution.breeding_strategies.differential_breeding import (
-    FunctionallyEquivGroup,
-)
+from coevolution.breeding_strategies.differential_breeding import FunctionallyEquivGroup
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import CoevolutionContext, InteractionData
 from coevolution.core.population import CodePopulation, TestPopulation
@@ -48,7 +46,8 @@ def setup_code_pop(ctx: MagicMock, size: int) -> list[CodeIndividual]:
         individuals.append(ind)
 
     ctx.code_population.individuals = individuals
-    ctx.code_population.size = size
+    # Configure size as a PropertyMock to return the actual integer value
+    type(ctx.code_population).size = PropertyMock(return_value=size)
     # Allow indexing: ctx.code_population[i]
     ctx.code_population.__getitem__.side_effect = lambda i: individuals[i]
     return individuals
@@ -173,6 +172,9 @@ def test_select_complex_groups_multiple_test_types(
     C2   | 1, 0            | 0            | [1, 0, 0] -> Group B
     C3   | 0, 1            | 1            | [0, 1, 1] -> Group C
     """
+
+    # Setup code population (4 codes)
+    codes = setup_code_pop(mock_context, size=4)
 
     # Public Tests Matrix (2 tests)
     mat_public = [
