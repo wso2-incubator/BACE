@@ -39,7 +39,7 @@ from common.coevolution.orchestrator_builder import (
     create_unittest_test_profile,
 )
 from common.llm_client import create_llm_client
-from common.sandbox import create_safe_test_environment
+from common.sandbox import SafeCodeSandbox, create_safe_test_environment
 
 
 def load_problems() -> list[LCBCodeGenerationProblem]:
@@ -50,7 +50,7 @@ def load_problems() -> list[LCBCodeGenerationProblem]:
         release_version="release_v6",
         start_date="2025-03-01",
         end_date="2025-05-10",
-        difficulty=Difficulty.HARD,
+        difficulty=Difficulty.MEDIUM,
     )
 
     if not problems:
@@ -99,6 +99,10 @@ def main(
     logger.info(f"Using model: {llm_client.model}")
 
     sandbox = create_safe_test_environment()
+    sandbox_for_differential = SafeCodeSandbox(
+        timeout=20, max_memory_mb=256, max_output_size=10_000_000
+    )
+
     logger.info("Sandbox created")
 
     # ====================================
@@ -183,18 +187,17 @@ def main(
             # Differential Profile: Bootstrap from empty with discovery-based growth
             differential_profile = create_differential_test_profile(
                 llm_client=llm_client,
-                sandbox=sandbox,
+                sandbox=sandbox_for_differential,
                 initial_prior=0.2,
                 initial_population_size=0,  # Bootstrap mode
-                max_population_size=5,
+                max_population_size=100,
                 offspring_rate=0.5,  # Aggressive growth
                 elitism_rate=0.3,
                 discovery_rate=1.0,  # Discovery finds divergent code pairs
-                crossover_rate=0.0,
                 alpha=0.3,  # Lower reliability than unittest
                 beta=0.5,
                 gamma=0.5,
-                learning_rate=0.05,
+                learning_rate=0.01,
                 max_workers=10,
                 diversity_enabled=True,
             )
@@ -227,7 +230,7 @@ def main(
 
             config = (
                 OrchestratorBuilder()
-                .with_evolution_config(num_generations=5)
+                .with_evolution_config(num_generations=10, epoch_length=1)
                 .with_code_profile(code_profile)
                 .add_test_profile("unittest", unittest_profile)
                 .add_test_profile("differential", differential_profile)
