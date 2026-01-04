@@ -622,7 +622,8 @@ def parse_complete_coevolution_log(
         - 'gen_stats': DataFrame
         - 'individuals': DataFrame
         - 'matrices': {
-            'generated': list[pd.DataFrame],
+            'unittest': list[pd.DataFrame],
+            'differential': list[pd.DataFrame],
             'public': list[pd.DataFrame],
             'private': list[pd.DataFrame]
           }
@@ -632,7 +633,8 @@ def parse_complete_coevolution_log(
     data_store: dict[str, list[Any]] = {
         "gen_data": [],
         "ind_data": [],
-        "mat_generated": [],
+        "mat_unittest": [],
+        "mat_differential": [],
         "mat_public": [],
         "mat_private": [],
     }
@@ -646,7 +648,12 @@ def parse_complete_coevolution_log(
         return {
             "gen_stats": pd.DataFrame(),
             "individuals": pd.DataFrame(),
-            "matrices": {"generated": [], "public": [], "private": []},
+            "matrices": {
+                "unittest": [],
+                "differential": [],
+                "public": [],
+                "private": [],
+            },
         }
 
     logger.info(
@@ -714,8 +721,10 @@ def parse_complete_coevolution_log(
                 df = pd.DataFrame.from_dict(matrix_dict)
                 df.index.name = "Code"
 
-                if matrix_type == "GENERATED":
-                    data_store["mat_generated"].append(df)
+                if matrix_type == "UNITTEST":
+                    data_store["mat_unittest"].append(df)
+                elif matrix_type == "DIFFERENTIAL":
+                    data_store["mat_differential"].append(df)
                 elif matrix_type == "PUBLIC":
                     data_store["mat_public"].append(df)
                 elif matrix_type == "PRIVATE":
@@ -764,7 +773,8 @@ def parse_complete_coevolution_log(
         "gen_stats": gen_df,
         "individuals": ind_df,
         "matrices": {
-            "generated": data_store["mat_generated"],
+            "unittest": data_store["mat_unittest"],
+            "differential": data_store["mat_differential"],
             "public": data_store["mat_public"],
             "private": data_store["mat_private"],
         },
