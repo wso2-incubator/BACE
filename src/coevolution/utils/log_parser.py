@@ -27,7 +27,6 @@ class MatrixRegistry(TypedDict):
 class ParsedLog(TypedDict):
     gen_stats: pd.DataFrame
     individuals: pd.DataFrame
-    # Changed from hardcoded keys to a dynamic dictionary
     matrices: dict[str, list[pd.DataFrame]]
 
 
@@ -68,7 +67,7 @@ def _log_line_generator(
 # --- The Parser (Logic) ---
 
 
-def parse_complete_coevolution_log(
+def parse_coevolution_log(
     log_dir: str,
     log_filename_pattern: str,
     target_run_id: Optional[str] = None,
