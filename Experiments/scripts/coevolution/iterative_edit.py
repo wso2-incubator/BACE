@@ -1,11 +1,11 @@
-from coevolution import lcb_dataset
+from coevolution.adapters import lcb
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import Operations
 from coevolution.core.mock import MockPareto, MockTestBlockRebuilder
 from coevolution.core.population import CodePopulation, TestPopulation
-from coevolution.execution import ExecutionSystem
+from coevolution.services.execution import ExecutionSystem
 from coevolution.feedback import CodeFeedbackGenerator
-from coevolution.prompt_templates import (
+from coevolution.utils.prompts import (
     _CODE_FORMAT_INSTRUCTION,
     _CODER_ROLE,
     _STARTER_CODE_BLOCK,
@@ -46,11 +46,11 @@ EDIT_CODE = (
 
 def main() -> None:
     # Load problem
-    problems = lcb_dataset.load_code_generation_dataset(
+    problems = lcb.load_code_generation_dataset(
         release_version="release_v6",
         start_date="2025-03-01",
         end_date="2025-05-10",
-        difficulty=lcb_dataset.Difficulty.HARD,
+        difficulty=lcb.Difficulty.HARD,
     )
 
     problem_id = "arc194_c"
@@ -59,7 +59,7 @@ def main() -> None:
         raise ValueError(f"Problem with ID {problem_id} not found.")
 
     # Initialize Test Population
-    test_class_block = lcb_dataset.LCBDatasetTestBlockBuilder.build_test_class_block(
+    test_class_block = lcb.LCBDatasetTestBlockBuilder.build_test_class_block(
         problem.public_test_cases, problem.starter_code
     )
 

@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from coevolution import logging_utils
+from coevolution.utils import logging as logging_utils
 from infrastructure.code_preprocessing.transformation import extract_test_methods_code
 
 # Import concrete classes

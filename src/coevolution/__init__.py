@@ -5,38 +5,44 @@ This module provides tools for coevolutionary algorithms with Bayesian updates,
 specifically designed for code-test coevolution where both populations evolve
 simultaneously with mutual evaluation and belief updates.
 
-Main components:
-- config: Configuration classes for coevolution experiments
-- bayesian: Bayesian belief update and evaluation functions
-- operators: LLM-based genetic operators (mutation, crossover, edit)
-- population: Population management (BasePopulation, CodePopulation, TestPopulation)
-- selection: Selection strategies for evolutionary algorithms
-- evaluation: Code execution and observation matrix generation
-- feedback: Natural language feedback generation for LLM editing
-- orchestrator: Main orchestrator for running the coevolution algorithm
+Phase 2 Architecture - Layered Implementation:
+
+Core Components:
+    - core/: Domain kernel (Orchestrator, Individual, Population, Interfaces)
+    - factory.py: Orchestrator construction and wiring
+    - scheduling.py: Evolution schedule configuration
+
+Implementation Layers:
+    - services/: Engine mechanisms (Bayesian, Execution, Ledger)
+    - strategies/: Pluggable policies (Operators, Breeding, Selection, Probability)
+    - adapters/: External data connectors (LiveCodeBench dataset)
+    - utils/: Cross-cutting helpers (Logging, Prompts)
 
 Usage Patterns:
 
-1. Direct submodule access (recommended):
-    import coevolution as coevo
-    config = coevo.core.interfaces.EvolutionConfig.simple(generations=50)
-    orchestrator = coevo.core.orchestrator.Orchestrator(config, ...)
-    selector = coevo.selection.SelectionStrategy(method="binary_tournament")
-    code_pop = coevo.population.CodePopulation(...)
+1. Direct layer access (recommended):
+    from coevolution.factory import OrchestratorBuilder
+    from coevolution.services import execution, bayesian, ledger
+    from coevolution.strategies import operators, breeding, selection
+    from coevolution.adapters import lcb
+    from coevolution import utils
 
 2. Hierarchical imports:
-    from coevolution.config import CoevolutionConfig
-    from coevolution.bayesian import initialize_prior_beliefs, update_population_beliefs
-    from coevolution.operators import CodeOperator, TestOperator
-    from coevolution.selection import SelectionStrategy
-    from coevolution.population import BasePopulation, CodePopulation, TestPopulation
-    from coevolution.orchestrator import CoevolutionOrchestrator
+    from coevolution.factory import OrchestratorBuilder
+    from coevolution.services.execution import ExecutionSystem
+    from coevolution.services.bayesian import BayesianSystem
+    from coevolution.strategies.breeding.code_breeding import CodeBreedingStrategy
+    from coevolution.adapters.lcb import load_code_generation_dataset
 
-Note: Uses CodeGenerationProblem from lcb_runner for problem representation.
+Note: Phase 3 will refactor the core kernel for improved domain clarity.
 """
 
-from . import core
+from . import adapters, core, services, strategies, utils
 
 __all__ = [
     "core",
+    "services",
+    "strategies",
+    "adapters",
+    "utils",
 ]

@@ -5,7 +5,7 @@ from typing import Any, Literal, cast
 import numpy as np
 from loguru import logger
 
-from coevolution import logging_utils
+from coevolution.utils import logging as logging_utils
 
 from .interfaces import (
     OPERATION_CROSSOVER,
@@ -821,5 +821,7 @@ class MockDatasetTestBlockBuilder:
             f"MockDatasetTestBlockBuilder: Built test class block with {len(snippets)} test methods"
         )
 
+        return test_class_block
+        return test_class_block
         return test_class_block
         return test_class_block

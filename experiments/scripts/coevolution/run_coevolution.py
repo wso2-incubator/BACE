@@ -20,17 +20,15 @@ from typing import Optional
 import typer
 from loguru import logger
 
-import coevolution.logging_utils as logging_utils
-from coevolution.bayesian_system import BayesianSystem
-from coevolution.execution import ExecutionSystem
-from coevolution.lcb_dataset import (
+import coevolution.utils.logging as logging_utils
+from coevolution.adapters.lcb import (
     Difficulty,
     LCBCodeGenerationProblem,
     LCBDatasetTestBlockBuilder,
     LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
-from coevolution.orchestrator_builder import (
+from coevolution.factory import (
     OrchestratorBuilder,
     build_orchestrator_from_config,
     create_default_code_profile,
@@ -39,6 +37,8 @@ from coevolution.orchestrator_builder import (
     create_unittest_test_profile,
 )
 from coevolution.scheduling import ScheduleBuilder
+from coevolution.services.bayesian import BayesianSystem
+from coevolution.services.execution import ExecutionSystem
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SafeCodeSandbox, create_safe_test_environment
 

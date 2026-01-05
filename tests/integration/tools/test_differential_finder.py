@@ -1,5 +1,5 @@
 # Integration test for DifferentialFinder using the real SafeCodeSandbox.
-from coevolution.tools.differential_finder import DifferentialFinder
+from coevolution.strategies.breeding.differential_finder import DifferentialFinder
 from infrastructure.sandbox import SafeCodeSandbox
 
 
