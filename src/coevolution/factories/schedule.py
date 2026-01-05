@@ -1,6 +1,35 @@
+"""
+Schedule builder with fluent API for constructing evolution schedules.
+
+This module provides ScheduleBuilder, a fluent interface for defining
+evolution schedules with multiple phases. Schedules control which populations
+evolve in each generation, enabling patterns like:
+- Warmup phases (one population frozen while other evolves)
+- Simultaneous evolution (both evolve together)
+- Alternating evolution (turn-taking between populations)
+
+Example Usage:
+    >>> from coevolution.factories import ScheduleBuilder
+    >>>
+    >>> # Build a complex schedule
+    >>> schedule = (
+    ...     ScheduleBuilder()
+    ...     .warmup_code(duration=5)           # Code evolves alone first
+    ...     .warmup_tests(duration=5)          # Then tests evolve alone
+    ...     .simultaneous(duration=10)         # Then both together
+    ...     .alternating(                       # Then alternating phases
+    ...         total_duration=20,
+    ...         code_step=2,
+    ...         test_step=3,
+    ...         start_with="test"
+    ...     )
+    ...     .build()
+    ... )
+"""
+
 from typing import Literal
 
-from .core.interfaces import EvolutionPhase, EvolutionSchedule
+from ..core.interfaces import EvolutionPhase, EvolutionSchedule
 
 
 class ScheduleBuilder:

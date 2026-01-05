@@ -9,8 +9,7 @@ Phase 2 Architecture - Layered Implementation:
 
 Core Components:
     - core/: Domain kernel (Orchestrator, Individual, Population, Interfaces)
-    - factory.py: Orchestrator construction and wiring
-    - scheduling.py: Evolution schedule configuration
+    - factories/: The Construction Layer (Builders, Factory functions)
 
 Implementation Layers:
     - services/: Engine mechanisms (Bayesian, Execution, Ledger)
@@ -21,14 +20,14 @@ Implementation Layers:
 Usage Patterns:
 
 1. Direct layer access (recommended):
-    from coevolution.factory import OrchestratorBuilder
+    from coevolution.factories import OrchestratorBuilder, ScheduleBuilder
     from coevolution.services import execution, bayesian, ledger
     from coevolution.strategies import operators, breeding, selection
     from coevolution.adapters import lcb
     from coevolution import utils
 
 2. Hierarchical imports:
-    from coevolution.factory import OrchestratorBuilder
+    from coevolution.factories import OrchestratorBuilder
     from coevolution.services.execution import ExecutionSystem
     from coevolution.services.bayesian import BayesianSystem
     from coevolution.strategies.breeding.code_breeding import CodeBreedingStrategy
@@ -37,10 +36,11 @@ Usage Patterns:
 Note: Phase 3 will refactor the core kernel for improved domain clarity.
 """
 
-from . import adapters, core, services, strategies, utils
+from . import adapters, core, factories, services, strategies, utils
 
 __all__ = [
     "core",
+    "factories",
     "services",
     "strategies",
     "adapters",
