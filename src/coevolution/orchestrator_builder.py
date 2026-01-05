@@ -69,6 +69,7 @@ from .core.interfaces import (
     BayesianConfig,
     CodeProfile,
     EvolutionConfig,
+    EvolutionSchedule,
     IBeliefUpdater,
     IDatasetTestBlockBuilder,
     IEliteSelectionStrategy,
@@ -80,7 +81,6 @@ from .core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
-from .core.scheduling import EvolutionSchedule
 from .ledger import InteractionLedger
 from .operators.code_llm_operator import CodeLLMOperator
 from .operators.differential_llm_operator import DifferentialLLMOperator

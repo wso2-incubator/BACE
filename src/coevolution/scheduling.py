@@ -1,35 +1,6 @@
-from dataclasses import dataclass
 from typing import Literal
 
-
-@dataclass(frozen=True)
-class EvolutionPhase:
-    """
-    Defines a specific time block in the evolutionary run with fixed rules.
-    """
-
-    name: str
-    duration: int
-    evolve_code: bool
-    evolve_tests: bool
-
-    def __post_init__(self) -> None:
-        if self.duration <= 0:
-            raise ValueError(f"Phase '{self.name}' duration must be positive.")
-
-
-@dataclass(frozen=True)
-class EvolutionSchedule:
-    """
-    The immutable plan for the entire evolutionary run.
-    """
-
-    phases: list[EvolutionPhase]
-
-    @property
-    def total_generations(self) -> int:
-        """Derived property: Sum of all phase durations."""
-        return sum(p.duration for p in self.phases)
+from .core.interfaces import EvolutionPhase, EvolutionSchedule
 
 
 class ScheduleBuilder:

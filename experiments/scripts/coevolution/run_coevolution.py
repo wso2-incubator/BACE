@@ -22,7 +22,6 @@ from loguru import logger
 
 import coevolution.logging_utils as logging_utils
 from coevolution.bayesian_system import BayesianSystem
-from coevolution.core.scheduling import ScheduleBuilder
 from coevolution.execution import ExecutionSystem
 from coevolution.lcb_dataset import (
     Difficulty,
@@ -39,6 +38,7 @@ from coevolution.orchestrator_builder import (
     create_public_test_profile,
     create_unittest_test_profile,
 )
+from coevolution.scheduling import ScheduleBuilder
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SafeCodeSandbox, create_safe_test_environment
 
@@ -155,8 +155,8 @@ def main(
                 llm_client=llm_client,
                 sandbox=sandbox,
                 initial_prior=0.2,
-                initial_population_size=10,
-                max_population_size=15,
+                initial_population_size=2,
+                max_population_size=3,
                 offspring_rate=0.8,
                 elitism_rate=0.3,
                 mutation_rate=0.2,
@@ -170,8 +170,8 @@ def main(
             unittest_profile = create_unittest_test_profile(
                 llm_client=llm_client,
                 initial_prior=0.2,
-                initial_population_size=20,
-                max_population_size=20,  # Fixed size
+                initial_population_size=5,
+                max_population_size=5,  # Fixed size
                 offspring_rate=0.8,
                 elitism_rate=0.4,
                 mutation_rate=0.3,

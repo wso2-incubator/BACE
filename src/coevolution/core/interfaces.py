@@ -48,8 +48,6 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, overload
 import numpy as np
 from loguru import logger
 
-from .scheduling import EvolutionSchedule, ScheduleBuilder
-
 if TYPE_CHECKING:
     # We are only importing these for type-hinting, not for runtime logic.
     from .population import CodePopulation, TestPopulation
@@ -322,6 +320,36 @@ class PopulationConfig:
 
 
 @dataclass(frozen=True)
+class EvolutionPhase:
+    """
+    Defines a specific time block in the evolutionary run with fixed rules.
+    """
+
+    name: str
+    duration: int
+    evolve_code: bool
+    evolve_tests: bool
+
+    def __post_init__(self) -> None:
+        if self.duration <= 0:
+            raise ValueError(f"Phase '{self.name}' duration must be positive.")
+
+
+@dataclass(frozen=True)
+class EvolutionSchedule:
+    """
+    The immutable plan for the entire evolutionary run.
+    """
+
+    phases: list[EvolutionPhase]
+
+    @property
+    def total_generations(self) -> int:
+        """Derived property: Sum of all phase durations."""
+        return sum(p.duration for p in self.phases)
+
+
+@dataclass(frozen=True)
 class EvolutionConfig:
     """
     Top-level configuration for controlling the evolutionary run.
@@ -334,14 +362,6 @@ class EvolutionConfig:
     def num_generations(self) -> int:
         """Derived property: Total generations in the schedule."""
         return self.schedule.total_generations
-
-    # Helper to create simple configs quickly without the builder
-    @staticmethod
-    def simple(generations: int) -> "EvolutionConfig":
-        """Creates a simple simultaneous evolution schedule."""
-        return EvolutionConfig(
-            schedule=ScheduleBuilder().simultaneous(generations).build()
-        )
 
 
 @dataclass(frozen=True)
