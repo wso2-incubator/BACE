@@ -141,16 +141,18 @@ def log_generation_summary(
     """
     import json
 
-    gen_num = code_population.generation
+    code_gen_num = code_population.generation
 
     # Collect newly born individuals (created this generation)
-    new_code_ids = [ind.id for ind in code_population if ind.generation_born == gen_num]
+    new_code_ids = [
+        ind.id for ind in code_population if ind.generation_born == code_gen_num
+    ]
 
     # Calculate code statistics
     code_probs = [ind.probability for ind in code_population]
 
     summary = {
-        "generation": gen_num,
+        "code_generation": code_gen_num,
         "code_pop_size": len(code_population),
         "avg_code_prob": round(sum(code_probs) / len(code_probs), 4),
         "min_code_prob": round(min(code_probs), 4),
@@ -161,9 +163,12 @@ def log_generation_summary(
 
     # Add statistics for each test population type
     for test_type, test_pop in test_populations.items():
-        new_test_ids = [ind.id for ind in test_pop if ind.generation_born == gen_num]
+        new_test_ids = [
+            ind.id for ind in test_pop if ind.generation_born == test_pop.generation
+        ]
         test_probs = [ind.probability for ind in test_pop]
 
+        summary[f"{test_type}_generation"] = test_pop.generation
         summary[f"{test_type}_pop_size"] = len(test_pop)
         # Handle empty populations (avoid division by zero)
         if test_probs:
@@ -179,8 +184,8 @@ def log_generation_summary(
         summary[f"{test_type}_new_count"] = len(new_test_ids)
         summary[f"{test_type}_new_ids"] = new_test_ids
 
-    log_subsection_header("INFO", f"--- Generation {gen_num} Summary ---")
-    logger.info(f"GEN_SUMMARY|{gen_num}|{json.dumps(summary)}")
+    log_subsection_header("INFO", "Generation Summary")
+    logger.info(f"GEN_SUMMARY|{json.dumps(summary)}")
 
 
 def log_individual_complete(
