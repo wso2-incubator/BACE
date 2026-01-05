@@ -74,11 +74,11 @@ from .core.interfaces import (
     ITestBlockRebuilder,
     LedgerFactory,
     OperatorRatesConfig,
+    OrchestratorConfig,
     PopulationConfig,
     PublicTestProfile,
     TestProfile,
 )
-from .orchestrator_config import OrchestratorConfig
 from .services.ledger import InteractionLedger
 from .strategies.breeding.code_breeding import CodeBreedingStrategy
 from .strategies.breeding.differential_breeding import DifferentialBreedingStrategy
