@@ -469,9 +469,9 @@ class Orchestrator:
             logger.debug(f"Generated {len(code_offsprings)} code offsprings.")
 
             # Transition
-            new_code_gen = code_elites + code_offsprings
-            self._notify_removed_individuals(code_pop, new_code_gen)
-            code_pop.set_next_generation(new_code_gen)
+            new_code_inds = code_elites + code_offsprings
+            self._notify_removed_individuals(code_pop, new_code_inds, "code")
+            code_pop.set_next_generation(new_code_inds)
             logger.info(
                 f"Code Population transitioned to generation {code_pop.generation}."
             )
@@ -509,9 +509,9 @@ class Orchestrator:
                     f"Generated {len(test_offsprings)} {test_type} test offsprings."
                 )
                 # Transition
-                new_test_gen = test_elites + test_offsprings
-                self._notify_removed_individuals(test_pop, new_test_gen)
-                test_pop.set_next_generation(new_test_gen)
+                new_test_inds = test_elites + test_offsprings
+                self._notify_removed_individuals(test_pop, new_test_inds, test_type)
+                test_pop.set_next_generation(new_test_inds)
                 logger.info(
                     f"{test_type.capitalize()} Test Population transitioned to generation {test_pop.generation}."
                 )
@@ -537,9 +537,7 @@ class Orchestrator:
             private_interaction.observation_matrix, code_pop, private_pop, "private"
         )
 
-        # Log final survivors for the first evolved test population (for now)
-        first_test_pop = next(iter(evolved_test_pops.values()))
-        logging_utils.log_final_survivors(code_pop, first_test_pop)
+        logging_utils.log_final_survivors(code_pop, evolved_test_pops)
         logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
 
     # =========================================================================
@@ -718,6 +716,7 @@ class Orchestrator:
         self,
         population: BasePopulation[IndT],
         next_gen_individuals: list[IndT],
+        population_type: str,
     ) -> None:
         """
         Helper to log and notify individuals that were removed from the population
@@ -740,10 +739,8 @@ class Orchestrator:
             )
             for ind in population:
                 if ind.id in removed_ids:
-                    # Log complete lifecycle record BEFORE notifying
-                    logging_utils.log_individual_complete(ind, "DIED")
-                    # Then notify the individual
                     ind.notify_died(generation=population.generation)
+                    logging_utils.log_individual_complete(ind, population_type, "DIED")
 
     def _breed_code(
         self,

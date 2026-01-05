@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from coevolution.core.individual import CodeIndividual, TestIndividual
-    from coevolution.core.interfaces import Problem
+    from coevolution.core.interfaces import BaseIndividual, Problem
     from coevolution.core.population import CodePopulation, TestPopulation
 
 
@@ -35,19 +35,6 @@ class ParsedLog(TypedDict):
     gen_stats: pd.DataFrame
     individuals: pd.DataFrame
     matrices: dict[str, list[pd.DataFrame]]
-
-
-def get_generation_logger() -> Any:
-    """
-    Returns a logger bound with GEN_LOG=True for generation-specific logging.
-
-    This logger is filtered to write to a separate generation log file,
-    allowing separation of detailed evolution tracking from general application logs.
-
-    Returns:
-        A Loguru logger instance bound with GEN_LOG context.
-    """
-    return logger.bind(GEN_LOG=True)
 
 
 def setup_logging(
@@ -207,7 +194,8 @@ def log_generation_summary(
 
 
 def log_individual_complete(
-    individual: "CodeIndividual | TestIndividual",
+    individual: "BaseIndividual",
+    population_type: str,
     status: str,
 ) -> None:
     """
@@ -233,13 +221,15 @@ def log_individual_complete(
     record["status"] = status
 
     # Log with structured format for easy parsing
-    logger.trace(f"INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}")
+    logger.trace(
+        f"{population_type}_INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}"
+    )
     logger.debug(f"Logged complete record for {individual.id} with status {status}")
 
 
 def log_final_survivors(
     code_population: "CodePopulation",
-    test_population: "TestPopulation",
+    test_populations: dict[str, "TestPopulation"],
 ) -> None:
     """
     Logs all individuals that survived to the final generation.
@@ -255,16 +245,13 @@ def log_final_survivors(
     logger.debug(f"Logging {len(code_population)} code survivors")
     code_ind: "CodeIndividual"
     for code_ind in code_population:
-        log_individual_complete(code_ind, "SURVIVED")
+        log_individual_complete(code_ind, "code", "SURVIVED")
 
-    logger.debug(f"Logging {len(test_population)} test survivors")
-    test_ind: "TestIndividual"
-    for test_ind in test_population:
-        log_individual_complete(test_ind, "SURVIVED")
-
-    logger.info(
-        f"Logged {len(code_population)} code and {len(test_population)} test survivors"
-    )
+    for test_type, test_pop in test_populations.items():
+        logger.debug(f"Logging {len(test_pop)} test survivors")
+        test_ind: "TestIndividual"
+        for test_ind in test_pop:
+            log_individual_complete(test_ind, test_type, "SURVIVED")
 
 
 def log_belief_update_start(
