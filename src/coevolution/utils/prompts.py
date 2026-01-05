@@ -492,13 +492,13 @@ DIFFERENTIAL_INPUT_GENERATOR_PROMPT = """
 <task>
 - You are given a programming problem described in a <problem> block. 
 - You are also given two Python code snippets in <solution variant='P'> and <solution variant='Q'> blocks that are intended to solve the same programming problem. 
-- Additionally, you have access to explanations of how each code snippet works in the <explanation variant='P'> and <explanation variant='Q'> blocks.
 - You are also given the current test inputs and the corresponding equivalent outputs they produce for both P and Q solutions in a <current_tests> block.
 - The current tests fail to differentiate between the two code snippets as they produce the same outputs for both.
 - Your task is to write a python script that generates test inputs that can differentiate between the two code snippets.
 - The script should define a function named `generate_test_inputs` that takes an integer parameter specifying the number of test inputs to generate and returns a list of dictionaries, each representing a test input.
 - The script should be able to generate multiple diverse test inputs as much as required by the user in a single execution. 
     -- Eg: if the user requests 100 test inputs, the script should generate 100 test inputs in one go.
+- You should prefer smaller and simpler test inputs over larger and complex ones, as long as they can differentiate between the two code snippets.
 - You are allowed to use standard python libraries to implement the script.
 - You are allowed to define helper functions within the script to aid in generating the test inputs.
 - You are NOT allowed to manually hardcode any test inputs within the script.
