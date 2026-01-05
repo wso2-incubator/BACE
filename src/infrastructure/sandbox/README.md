@@ -4,7 +4,7 @@ Safe code execution environment for testing generated code with comprehensive te
 
 ## Structure
 
-```
+```markdown
 sandbox/
 ├── __init__.py          # Public API exports
 ├── types.py             # Data classes (TestResult, TestExecutionResult, etc.)

@@ -4,7 +4,7 @@ A unified interface for working with different Large Language Model (LLM) provid
 
 ## Structure
 
-```
+```markdown
 llm_client/
 ├── __init__.py          # Public API exports
 ├── base.py              # Abstract base class and core functionality
