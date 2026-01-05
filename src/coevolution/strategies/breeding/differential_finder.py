@@ -71,11 +71,6 @@ class DifferentialFinder(IDifferentialFinder):
             return found_divergences
 
         for idx, ti in enumerate(test_inputs):
-            if ti is None:
-                logger.warning(f"Test input {idx + 1} is None; skipping.")
-                logger.debug(f"Invalid test input:\n{ti}")
-                continue
-
             code_a_output = self._generate_output(code_a_snippet, ti)
             code_b_output = self._generate_output(code_b_snippet, ti)
 
@@ -86,9 +81,8 @@ class DifferentialFinder(IDifferentialFinder):
                 continue
 
             if code_a_output != code_b_output:
-                logger.debug(f"Test Input {idx + 1}:\n")
                 logger.debug("Discrepancy found!")
-                logger.debug(f"Test Input:\n{ti}")
+                logger.debug(f"Test Input {idx + 1}:\n{ti}")
                 logger.debug(f"Code 'a' Output: {code_a_output}")
                 logger.debug(f"Code 'b' Output: {code_b_output}")
                 found_divergences.append(
