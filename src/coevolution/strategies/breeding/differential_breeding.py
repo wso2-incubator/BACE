@@ -197,7 +197,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         # Run Differential Finder (Returns a LIST now)
         divergences = self.differential_finder.find_differential(
-            code_a.snippet, code_b.snippet, script
+            code_a.snippet, code_b.snippet, script, limit=5
         )
 
         # Mark as explored regardless of outcome to prevent re-running
