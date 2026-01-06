@@ -529,7 +529,14 @@ class Orchestrator:
         public_pop: TestPopulation,
         private_pop: TestPopulation,
     ) -> None:
-        """Runs final private evaluation and logs closing stats."""
+        """
+        Final execution and logging after all generations are complete.
+        """
+
+        self._execute_all_interactions(
+            code_pop, evolved_test_pops, public_pop
+        )  # Final execution to ensure latest interactions
+
         # Run final private tests
         private_interaction = self._get_interaction_data(code_pop, private_pop)
 
