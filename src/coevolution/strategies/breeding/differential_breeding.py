@@ -7,9 +7,9 @@ Adheres to the BaseBreedingStrategy architecture.
 
 from __future__ import annotations
 
-import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast, override
 
 from loguru import logger
 
@@ -92,6 +92,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         parent_selector: IParentSelectionStrategy[TestIndividual],
         functionally_equivalent_code_selector: IFunctionallyEquivalentCodeSelector,
         max_workers: int = 1,
+        divergence_limit: int = 5,
     ) -> None:
         super().__init__(op_rates_config, max_workers)
 
@@ -101,6 +102,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self.probability_assigner = probability_assigner
         self.parent_selector = parent_selector
         self.func_eq_code_selector = functionally_equivalent_code_selector
+        self.divergence_limit = divergence_limit  # Max divergences to find per pair
 
         # Validate operations
         for op in self.op_rates_config.operation_rates.keys():
@@ -112,10 +114,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                     f"DifferentialBreedingStrategy: Operation '{op}' not supported by the operator."
                 )
 
-        # Register Handlers
-        self._strategies = {
-            OPERATION_DISCOVERY: self._breed_via_discovery,
-        }
+        # Handlers not needed as all handled in breed()
+        # Only OPERATION_DISCOVERY is relevant here.
 
         # Cache of pairs that have already been explored for divergence (whether found or not).
         # Stores tuples of (min_id, max_id) to ensure order independence.
@@ -142,90 +142,199 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             return [], None
         return [], test_class_block
 
-    # --- Handlers ---
+    @override
+    def breed(
+        self, coevolution_context: CoevolutionContext, num_offsprings: int
+    ) -> list[TestIndividual]:
+        """
+        Deterministic breeding implementation.
+        """
+        offspring_list: list[TestIndividual] = []
 
-    def _breed_via_discovery(self, context: CoevolutionContext) -> list[TestIndividual]:
-        """
-        Handler for OPERATION_DISCOVERY.
-        """
+        # --- Step 1: Gather Candidates ---
+        logger.debug("Scanning for functionally equivalent code pairs...")
         groups = self.func_eq_code_selector.select_functionally_equivalent_codes(
-            context
+            coevolution_context
         )
-        valid_groups = [g for g in groups if len(g.code_individuals) >= 2]
 
-        if not valid_groups:
-            logger.debug(
-                "No valid functionally equivalent code groups found for differential discovery."
+        candidate_pairs = []
+
+        # [NEW] nCr Analysis for Logging
+        theoretical_max_pairs = 0
+
+        for group in groups:
+            n = len(group.code_individuals)
+            if n < 2:
+                continue
+
+            # nCr formula: n! / (r! * (n-r)!) where r=2 => n*(n-1)/2
+            nCr = (n * (n - 1)) // 2
+            theoretical_max_pairs += nCr
+
+            # Generate unique pairs (A, B) where id(A) < id(B)
+            sorted_inds = sorted(group.code_individuals, key=lambda x: x.id)
+            for i in range(len(sorted_inds)):
+                for j in range(i + 1, len(sorted_inds)):
+                    code_a = sorted_inds[i]
+                    code_b = sorted_inds[j]
+
+                    if not self._is_pair_explored(code_a, code_b):
+                        candidate_pairs.append((code_a, code_b, group))
+
+        # Capacity Check Log
+        potential_offspring = len(candidate_pairs) * self.divergence_limit * 2
+        logger.info(
+            f"Differential Capacity Analysis: "
+            f"Total Pairs (nCr)={theoretical_max_pairs}, "
+            f"Unexplored={len(candidate_pairs)}, "
+            f"Max Potential Offspring={potential_offspring} "
+            f"(Requested: {num_offsprings})"
+        )
+
+        if not candidate_pairs:
+            logger.warning(
+                "No new unexplored pairs available for differential testing."
             )
             return []
 
-        group = random.choice(valid_groups)
-        code_a, code_b = random.sample(group.code_individuals, 2)
-
-        # Optimization: Skip if we've already checked this pair (successfully or not)
-        if self._is_pair_explored(code_a, code_b):
-            logger.debug(f"Pair ({code_a.id}, {code_b.id}) already explored. Skipping.")
-            return []
-
-        logger.debug(
-            f"Selected Code Individuals {code_a.id} and {code_b.id} for differential discovery."
+        # --- Step 2: Prioritize (Sort) ---
+        candidate_pairs.sort(
+            key=lambda p: p[0].probability + p[1].probability, reverse=True
         )
 
-        # Context building
-        diff_tests = group.passing_test_individuals.get("differential", [])
-        passing_io_pairs: list[DifferentialInputOutput] = []
-        for t in diff_tests:
-            pairs = t.metadata.get("io_pairs", [])
-            if pairs:
-                passing_io_pairs.append(pairs[0])
+        # --- Step 3: Batch Execution ---
+        # (Standard ThreadPool execution logic...)
+        total_candidates = len(candidate_pairs)
+        candidate_idx = 0
 
-        dto = DifferentialGenScriptInput(
-            operation=OPERATION_DISCOVERY,
-            question_content=context.problem.question_content,
-            equivalent_code_snippet_1=code_a.snippet,
-            equivalent_code_snippet_2=code_b.snippet,
-            passing_differential_test_io_pairs=passing_io_pairs,
-            num_inputs_to_generate=100,  # TODO: make configurable
-        )
+        if self.max_workers <= 1:
+            while (
+                len(offspring_list) < num_offsprings
+                and candidate_idx < total_candidates
+            ):
+                code_a, code_b, group = candidate_pairs[candidate_idx]
+                candidate_idx += 1
+                self._mark_pair_explored(code_a, code_b)
+                new_inds = self._process_pair(
+                    coevolution_context, code_a, code_b, group
+                )
+                offspring_list.extend(new_inds)
+            return offspring_list[:num_offsprings]
 
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            while (
+                len(offspring_list) < num_offsprings
+                and candidate_idx < total_candidates
+            ):
+                remaining_needed = num_offsprings - len(offspring_list)
+                # If limit is 5, we need fewer pairs than raw count.
+                # Estimate pairs needed: ceil(remaining / avg_yield). Conservative: assume yield=1
+                batch_size = min(remaining_needed + 2, self.max_workers * 2)
+
+                current_batch_futures = []
+                for _ in range(batch_size):
+                    if candidate_idx >= total_candidates:
+                        break
+                    cA, cB, grp = candidate_pairs[candidate_idx]
+                    candidate_idx += 1
+                    self._mark_pair_explored(cA, cB)
+
+                    current_batch_futures.append(
+                        executor.submit(
+                            self._process_pair, coevolution_context, cA, cB, grp
+                        )
+                    )
+
+                if not current_batch_futures:
+                    break
+
+                for future in as_completed(current_batch_futures):
+                    try:
+                        res = future.result()
+                        offspring_list.extend(res)
+                        if len(offspring_list) >= num_offsprings:
+                            for f in current_batch_futures:
+                                f.cancel()
+                            break
+                    except Exception as e:
+                        logger.error(f"Worker failed: {e}")
+
+        return offspring_list[:num_offsprings]
+
+    # --------------------------------------------------------------------------
+    # WORKER LOGIC
+    # --------------------------------------------------------------------------
+
+    def _process_pair(
+        self,
+        context: CoevolutionContext,
+        code_a: CodeIndividual,
+        code_b: CodeIndividual,
+        group: FunctionallyEquivGroup,
+    ) -> list[TestIndividual]:
+        """
+        The actual work unit.
+        """
+        logger.debug(f"Processing code pair ({code_a.id}, {code_b.id}) for divergence.")
         try:
+            # 1. Prepare Context (Same as before)
+            diff_tests = group.passing_test_individuals.get("differential", [])
+            passing_io_pairs: list[DifferentialInputOutput] = []
+            for t in diff_tests:
+                pairs = t.metadata.get("io_pairs", [])
+                if pairs:
+                    passing_io_pairs.append(pairs[0])
+
+            dto = DifferentialGenScriptInput(
+                operation=OPERATION_DISCOVERY,
+                question_content=context.problem.question_content,
+                equivalent_code_snippet_1=code_a.snippet,
+                equivalent_code_snippet_2=code_b.snippet,
+                passing_differential_test_io_pairs=passing_io_pairs,
+                num_inputs_to_generate=100,  # This is inputs generated by script
+            )
+
+            # 2. Run LLM Operator
             op_output = self.operator.apply(dto)
             script = op_output.results[0].snippet
-        except Exception as e:
-            logger.warning(f"Differential discovery operator failed: {e}")
-            return []
 
-        # Run Differential Finder (Returns a LIST now)
-        divergences = self.differential_finder.find_differential(
-            code_a.snippet, code_b.snippet, script, limit=5
-        )
-
-        # Mark as explored regardless of outcome to prevent re-running
-        self._mark_pair_explored(code_a, code_b)
-
-        # No Divergences Found
-        if not divergences:
-            logger.debug(f"No divergences found between {code_a.id} and {code_b.id}.")
-            return []
-
-        # TODO: Probability assignment should be more sophisticated
-        parent_probs = []
-        for test_type, test_inds in group.passing_test_individuals.items():
-            if test_type == "differential":
-                for ind in test_inds:
-                    parent_probs.append(ind.probability)
-
-        if parent_probs:
-            prob = self.probability_assigner.assign_probability(
-                operation=OPERATION_DISCOVERY,
-                parent_probs=parent_probs,
-                initial_prior=self.pop_config.initial_prior,
+            # 3. Run Differential Finder
+            divergences = self.differential_finder.find_differential(
+                code_a.snippet,
+                code_b.snippet,
+                script,
+                limit=self.divergence_limit,
             )
-        else:
-            prob = self.pop_config.initial_prior
 
-        # Create TestIndividual per Input Divergence for BOTH scenarios
-        return self._create_divergence_tests(context, code_a, code_b, divergences, prob)
+            if not divergences:
+                logger.debug(
+                    f"No divergences found for code pair ({code_a.id}, {code_b.id})."
+                )
+                return []
+
+            # 4. Assign Probability & Create Individuals (Same as before)
+            parent_probs = []
+            for test_type, test_inds in group.passing_test_individuals.items():
+                if test_type == "differential":
+                    for ind in test_inds:
+                        parent_probs.append(ind.probability)
+
+            if parent_probs:
+                prob = self.probability_assigner.assign_probability(
+                    operation=OPERATION_DISCOVERY,
+                    parent_probs=parent_probs,
+                    initial_prior=self.pop_config.initial_prior,
+                )
+            else:
+                prob = self.pop_config.initial_prior
+
+            return self._create_divergence_tests(
+                context, code_a, code_b, divergences, prob
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing pair {code_a.id} vs {code_b.id}: {e}")
+            return []
 
     def _create_divergence_tests(
         self,
@@ -262,8 +371,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         ]
 
         for winner, loser, io_pairs, winner_outputs in scenarios:
-            # Generate the Python Test Method (Contains assertions for ALL pairs)
             for i, io_pair in enumerate(io_pairs):
+                # One test per divergence input
                 snippet = self.operator.get_test_method_from_io(
                     context.problem.starter_code, [io_pair], [winner.id, loser.id], i
                 )
@@ -288,6 +397,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 )
                 results.append(ind)
 
+        logger.debug(
+            f"Created {len(results)} divergence tests for codes ({code_a.id}, {code_b.id})"
+        )
         return results
 
     def _mark_pair_explored(
