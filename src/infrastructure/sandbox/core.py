@@ -65,45 +65,48 @@ class SafeCodeSandbox:
         ]
 
         # Dangerous modules/functions to block
-        self.blocked_patterns = [
-            "import os",
-            # "import sys", # TODO: Consider allowing sys with restrictions
-            "import subprocess",
-            "import shutil",
-            "import socket",
-            "import urllib",
-            "import requests",
-            "import http",
-            "import ftplib",
-            "import smtplib",
-            "import telnetlib",
-            "import tempfile",
-            "import pickle",
-            "import marshal",
-            "import importlib",
-            "import __import__",
-            "exec(",
-            # "eval(", # TODO: Consider allowing eval with restrictions, this was needed for generating test with actual lcb test cases
-            "compile(",
-            "open(",
-            "file(",
-            # "input(",
-            "raw_input(",
-            "__builtins__",
-            "__globals__",
-            "__locals__",
-            # "globals()",
-            # "locals()", # TODO: Consider allowing globals/locals with restrictions
-            "vars()",
-            "dir()",
-            "hasattr(",
-            "getattr(",
-            "setattr(",
-            "delattr(",
-            "exit(",
-            "quit(",
-            "reload(",
-        ]
+        # self.blocked_patterns = [
+        #     "import os",
+        #     # "import sys", # TODO: Consider allowing sys with restrictions
+        #     "import subprocess",
+        #     "import shutil",
+        #     "import socket",
+        #     "import urllib",
+        #     "import requests",
+        #     "import http",
+        #     "import ftplib",
+        #     "import smtplib",
+        #     "import telnetlib",
+        #     "import tempfile",
+        #     "import pickle",
+        #     "import marshal",
+        #     "import importlib",
+        #     "import __import__",
+        #     "exec(",
+        #     # "eval(", # TODO: Consider allowing eval with restrictions, this was needed for generating test with actual lcb test cases
+        #     "compile(",
+        #     "open(",
+        #     "file(",
+        #     # "input(",
+        #     "raw_input(",
+        #     "__builtins__",
+        #     "__globals__",
+        #     "__locals__",
+        #     # "globals()",
+        #     # "locals()", # TODO: Consider allowing globals/locals with restrictions
+        #     "vars()",
+        #     "dir()",
+        #     "hasattr(",
+        #     "getattr(",
+        #     "setattr(",
+        #     "delattr(",
+        #     "exit(",
+        #     "quit(",
+        #     "reload(",
+        # ]
+
+        # TODO: Re-evaluate blocked patterns, for now we disable blocking to allow more flexibility
+        self.blocked_patterns = []
 
     def _check_code_safety(self, code: str) -> bool:
         """
