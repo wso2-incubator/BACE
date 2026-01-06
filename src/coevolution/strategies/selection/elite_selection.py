@@ -342,6 +342,13 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
     """
     Diversity-based elite selection for code populations.
 
+    Core idea:
+    I will save the best version of every distinct strategy we have found
+    so far. Then, I will fill the remaining slots with the highest-probability
+    individuals to ensure we remain strong. Finally, if this combined group
+    is too large to support new offspring, I will strictly cut the
+    lowest-probability individuals to fit the population limit."
+
     Combines two selection criteria:
     1. Behavioral diversity: Selects code with diverse test interaction patterns
     2. Quality guarantee: Ensures top probability individuals are always included
@@ -349,10 +356,13 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
     The strategy analyzes ALL observation matrices (concatenated horizontally) to
     identify diverse behavioral patterns across all test populations, then ensures
     the absolute best individuals (by probability) are included in the final elite set.
+    Finally, it enforces strict population limits by truncating lowest-probability
+    individuals if the elite set grows too large.
 
     This dual-objective approach ensures:
     - Population maintains behavioral diversity (exploration)
     - Best solutions are always preserved (exploitation)
+    - Population size constraints are respected (feasibility)
 
     Design:
     - Uses ALL test population matrices (public, unittest, differential, etc.)
@@ -365,7 +375,8 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
     2. Group code by unique row patterns in concatenated matrix
     3. Select highest probability code from each unique group (diversity)
     4. Add top-k individuals by probability (quality guarantee)
-    5. Return union, ensuring elitism_rate * population_size elites total
+    5. Union and deduplicate the two sets
+    6. Truncate: If total elites > (max_pop - offspring_count), keep only the top-N by probability
 
     Examples:
         >>> # For code population using all test matrices
@@ -381,6 +392,12 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
         behavioral diversity analysis.
         """
         logger.debug("Initialized CodeDiversityEliteSelector (uses all test matrices)")
+
+    def _sort_by_probability(
+        self, individuals: list[CodeIndividual]
+    ) -> list[CodeIndividual]:
+        """Helper to sort individuals by probability descending."""
+        return sorted(individuals, key=lambda ind: ind.probability, reverse=True)
 
     def select_elites(
         self,
@@ -437,6 +454,13 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
         # Determine target number of elites for top-k quality guarantee
         num_top_elites = int(population.size * population_config.elitism_rate)
 
+        # Determine the offspring number to leave room for breeding
+        num_offspring = int(
+            population_config.offspring_rate * population_config.max_population_size
+        )
+
+        maximum_num_elites = population_config.max_population_size - num_offspring
+
         # Try to concatenate all observation matrices
         try:
             concatenated_matrix = self._concatenate_all_matrices(
@@ -488,6 +512,16 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
             if code.id not in elite_ids:
                 elite_ids.add(code.id)
                 final_elites.append(code)
+
+        # Truncate if exceeding maximum allowed elites
+        if maximum_num_elites < len(final_elites):
+            logger.debug(
+                f"CodeDiversityEliteSelector: Number of selected elites ({len(final_elites)}) "
+                f"exceeds available slots after offspring ({maximum_num_elites}). "
+                f"Truncating elite list to fit."
+            )
+
+            final_elites = self._sort_by_probability(final_elites)[:maximum_num_elites]
 
         logger.info(
             f"CodeDiversityEliteSelector: "
