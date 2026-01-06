@@ -147,64 +147,96 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self, coevolution_context: CoevolutionContext, num_offsprings: int
     ) -> list[TestIndividual]:
         """
-        Deterministic breeding implementation.
+        Deterministic breeding implementation with Round-Robin Group Scheduling.
+
+        Improvements:
+        - Prevents "Diversity Starvation" by interleaving pairs from different functional groups.
+        - Prioritizes best pairs WITHIN each group, but ensures all groups get a turn.
         """
         offspring_list: list[TestIndividual] = []
 
-        # --- Step 1: Gather Candidates ---
+        # --- Step 1: Gather Candidates By Group ---
         logger.debug("Scanning for functionally equivalent code pairs...")
         groups = self.func_eq_code_selector.select_functionally_equivalent_codes(
             coevolution_context
         )
 
-        candidate_pairs = []
+        # Store candidates as a list of lists: [ [GroupA_Pair1, GroupA_Pair2], [GroupB_Pair1] ]
+        candidates_by_group: list[list[tuple]] = []
 
-        # [NEW] nCr Analysis for Logging
+        # Stats for logging
         theoretical_max_pairs = 0
+        total_unexplored = 0
 
         for group in groups:
             n = len(group.code_individuals)
             if n < 2:
                 continue
 
-            # nCr formula: n! / (r! * (n-r)!) where r=2 => n*(n-1)/2
+            # nCr Analysis
             nCr = (n * (n - 1)) // 2
             theoretical_max_pairs += nCr
 
-            # Generate unique pairs (A, B) where id(A) < id(B)
+            # Generate pairs for THIS group
+            group_pairs = []
             sorted_inds = sorted(group.code_individuals, key=lambda x: x.id)
+
             for i in range(len(sorted_inds)):
                 for j in range(i + 1, len(sorted_inds)):
                     code_a = sorted_inds[i]
                     code_b = sorted_inds[j]
 
                     if not self._is_pair_explored(code_a, code_b):
-                        candidate_pairs.append((code_a, code_b, group))
+                        group_pairs.append((code_a, code_b, group))
 
-        # Capacity Check Log
-        potential_offspring = len(candidate_pairs) * self.divergence_limit * 2
+            if group_pairs:
+                # Local Elitism: Sort pairs within this group by quality
+                group_pairs.sort(
+                    key=lambda p: p[0].probability + p[1].probability, reverse=True
+                )
+                candidates_by_group.append(group_pairs)
+                total_unexplored += len(group_pairs)
+
+        # Log Capacity
+        potential_offspring = total_unexplored * self.divergence_limit * 2
         logger.info(
             f"Differential Capacity Analysis: "
+            f"Groups={len(candidates_by_group)}, "
             f"Total Pairs (nCr)={theoretical_max_pairs}, "
-            f"Unexplored={len(candidate_pairs)}, "
+            f"Unexplored={total_unexplored}, "
             f"Max Potential Offspring={potential_offspring} "
             f"(Requested: {num_offsprings})"
         )
 
-        if not candidate_pairs:
+        if total_unexplored == 0:
             logger.warning(
                 "No new unexplored pairs available for differential testing."
             )
             return []
 
-        # --- Step 2: Prioritize (Sort) ---
-        candidate_pairs.sort(
-            key=lambda p: p[0].probability + p[1].probability, reverse=True
+        # --- Step 2: Interleave (Round-Robin Flattening) ---
+        # We transform [ [A1, A2, A3], [B1, B2] ] -> [A1, B1, A2, B2, A3]
+        final_candidate_queue = []
+
+        # We loop until all groups are exhausted
+        while candidates_by_group:
+            # Iterate through a copy so we can remove empty groups safely
+            for group_list in list(candidates_by_group):
+                if group_list:
+                    # Take the best remaining pair from this group
+                    final_candidate_queue.append(group_list.pop(0))
+
+                # If group is now empty, remove it from rotation
+                if not group_list:
+                    candidates_by_group.remove(group_list)
+
+        logger.debug(
+            f"Scheduled {len(final_candidate_queue)} pairs via Round-Robin selection."
         )
 
-        # --- Step 3: Batch Execution ---
-        # (Standard ThreadPool execution logic...)
-        total_candidates = len(candidate_pairs)
+        # --- Step 3: Batch Execution (Standard) ---
+        # Now we just consume the interleaved queue
+        total_candidates = len(final_candidate_queue)
         candidate_idx = 0
 
         if self.max_workers <= 1:
@@ -212,7 +244,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 len(offspring_list) < num_offsprings
                 and candidate_idx < total_candidates
             ):
-                code_a, code_b, group = candidate_pairs[candidate_idx]
+                code_a, code_b, group = final_candidate_queue[candidate_idx]
                 candidate_idx += 1
                 self._mark_pair_explored(code_a, code_b)
                 new_inds = self._process_pair(
@@ -221,21 +253,20 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 offspring_list.extend(new_inds)
             return offspring_list[:num_offsprings]
 
+        # Multi-threaded logic (same as before, just using final_candidate_queue)
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             while (
                 len(offspring_list) < num_offsprings
                 and candidate_idx < total_candidates
             ):
                 remaining_needed = num_offsprings - len(offspring_list)
-                # If limit is 5, we need fewer pairs than raw count.
-                # Estimate pairs needed: ceil(remaining / avg_yield). Conservative: assume yield=1
                 batch_size = min(remaining_needed + 2, self.max_workers * 2)
 
                 current_batch_futures = []
                 for _ in range(batch_size):
                     if candidate_idx >= total_candidates:
                         break
-                    cA, cB, grp = candidate_pairs[candidate_idx]
+                    cA, cB, grp = final_candidate_queue[candidate_idx]
                     candidate_idx += 1
                     self._mark_pair_explored(cA, cB)
 
