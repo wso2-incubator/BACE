@@ -97,6 +97,7 @@ class DifferentialFinder(IDifferentialFinder):
                     f"Reached divergence limit of {limit}. Stopping further checks."
                 )
                 break
+
         return found_divergences
 
 
