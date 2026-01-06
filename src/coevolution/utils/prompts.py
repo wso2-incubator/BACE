@@ -259,6 +259,7 @@ INITIAL_TEST = (
     "<context>\n"
     "The solution is imported in the format:\n"
     "```python\n{starter_code}```\n"
+    "Note that if the output of the solution is a string, it will not contain a newline at the end.\n"
     "</context>\n\n"
     "<constraints>\n"
     "1. Write tests using the unittest framework.\n"
@@ -281,7 +282,7 @@ The solution code is imported in the format:
 ```python
 {starter_code}
 ```
-
+Note that if the output of the solution is a string, it will not contain a newline at the end.
 </context>
 
 <instructions>
