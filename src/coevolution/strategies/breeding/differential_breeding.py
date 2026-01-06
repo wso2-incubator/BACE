@@ -161,6 +161,10 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             coevolution_context
         )
 
+        logger.info(
+            f"Identified {len(groups)} functionally equivalent code groups for differential breeding."
+        )
+
         # Store candidates as a list of lists: [ [GroupA_Pair1, GroupA_Pair2], [GroupB_Pair1] ]
         candidates_by_group: list[list[tuple]] = []
 
@@ -201,7 +205,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         potential_offspring = total_unexplored * self.divergence_limit * 2
         logger.info(
             f"Differential Capacity Analysis: "
-            f"Groups={len(candidates_by_group)}, "
+            f"Candidate Groups={len(candidates_by_group)}, "
             f"Total Pairs (nCr)={theoretical_max_pairs}, "
             f"Unexplored={total_unexplored}, "
             f"Max Potential Offspring={potential_offspring} "
