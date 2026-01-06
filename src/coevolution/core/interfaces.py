@@ -301,7 +301,7 @@ class PopulationConfig:
 
         # Special validation for empty initial populations
         if self.initial_population_size == 0 and self.max_population_size == 0:
-            raise ValueError(
+            logger.warning(
                 "Population initialized to 0 must have max_population_size > 0 to allow growth."
             )
 
@@ -331,7 +331,11 @@ class EvolutionPhase:
     evolve_tests: bool
 
     def __post_init__(self) -> None:
-        if self.duration <= 0:
+        if self.duration == 0:
+            logger.warning(
+                f"Phase '{self.name}' has zero duration. It will not be executed."
+            )
+        if self.duration < 0:
             raise ValueError(f"Phase '{self.name}' duration must be positive.")
 
 
