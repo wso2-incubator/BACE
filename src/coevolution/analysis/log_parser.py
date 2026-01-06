@@ -5,7 +5,7 @@ import json
 import os
 import zipfile
 from collections import defaultdict
-from typing import Generator, Optional, TypedDict
+from typing import Generator, TypedDict
 
 import pandas as pd
 from loguru import logger
@@ -70,8 +70,8 @@ def _log_line_generator(
 def parse_coevolution_log(
     log_dir: str,
     log_filename_pattern: str,
-    target_run_id: Optional[str] = None,
-    target_problem_id: Optional[str] = None,
+    target_run_id: str,
+    target_problem_id: str,
 ) -> ParsedLog:
     """
     Flexible parser that dynamically discovers matrix types.
@@ -100,9 +100,9 @@ def parse_coevolution_log(
 
             # --- Filtering ---
             # Only filter if target IDs are provided
-            if target_run_id and extra.get("run_id") != target_run_id:
+            if extra.get("run_id") != target_run_id:
                 continue
-            if target_problem_id and extra.get("problem_id") != target_problem_id:
+            if extra.get("problem_id") != target_problem_id:
                 continue
 
             message = record.get("message")
@@ -176,3 +176,31 @@ def parse_coevolution_log(
         "individuals": ind_df,
         "matrices": dict(matrix_store),  # Convert defaultdict back to dict
     }
+
+
+def get_problem_ids(log_dir: str, log_filename_pattern: str, run_id: str) -> set[str]:
+    """
+    Scans log files to extract all unique problem IDs present.
+    """
+    problem_ids = set()
+
+    for line_str in _log_line_generator(log_dir, log_filename_pattern):
+        if not line_str.strip():
+            continue
+
+        try:
+            log_entry = json.loads(line_str)
+        except json.JSONDecodeError:
+            continue  # Skip partial lines
+
+        record = log_entry.get("record", {})
+        extra = record.get("extra", {})
+
+        if extra.get("run_id") != run_id:
+            continue
+
+        pid = extra.get("problem_id")
+        if pid and isinstance(pid, str):
+            problem_ids.add(pid)
+
+    return problem_ids
