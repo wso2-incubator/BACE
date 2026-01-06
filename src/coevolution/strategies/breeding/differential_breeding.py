@@ -24,6 +24,7 @@ from coevolution.core.interfaces import (
     PopulationConfig,
     Problem,
 )
+
 from ..operators.differential_llm_operator import (
     OPERATION_DISCOVERY,
     DifferentialGenScriptInput,
@@ -116,10 +117,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             OPERATION_DISCOVERY: self._breed_via_discovery,
         }
 
-        # Cache of pairs that have already been checked for divergence and found none.
+        # Cache of pairs that have already been explored for divergence (whether found or not).
         # Stores tuples of (min_id, max_id) to ensure order independence.
-        self._checked_equivalence_cache: set[tuple[str, str]] = set()
-
+        self._explored_pairs_cache: set[tuple[str, str]] = set()
         logger.info("DifferentialBreedingStrategy initialized.")
 
     def initialize_individuals(
@@ -162,15 +162,15 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         group = random.choice(valid_groups)
         code_a, code_b = random.sample(group.code_individuals, 2)
 
-        if self._check_equivalence(code_a, code_b):
-            logger.debug(
-                f"Code Individuals {code_a.id} and {code_b.id} are already marked as functionally equivalent. Skipping discovery."
-            )
+        # Optimization: Skip if we've already checked this pair (successfully or not)
+        if self._is_pair_explored(code_a, code_b):
+            logger.debug(f"Pair ({code_a.id}, {code_b.id}) already explored. Skipping.")
             return []
 
         logger.debug(
             f"Selected Code Individuals {code_a.id} and {code_b.id} for differential discovery."
         )
+
         # Context building
         diff_tests = group.passing_test_individuals.get("differential", [])
         passing_io_pairs: list[DifferentialInputOutput] = []
@@ -200,11 +200,12 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             code_a.snippet, code_b.snippet, script
         )
 
+        # Mark as explored regardless of outcome to prevent re-running
+        self._mark_pair_explored(code_a, code_b)
+
         # No Divergences Found
         if not divergences:
-            logger.warning("No divergences found between selected code individuals.")
-            # Mark as equivalent to avoid future redundant checks
-            self._mark_as_equivalent(code_a, code_b)
+            logger.debug(f"No divergences found between {code_a.id} and {code_b.id}.")
             return []
 
         # TODO: Probability assignment should be more sophisticated
@@ -289,28 +290,26 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         return results
 
-    def _mark_as_equivalent(
+    def _mark_pair_explored(
         self, code_a: CodeIndividual, code_b: CodeIndividual
     ) -> None:
         """
-        Cache the fact that these two individuals were checked and no divergence was found.
+        Cache the fact that this pair has been processed to prevent redundant checks.
         Uses a sorted tuple key to handle symmetry (A,B) == (B,A).
         """
         # Create a consistent key regardless of order
         pair_key = tuple(sorted((code_a.id, code_b.id)))
-        self._checked_equivalence_cache.add(cast(tuple[str, str], pair_key))
+        self._explored_pairs_cache.add(cast(tuple[str, str], pair_key))
 
-        logger.debug(f"Cached equivalence check for {code_a.id} and {code_b.id}.")
+        logger.debug(f"Marked pair ({code_a.id}, {code_b.id}) as explored.")
 
-    def _check_equivalence(
-        self, code_a: CodeIndividual, code_b: CodeIndividual
-    ) -> bool:
+    def _is_pair_explored(self, code_a: CodeIndividual, code_b: CodeIndividual) -> bool:
         """
-        Returns True if we have already checked these two for divergence
-        and failed to find any.
+        Returns True if we have already run differential discovery on this pair
+        (regardless of whether we found divergences or not).
         """
         pair_key = tuple(sorted((code_a.id, code_b.id)))
-        return pair_key in self._checked_equivalence_cache
+        return pair_key in self._explored_pairs_cache
 
 
 __all__ = ["DifferentialBreedingStrategy"]
