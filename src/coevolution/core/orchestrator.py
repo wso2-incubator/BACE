@@ -207,12 +207,6 @@ class Orchestrator:
                 global_gen += 1
 
         # 3. Finalization
-        code_pop = context.code_population
-        evolved_test_pops = {
-            k: v
-            for k, v in context.test_populations.items()
-            if k in self.evolved_test_types
-        }
         self._finalize_evolution(code_pop, evolved_test_pops, public_pop, private_pop)
 
         return code_pop, evolved_test_pops
