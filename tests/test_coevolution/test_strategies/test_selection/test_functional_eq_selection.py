@@ -174,7 +174,7 @@ def test_select_complex_groups_multiple_test_types(
     """
 
     # Setup code population (4 codes)
-    codes = setup_code_pop(mock_context, size=4)
+    codes = setup_code_pop(mock_context, size=4)  # ignore unused variable warning
 
     # Public Tests Matrix (2 tests)
     mat_public = [
@@ -242,7 +242,7 @@ def test_three_types(selector: FunctionallyEqSelector, mock_context: MagicMock) 
     """
 
     # Setup code population (5 codes)
-    codes = setup_code_pop(mock_context, size=5)
+    codes = setup_code_pop(mock_context, size=5)  # ignore unused variable warning
 
     # Public Tests Matrix (3 tests)
     mat_public = [
