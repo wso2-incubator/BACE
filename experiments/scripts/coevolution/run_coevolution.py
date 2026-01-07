@@ -28,19 +28,19 @@ from coevolution.adapters.lcb import (
     LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
-from coevolution.factory import (
+from coevolution.factories import (
     OrchestratorBuilder,
+    ScheduleBuilder,
     build_orchestrator_from_config,
     create_default_code_profile,
     create_differential_test_profile,
     create_public_test_profile,
     create_unittest_test_profile,
 )
-from coevolution.scheduling import ScheduleBuilder
 from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from infrastructure.llm_client import create_llm_client
-from infrastructure.sandbox import SafeCodeSandbox, create_safe_test_environment
+from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 
 
 def load_problems() -> list[LCBCodeGenerationProblem]:
@@ -51,7 +51,7 @@ def load_problems() -> list[LCBCodeGenerationProblem]:
         release_version="release_v6",
         start_date="2025-03-01",
         end_date="2025-05-10",
-        difficulty=Difficulty.MEDIUM,
+        difficulty=Difficulty.HARD,
     )
 
     if not problems:
@@ -99,9 +99,15 @@ def main(
     )
     logger.info(f"Using model: {llm_client.model}")
 
-    sandbox = create_safe_test_environment()
     sandbox_for_differential = SafeCodeSandbox(
         timeout=20, max_memory_mb=256, max_output_size=10_000_000
+    )
+
+    exec_sandbox_config = SandboxConfig(
+        timeout=180,
+        max_memory_mb=100,
+        max_output_size=10_000_000,
+        test_method_timeout=30,
     )
 
     logger.info("Sandbox created")
@@ -129,7 +135,7 @@ def main(
 
             # Execution System
             execution_system = ExecutionSystem(
-                sandbox=sandbox,
+                sandbox_config=exec_sandbox_config,
                 enable_multiprocessing=True,
                 num_workers=12,
             )
@@ -153,25 +159,24 @@ def main(
             # Code Profile: Variable-size population with diversity-aware selection
             code_profile = create_default_code_profile(
                 llm_client=llm_client,
-                sandbox=sandbox,
                 initial_prior=0.2,
-                initial_population_size=2,
-                max_population_size=3,
-                offspring_rate=0.8,
+                initial_population_size=10,
+                max_population_size=15,
+                offspring_rate=0.3,
                 elitism_rate=0.3,
                 mutation_rate=0.2,
                 crossover_rate=0.2,
                 edit_rate=0.6,
                 max_workers=10,  # Parallel breeding
-                diversity_enabled=False,  # use top-k selection based on elitism rate only
+                diversity_enabled=True,  # use top-k selection based on elitism rate only
             )
 
             # Unittest Profile: Fixed-size population with discrimination-driven edit
             unittest_profile = create_unittest_test_profile(
                 llm_client=llm_client,
                 initial_prior=0.2,
-                initial_population_size=5,
-                max_population_size=5,  # Fixed size
+                initial_population_size=20,
+                max_population_size=20,  # Fixed size
                 offspring_rate=0.8,
                 elitism_rate=0.4,
                 mutation_rate=0.3,
@@ -192,13 +197,13 @@ def main(
                 initial_prior=0.2,
                 initial_population_size=0,  # Bootstrap mode
                 max_population_size=100,
-                offspring_rate=0.5,  # Aggressive growth
+                offspring_rate=0.5,
                 elitism_rate=0.3,
                 discovery_rate=1.0,  # Discovery finds divergent code pairs
                 alpha=0.3,  # Lower reliability than unittest
                 beta=0.5,
                 gamma=0.5,
-                learning_rate=0.01,
+                learning_rate=0.025,
                 max_workers=10,
                 diversity_enabled=True,
             )
@@ -229,15 +234,21 @@ def main(
             # ====================================
             logger.info("Building orchestrator configuration...")
 
+            # build schedule
+            schedule = (
+                ScheduleBuilder()
+                .alternating(
+                    total_duration=10,
+                    code_step=1,
+                    test_step=1,
+                    start_with="test",
+                )
+                .build()
+            )
+
             config = (
                 OrchestratorBuilder()
-                .with_evolution_config(
-                    schedule=ScheduleBuilder()
-                    .alternating(
-                        total_duration=10, code_step=1, test_step=1, start_with="test"
-                    )
-                    .build()
-                )
+                .with_evolution_config(schedule)
                 .with_code_profile(code_profile)
                 .add_test_profile("unittest", unittest_profile)
                 .add_test_profile("differential", differential_profile)

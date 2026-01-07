@@ -16,7 +16,7 @@ from loguru import logger
 import infrastructure.code_preprocessing as cpp
 
 # ALIAS the sandbox result type to avoid name collision with core.interfaces.ExecutionResult
-from infrastructure.sandbox import SafeCodeSandbox
+from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 from infrastructure.sandbox import TestExecutionResult as SandboxResult
 
 from ..core.interfaces import (
@@ -33,16 +33,28 @@ def _execute_single_code(
     code_idx: int,
     code_snippet: str,
     test_class_block: str,
-    sandbox: SafeCodeSandbox,
+    sandbox_config: SandboxConfig,
 ) -> tuple[int, Optional[SandboxResult]]:
     """
     Worker function to execute a single code snippet against the test suite.
+
+    Args:
+        code_idx: Index of the code individual in the population
+        code_snippet: The code snippet to test
+        test_class_block: The test class containing all test methods
+        sandbox_config: Serializable configuration for creating a fresh sandbox
+
+    Returns:
+        Tuple of (code_idx, sandbox_result or None on failure)
     """
     try:
         # CRITICAL: Reconfigure logging in child process
         from coevolution.utils.logging import setup_logging
 
         setup_logging(console_level="DEBUG", file_level="TRACE")
+
+        # Create fresh sandbox instance in this worker process
+        sandbox = SafeCodeSandbox.from_config(sandbox_config)
 
         # Compose the complete test script
         script = cpp.composition.compose_lcb_test_script(code_snippet, test_class_block)
@@ -70,13 +82,25 @@ class ExecutionSystem(IExecutionSystem):
 
     def __init__(
         self,
-        sandbox: SafeCodeSandbox,
+        sandbox_config: SandboxConfig,
         enable_multiprocessing: bool = True,
         num_workers: int | None = None,
     ):
-        self.sandbox = sandbox
+        """
+        Initialize the execution system with sandbox configuration.
+
+        Args:
+            sandbox_config: Configuration for creating sandbox instances
+            enable_multiprocessing: Whether to use multiprocessing for parallel execution
+            num_workers: Number of worker processes (None = auto-detect from CPU count)
+        """
+        self.sandbox_config = sandbox_config
         self.enable_multiprocessing = enable_multiprocessing
         self._num_workers = num_workers
+
+        # Create a local sandbox instance for sequential execution
+        # (multiprocessing workers will create their own)
+        self._local_sandbox = SafeCodeSandbox.from_config(sandbox_config)
 
     def _get_num_workers(self, num_codes: int) -> int:
         """Determine optimal number of workers based on CPU count and population size."""
@@ -122,7 +146,7 @@ class ExecutionSystem(IExecutionSystem):
 
         # 3. Run the workers (pass index so we can map rows directly)
         tasks = [
-            (i, code.snippet, test_population.test_class_block, self.sandbox)
+            (i, code.snippet, test_population.test_class_block, self.sandbox_config)
             for i, code in enumerate(code_population)
         ]
 
@@ -196,7 +220,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_with_multiprocessing(
         self,
-        tasks: list[tuple[int, str, str, SafeCodeSandbox]],
+        tasks: list[tuple[int, str, str, SandboxConfig]],
         num_workers: int,
     ) -> list[tuple[int, Optional[SandboxResult]]]:
         """Execute tasks using multiprocessing pool."""
@@ -214,7 +238,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_sequentially(
         self,
-        tasks: list[tuple[int, str, str, SafeCodeSandbox]],
+        tasks: list[tuple[int, str, str, SandboxConfig]],
     ) -> list[tuple[int, Optional[SandboxResult]]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")

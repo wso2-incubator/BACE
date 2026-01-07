@@ -29,7 +29,13 @@ from .analyzer import PytestXmlAnalyzer
 from .core import SafeCodeSandbox
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
 from .executor import TestExecutor
-from .types import BasicExecutionResult, TestAnalysis, TestExecutionResult, TestResult
+from .types import (
+    BasicExecutionResult,
+    SandboxConfig,
+    TestAnalysis,
+    TestExecutionResult,
+    TestResult,
+)
 from .utils import (
     check_test_execution_status,
     create_safe_test_environment,
@@ -46,6 +52,7 @@ __all__ = [
     "BasicExecutionResult",
     "TestExecutionResult",
     "TestAnalysis",
+    "SandboxConfig",
     # Exceptions
     "CodeExecutionError",
     "CodeExecutionTimeoutError",

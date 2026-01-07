@@ -40,6 +40,7 @@ from .sandbox import (
     CodeExecutionTimeoutError,
     PytestXmlAnalyzer,
     SafeCodeSandbox,
+    SandboxConfig,
     TestAnalysis,
     TestExecutionResult,
     TestExecutor,
@@ -57,6 +58,7 @@ __all__ = [
     # Core utilities
     "LLMClient",
     "SafeCodeSandbox",
+    "SandboxConfig",
     "create_safe_test_environment",
     "check_test_execution_status",
     # Types

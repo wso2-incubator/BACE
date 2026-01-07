@@ -71,7 +71,6 @@ from ..strategies.selection.parent_selection import RouletteWheelParentSelection
 
 def create_default_code_profile(
     llm_client: LLMClient,
-    sandbox: SafeCodeSandbox,
     initial_prior: float = 0.2,
     initial_population_size: int = 10,
     max_population_size: int = 15,

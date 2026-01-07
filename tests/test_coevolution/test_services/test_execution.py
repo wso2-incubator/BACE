@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
-from coevolution.core.interfaces import TestResult  # The new single test type
 from coevolution.core.interfaces import (  # The new dict value type
     OPERATION_INITIAL,
     ExecutionResult,
@@ -26,7 +25,7 @@ from coevolution.core.population import CodePopulation, TestPopulation
 from coevolution.services.execution import ExecutionSystem, _execute_single_code
 
 # Rename the legacy one so we don't confuse it with the new one
-from infrastructure.sandbox import SafeCodeSandbox
+from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 from infrastructure.sandbox import TestExecutionResult as SandboxResult
 from infrastructure.sandbox import TestResult as SandboxTestResult
 
@@ -95,6 +94,19 @@ class TestAdd:
         individuals=individuals,
         test_block_rebuilder=mock_rebuilder,
         test_class_block=test_class,
+    )
+
+
+@pytest.fixture
+def default_sandbox_config():
+    """Create a default SandboxConfig for testing."""
+    from infrastructure.sandbox import SandboxConfig
+
+    return SandboxConfig(
+        timeout=30,
+        max_memory_mb=100,
+        max_output_size=10000,
+        test_method_timeout=None,
     )
 
 
@@ -235,31 +247,31 @@ def mock_execution_results_list() -> list[SandboxResult]:
 class TestExecutionSystemInitialization:
     """Test suite for ExecutionSystem initialization."""
 
-    def test_default_initialization(self, mock_sandbox: Mock) -> None:
+    def test_default_initialization(self, default_sandbox_config) -> None:
         """Test default initialization with multiprocessing enabled."""
-        system = ExecutionSystem(mock_sandbox)
-        assert system.sandbox is mock_sandbox
+        system = ExecutionSystem(default_sandbox_config)
+        assert system.sandbox_config is default_sandbox_config
         assert system.enable_multiprocessing is True
         assert system._num_workers is None
 
     def test_initialization_with_multiprocessing_disabled(
-        self, mock_sandbox: Mock
+        self, default_sandbox_config
     ) -> None:
         """Test initialization with multiprocessing disabled."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         assert system.enable_multiprocessing is False
 
-    def test_initialization_with_custom_workers(self, mock_sandbox: Mock) -> None:
+    def test_initialization_with_custom_workers(self, default_sandbox_config) -> None:
         """Test initialization with custom number of workers."""
-        system = ExecutionSystem(mock_sandbox, num_workers=4)
+        system = ExecutionSystem(default_sandbox_config, num_workers=4)
         assert system._num_workers == 4
 
     def test_initialization_multiprocessing_off_ignores_workers(
-        self, mock_sandbox: Mock
+        self, default_sandbox_config
     ) -> None:
         """Test that num_workers is ignored when multiprocessing is disabled."""
         system = ExecutionSystem(
-            mock_sandbox, enable_multiprocessing=False, num_workers=8
+            default_sandbox_config, enable_multiprocessing=False, num_workers=8
         )
         num_workers = system._get_num_workers(100)
         assert num_workers == 1  # Should be 1 when multiprocessing is off
@@ -268,52 +280,62 @@ class TestExecutionSystemInitialization:
 class TestWorkerCountDetermination:
     """Test suite for _get_num_workers method."""
 
-    def test_get_num_workers_multiprocessing_disabled(self, mock_sandbox: Mock) -> None:
+    def test_get_num_workers_multiprocessing_disabled(
+        self, default_sandbox_config
+    ) -> None:
         """Test that worker count is 1 when multiprocessing is disabled."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         assert system._get_num_workers(100) == 1
 
-    def test_get_num_workers_with_custom_count(self, mock_sandbox: Mock) -> None:
+    def test_get_num_workers_with_custom_count(self, default_sandbox_config) -> None:
         """Test worker count respects custom num_workers."""
-        system = ExecutionSystem(mock_sandbox, num_workers=4)
+        system = ExecutionSystem(default_sandbox_config, num_workers=4)
         assert system._get_num_workers(100) == 4
 
-    def test_get_num_workers_limited_by_population(self, mock_sandbox: Mock) -> None:
+    def test_get_num_workers_limited_by_population(
+        self, default_sandbox_config
+    ) -> None:
         """Test that worker count doesn't exceed population size."""
-        system = ExecutionSystem(mock_sandbox, num_workers=10)
+        system = ExecutionSystem(default_sandbox_config, num_workers=10)
         assert system._get_num_workers(3) == 3
 
     @patch("os.cpu_count", return_value=8)
     def test_get_num_workers_uses_cpu_count(
-        self, mock_cpu_count: int, mock_sandbox: Mock
+        self, mock_cpu_count: int, default_sandbox_config
     ) -> None:
         """Test that worker count defaults to CPU count."""
-        system = ExecutionSystem(mock_sandbox)
+        system = ExecutionSystem(default_sandbox_config)
         assert system._get_num_workers(100) == 8
 
     @patch("os.cpu_count", return_value=None)
     def test_get_num_workers_handles_none_cpu_count(
-        self, mock_cpu_count: int, mock_sandbox: Mock
+        self, mock_cpu_count: int, default_sandbox_config
     ) -> None:
         """Test fallback when cpu_count returns None."""
-        system = ExecutionSystem(mock_sandbox)
+        system = ExecutionSystem(default_sandbox_config)
         assert system._get_num_workers(100) == 1
 
 
 class TestExecuteTests:
     """Test suite for execute_tests method."""
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_execute_tests_sequential_mode(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test execute_tests returns unified InteractionData."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        # Configure the mock class to return a mock instance
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock Sandbox returns LEGACY objects (SandboxResult)
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=2,
             tests_failed=0,
@@ -352,18 +374,23 @@ class TestExecuteTests:
         assert isinstance(res, ExecutionResult)  # The NEW interface type
         assert res.script_error is False
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_execute_tests_handles_failures(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that execute_tests handles execution failures gracefully."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock sandbox to fail on second execution
         def side_effect(*args: Any, **kwargs: Any) -> SandboxResult:
-            if mock_sandbox.execute_test_script.call_count == 2:
+            if mock_sandbox_instance.execute_test_script.call_count == 2:
                 raise RuntimeError("Execution failed")
             return SandboxResult(
                 script_error=False,
@@ -384,7 +411,7 @@ class TestExecuteTests:
                 summary="Passed",
             )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect
 
         # ACT: Execute tests
         interaction_data = system.execute_tests(
@@ -410,17 +437,22 @@ class TestExecuteTests:
         c2_id = simple_code_population[2].id
         assert interaction_data.execution_results[c2_id].script_error is False
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_execute_tests_result_count_mismatch(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that result count mismatches are handled with script_error=True."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock sandbox to return wrong number of test results (1 instead of 2)
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -452,9 +484,15 @@ class TestExecuteTests:
 class TestWorkerFunction:
     """Test suite for the _execute_single_code worker function."""
 
-    def test_worker_function_success(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_worker_function_success(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test worker function with successful execution."""
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -471,22 +509,30 @@ class TestWorkerFunction:
             code_idx=0,
             code_snippet="def add(a, b): return a + b",
             test_class_block="class TestAdd: pass",
-            sandbox=mock_sandbox,
+            sandbox_config=default_sandbox_config,
         )
 
         assert code_idx == 0
         assert result is not None
         assert isinstance(result, SandboxResult)
 
-    def test_worker_function_handles_exception(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_worker_function_handles_exception(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test worker function handles exceptions and returns None."""
-        mock_sandbox.execute_test_script.side_effect = RuntimeError("Execution error")
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        mock_sandbox_instance.execute_test_script.side_effect = RuntimeError(
+            "Execution error"
+        )
 
         code_idx, result = _execute_single_code(
             code_idx=1,
             code_snippet="def bad(): raise Exception()",
             test_class_block="class TestBad: pass",
-            sandbox=mock_sandbox,
+            sandbox_config=default_sandbox_config,
         )
 
         assert code_idx == 1
@@ -496,18 +542,25 @@ class TestWorkerFunction:
 class TestIntegration:
     """Integration tests for the full execution pipeline."""
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_full_pipeline_atomic(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
         mock_execution_results_list: list[SandboxResult],  # Use Legacy type for mocks
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test the atomic generation of InteractionData."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock the sandbox behavior
-        mock_sandbox.execute_test_script.side_effect = mock_execution_results_list
+        mock_sandbox_instance.execute_test_script.side_effect = (
+            mock_execution_results_list
+        )
 
         # ACT: Single call does everything now
         data = system.execute_tests(simple_code_population, simple_test_population)
@@ -530,18 +583,23 @@ class TestIntegration:
         # Matrix View
         assert np.array_equal(matrix[1], [0, 0])
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_pass_rate_calculation_from_matrix(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
         mock_execution_results: list[SandboxResult],
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that pass rates can be calculated from observation matrix."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock the sandbox
-        mock_sandbox.execute_test_script.side_effect = mock_execution_results
+        mock_sandbox_instance.execute_test_script.side_effect = mock_execution_results
 
         # Get InteractionData
         data = system.execute_tests(simple_code_population, simple_test_population)
@@ -567,6 +625,18 @@ class TestRealSandboxIntegration:
         from infrastructure.sandbox import SafeCodeSandbox
 
         return SafeCodeSandbox(timeout=5)
+
+    @pytest.fixture
+    def real_sandbox_config(self, real_sandbox: SafeCodeSandbox) -> SandboxConfig:
+        """Create a SandboxConfig from real_sandbox."""
+        return SandboxConfig(
+            timeout=real_sandbox.timeout,
+            max_memory_mb=real_sandbox.max_memory_mb,
+            max_output_size=real_sandbox.max_output_size,
+            allowed_imports=real_sandbox.allowed_imports,
+            python_executable=real_sandbox.python_executable,
+            test_method_timeout=real_sandbox.test_method_timeout,
+        )
 
     @pytest.fixture
     def real_code_population(self) -> CodePopulation:
@@ -663,14 +733,19 @@ if __name__ == '__main__':
             test_class_block=test_class,
         )
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_real_execution_with_sandbox(
         self,
+        MockSandboxClass,
         real_sandbox: SafeCodeSandbox,
+        real_sandbox_config: SandboxConfig,
         real_code_population: CodePopulation,
         real_test_population: TestPopulation,
     ) -> None:
         """Test ExecutionSystem with real SafeCodeSandbox execution."""
-        system = ExecutionSystem(real_sandbox, enable_multiprocessing=False)
+        MockSandboxClass.from_config.return_value = real_sandbox
+
+        system = ExecutionSystem(real_sandbox_config, enable_multiprocessing=False)
 
         # Execute tests with real sandbox
         data = system.execute_tests(real_code_population, real_test_population)
@@ -693,15 +768,20 @@ if __name__ == '__main__':
         # Code 2 (partially correct): should only pass test_zero
         assert np.array_equal(matrix[2], [0, 1, 0])  # Only middle pass
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_real_execution_multiprocessing(
         self,
+        MockSandboxClass,
         real_sandbox: SafeCodeSandbox,
+        real_sandbox_config: SandboxConfig,
         real_code_population: CodePopulation,
         real_test_population: TestPopulation,
     ) -> None:
         """Test ExecutionSystem with multiprocessing enabled."""
+        MockSandboxClass.from_config.return_value = real_sandbox
+
         system = ExecutionSystem(
-            real_sandbox, enable_multiprocessing=True, num_workers=2
+            real_sandbox_config, enable_multiprocessing=True, num_workers=2
         )
 
         # Execute tests with real sandbox and multiprocessing
@@ -727,8 +807,14 @@ if __name__ == '__main__':
 class TestAdditionalEdgeCases:
     """Additional edge and boundary case tests for ExecutionSystem."""
 
-    def test_single_code_single_test(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_single_code_single_test(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test execution with minimal population size (1x1)."""
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
         # Create minimal populations
         code_pop = CodePopulation(
             individuals=[
@@ -757,7 +843,7 @@ class TestAdditionalEdgeCases:
         )
 
         # Mock sandbox
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -770,7 +856,7 @@ class TestAdditionalEdgeCases:
             summary="Passed",
         )
 
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         data = system.execute_tests(code_pop, test_pop)
 
         # Verify 1x1 matrix
@@ -783,8 +869,14 @@ class TestAdditionalEdgeCases:
         assert code_id in data.execution_results
         assert data.execution_results[code_id].script_error is False
 
-    def test_asymmetric_populations(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_asymmetric_populations(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test with different population sizes (many codes, few tests)."""
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
         # 5 codes, 2 tests
         code_pop = CodePopulation(
             individuals=[
@@ -815,7 +907,7 @@ class TestAdditionalEdgeCases:
         )
 
         # Mock all to pass
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=2,
             tests_failed=0,
@@ -829,24 +921,29 @@ class TestAdditionalEdgeCases:
             summary="Passed",
         )
 
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         data = system.execute_tests(code_pop, test_pop)
 
         # Verify shape
         assert data.observation_matrix.shape == (5, 2)
         assert np.all(data.observation_matrix == 1)
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_all_tests_fail(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test when all tests fail for all code."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock all failures
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=0,
             tests_failed=2,
@@ -882,17 +979,22 @@ class TestAdditionalEdgeCases:
             for test_result in result.test_results.values():
                 assert test_result.status == "failed"
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_script_error_handling(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test handling of script errors from sandbox."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Mock script error
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=True,
             tests_passed=0,
             tests_failed=0,
@@ -912,17 +1014,22 @@ class TestAdditionalEdgeCases:
             assert result.script_error is True
             assert len(result.test_results) == 0
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_mixed_statuses(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test various test statuses (passed, failed, error, skipped)."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Return different statuses
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -950,17 +1057,22 @@ class TestAdditionalEdgeCases:
                 data.observation_matrix[i, 1] == 0
             )  # Second test errored (counts as fail)
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_extra_test_results_ignored(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that extra test results beyond expected count cause script error."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Return 3 results when only 2 tests exist
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=2,
             tests_failed=1,
@@ -989,7 +1101,9 @@ class TestAdditionalEdgeCases:
         # Matrix should be all zeros
         assert np.all(data.observation_matrix == 0)
 
-    def test_worker_function_handles_compose_error(self, mock_sandbox: Mock) -> None:
+    def test_worker_function_handles_compose_error(
+        self, default_sandbox_config
+    ) -> None:
         """If composition fails before sandbox execution, worker should return None result."""
         with patch(
             "coevolution.services.execution.cpp.composition.compose_lcb_test_script",
@@ -999,37 +1113,42 @@ class TestAdditionalEdgeCases:
                 code_idx=7,
                 code_snippet="def foo(): pass",
                 test_class_block="class TestFoo: pass",
-                sandbox=mock_sandbox,
+                sandbox_config=default_sandbox_config,
             )
 
         assert code_idx == 7
         assert result is None
 
     def test_execute_with_multiprocessing_handles_pool_error(
-        self, mock_sandbox: Mock
+        self, default_sandbox_config
     ) -> None:
         """_execute_with_multiprocessing returns [] when Pool raises an exception."""
-        system = ExecutionSystem(mock_sandbox)
+        system = ExecutionSystem(default_sandbox_config)
 
-        tasks: list[tuple[int, str, str, SafeCodeSandbox]] = []
+        tasks: list[tuple[int, str, str, SandboxConfig]] = []
         # Patch Pool to raise on construction
         with patch("multiprocessing.Pool", side_effect=RuntimeError("pool boom")):
             results = system._execute_with_multiprocessing(tasks, num_workers=2)
 
         assert results == []
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_direct_index_mapping_verification(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Verify that test results use direct index mapping to observation matrix."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Create specific pass/fail pattern
         def side_effect_func(*args: Any, **kwargs: Any) -> SandboxResult:
-            call_count = mock_sandbox.execute_test_script.call_count
+            call_count = mock_sandbox_instance.execute_test_script.call_count
             if call_count == 1:
                 # Code 0: first test passes, second fails
                 return SandboxResult(
@@ -1100,7 +1219,7 @@ class TestAdditionalEdgeCases:
                     summary="Failed",
                 )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1122,8 +1241,14 @@ class TestAdditionalEdgeCases:
         assert code_0_results.test_results[test_0_id].status == "passed"
         assert code_0_results.test_results[test_1_id].status == "failed"
 
-    def test_large_population_stress(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_large_population_stress(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Stress test with larger populations to verify scalability."""
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
         # Create 20 codes and 15 tests
         code_pop = CodePopulation(
             individuals=[
@@ -1155,7 +1280,7 @@ class TestAdditionalEdgeCases:
 
         # Mock sandbox to alternate pass/fail based on index
         def side_effect_func(*args: Any, **kwargs: Any) -> SandboxResult:
-            call_count = mock_sandbox.execute_test_script.call_count
+            call_count = mock_sandbox_instance.execute_test_script.call_count
             # Even codes pass all, odd codes fail all
             if call_count % 2 == 1:
                 return SandboxResult(
@@ -1192,9 +1317,9 @@ class TestAdditionalEdgeCases:
                     summary="All failed",
                 )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         data = system.execute_tests(code_pop, test_pop)
 
         # Verify shape
@@ -1210,18 +1335,23 @@ class TestAdditionalEdgeCases:
         # Verify all execution results exist
         assert len(data.execution_results) == 20
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_partial_infrastructure_failure(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test when some codes fail infrastructure-wise but others succeed."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Create a pattern: success, failure, success
         def side_effect_func(*args: Any, **kwargs: Any) -> SandboxResult:
-            call_count = mock_sandbox.execute_test_script.call_count
+            call_count = mock_sandbox_instance.execute_test_script.call_count
             if call_count == 2:
                 # Second call (code 1) fails
                 raise RuntimeError("Infrastructure failure")
@@ -1249,7 +1379,7 @@ class TestAdditionalEdgeCases:
                     summary="Passed",
                 )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1276,14 +1406,19 @@ class TestAdditionalEdgeCases:
 class TestMatrixAlignmentAndConsistency:
     """Tests specifically focused on matrix-dictionary alignment and consistency."""
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_matrix_dictionary_id_consistency(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Verify that matrix indices map correctly to dictionary IDs."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Create a specific pattern for each code
         results_pattern = [
@@ -1293,7 +1428,7 @@ class TestMatrixAlignmentAndConsistency:
         ]
 
         def side_effect_func(*args: Any, **kwargs: Any) -> SandboxResult:
-            call_count = mock_sandbox.execute_test_script.call_count - 1
+            call_count = mock_sandbox_instance.execute_test_script.call_count - 1
             pattern = results_pattern[call_count]
 
             return SandboxResult(
@@ -1313,7 +1448,7 @@ class TestMatrixAlignmentAndConsistency:
                 summary="Test",
             )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1340,14 +1475,19 @@ class TestMatrixAlignmentAndConsistency:
                         f"Matrix says failed but dict says {dict_status}"
                     )
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_no_data_loss_on_partial_failures(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Ensure no data is lost when some executions fail."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Pattern: success, failure, success
         call_results = [
@@ -1394,14 +1534,14 @@ class TestMatrixAlignmentAndConsistency:
         ]
 
         def side_effect_func(*args: Any, **kwargs: Any) -> SandboxResult:
-            call_count = mock_sandbox.execute_test_script.call_count - 1
+            call_count = mock_sandbox_instance.execute_test_script.call_count - 1
             result: SandboxResult | None = call_results[call_count]
             if result is None:
                 raise RuntimeError("Simulated failure")
             else:
                 return result
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1423,17 +1563,22 @@ class TestMatrixAlignmentAndConsistency:
         assert c2.script_error is False
         assert len(c2.test_results) == 2
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_empty_test_results_list_treated_as_mismatch(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that empty test_results list is treated as count mismatch."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Return empty test results
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=0,
             tests_failed=0,
@@ -1453,18 +1598,23 @@ class TestMatrixAlignmentAndConsistency:
         # Matrix should be all zeros
         assert np.all(data.observation_matrix == 0)
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_test_details_preserved_in_execution_results(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Verify that test details/output are preserved in execution results."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         error_msg = "AssertionError: Expected 5, got 3"
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=1,
@@ -1496,16 +1646,21 @@ class TestMatrixAlignmentAndConsistency:
         assert code_0_results.test_results[test_0_id].details == error_msg
         assert code_0_results.test_results[test_1_id].details is None
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_observation_matrix_dtype_is_int(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Verify observation matrix uses int dtype."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
+
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=2,
             tests_failed=0,
@@ -1530,13 +1685,18 @@ class TestMatrixAlignmentAndConsistency:
 class TestSequentialVsMultiprocessing:
     """Tests comparing sequential and multiprocessing execution modes."""
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_sequential_and_multiprocessing_produce_same_results(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Verify sequential and multiprocessing modes produce identical results."""
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
         # Define a consistent mock response
         mock_response = SandboxResult(
             script_error=False,
@@ -1555,15 +1715,17 @@ class TestSequentialVsMultiprocessing:
         )
 
         # Run sequential
-        mock_sandbox.execute_test_script.return_value = mock_response
-        system_seq = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance.execute_test_script.return_value = mock_response
+        system_seq = ExecutionSystem(
+            default_sandbox_config, enable_multiprocessing=False
+        )
         data_seq = system_seq.execute_tests(
             simple_code_population, simple_test_population
         )
 
         # Reset mock
-        mock_sandbox.reset_mock()
-        mock_sandbox.execute_test_script.return_value = mock_response
+        mock_sandbox_instance.reset_mock()
+        mock_sandbox_instance.execute_test_script.return_value = mock_response
 
         # Run multiprocessing (with 1 worker to be deterministic)
         system_mp = ExecutionSystem(
@@ -1585,14 +1747,19 @@ class TestSequentialVsMultiprocessing:
 class TestErrorRecovery:
     """Tests for error recovery and graceful degradation."""
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_continues_after_worker_exception(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that execution continues after a worker exception."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # First call raises, rest succeed
         call_count = [0]
@@ -1620,7 +1787,7 @@ class TestErrorRecovery:
                 summary="Pass",
             )
 
-        mock_sandbox.execute_test_script.side_effect = side_effect_func
+        mock_sandbox_instance.execute_test_script.side_effect = side_effect_func
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1638,17 +1805,22 @@ class TestErrorRecovery:
             data.execution_results[simple_code_population[2].id].script_error is False
         )
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_all_workers_fail_returns_empty_matrix(
         self,
+        MockSandboxClass,
         simple_code_population: CodePopulation,
         simple_test_population: TestPopulation,
-        mock_sandbox: Mock,
+        default_sandbox_config,
     ) -> None:
         """Test that all workers failing still returns valid (zero) matrix."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # All calls fail
-        mock_sandbox.execute_test_script.side_effect = RuntimeError("All fail")
+        mock_sandbox_instance.execute_test_script.side_effect = RuntimeError("All fail")
 
         data = system.execute_tests(simple_code_population, simple_test_population)
 
@@ -1702,7 +1874,10 @@ class TestArchitecturalWeaknesses:
             test_class_block="class Test: pass",
         )
 
-    def test_alignment_when_sandbox_reorders_tests(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_alignment_when_sandbox_reorders_tests(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """
         CRITICAL: Test what happens if the sandbox returns results in a different order
         than the TestPopulation (e.g. alphabetical sorting vs insertion order).
@@ -1710,7 +1885,10 @@ class TestArchitecturalWeaknesses:
         This test verifies the POSITIONAL assumption in the execution system:
         sandbox_result[i] MUST map to test_population[i], regardless of test names.
         """
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Population: [Test_B, Test_A] (insertion order)
         test_b = TestIndividual(
@@ -1750,7 +1928,7 @@ class TestArchitecturalWeaknesses:
         # BUT the key point is: these are returned in POSITIONS [0, 1]
         # Result at position 0: test_a (passed)
         # Result at position 1: test_b (failed)
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=1,
@@ -1799,11 +1977,15 @@ class TestArchitecturalWeaknesses:
         # If sandbox reorders tests, results will be misaligned!
         # A robust system would match by test name, not position.
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_duplicate_code_ids_cause_dictionary_data_loss(
-        self, mock_sandbox: Mock
+        self, MockSandboxClass, default_sandbox_config
     ) -> None:
         """Verify behavior when population has duplicate IDs."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
 
         # Two individuals with SAME ID (force via object manipulation)
         ind1 = CodeIndividual(
@@ -1840,7 +2022,7 @@ class TestArchitecturalWeaknesses:
             test_class_block="class Test: pass",
         )
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -1893,9 +2075,15 @@ class TestArchitecturalWeaknesses:
             "Current implementation is strict 'passed' only"
         )
 
-    def test_malformed_sandbox_result_attributes(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_malformed_sandbox_result_attributes(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test behavior when inner result objects lack standard attributes."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(1)
         test_pop = self._make_dummy_test_pop(1)
 
@@ -1903,7 +2091,7 @@ class TestArchitecturalWeaknesses:
         # Just a bare Mock with no spec
         malformed_result = Mock(spec=[])
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=0,
             tests_failed=0,
@@ -1921,14 +2109,22 @@ class TestArchitecturalWeaknesses:
         res = data.execution_results[code_pop[0].id].test_results[test_pop[0].id]
         assert res.status == "error"
 
-    def test_worker__invalid_index(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_worker__invalid_index(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test handling when worker returns an index out of bounds."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(2)  # Size 2
         test_pop = self._make_dummy_test_pop(1)
 
         # Mock worker returning index 99 (Out of bounds)
-        with patch("coevolution.services.execution._execute_single_code") as mock_worker:
+        with patch(
+            "coevolution.services.execution._execute_single_code"
+        ) as mock_worker:
             mock_worker.return_value = (
                 99,
                 SandboxResult(
@@ -1955,9 +2151,15 @@ class TestArchitecturalWeaknesses:
         # Index 99 doesn't map to any code, so it should be skipped
         assert len(data.execution_results) == 0
 
-    def test_execution_with_zero_tests(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_execution_with_zero_tests(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test execution when test population is empty."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(3)
 
         # Empty test population
@@ -1967,7 +2169,7 @@ class TestArchitecturalWeaknesses:
             test_class_block="class Test: pass",
         )
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=0,
             tests_failed=0,
@@ -1988,16 +2190,20 @@ class TestArchitecturalWeaknesses:
         for code in code_pop:
             assert data.execution_results[code.id].test_results == {}
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_sandbox_returns_extra_results_fails_validation(
-        self, mock_sandbox: Mock
+        self, MockSandboxClass, default_sandbox_config
     ) -> None:
         """Test validation failure when sandbox returns MORE results than expected."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(1)
         test_pop = self._make_dummy_test_pop(1)  # Expect 1
 
         # Return 2 results (extra)
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=2,
             tests_failed=0,
@@ -2020,9 +2226,15 @@ class TestArchitecturalWeaknesses:
         assert res.script_error is True
         assert np.all(data.observation_matrix == 0)
 
-    def test_missing_details_attribute_is_handled(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_missing_details_attribute_is_handled(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test robustness when 'details' attribute is missing on sandbox result."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(1)
         test_pop = self._make_dummy_test_pop(1)
 
@@ -2033,7 +2245,7 @@ class TestArchitecturalWeaknesses:
         res_obj.description = ""
         # Accessing .details will use getattr fallback
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -2048,15 +2260,19 @@ class TestArchitecturalWeaknesses:
         assert res.details is None
         assert res.status == "passed"
 
+    @patch("coevolution.services.execution.SafeCodeSandbox")
     def test_matrix_is_strictly_numeric_zeros_and_ones(
-        self, mock_sandbox: Mock
+        self, MockSandboxClass, default_sandbox_config
     ) -> None:
         """Ensure matrix contains only 0 and 1 integers, no booleans or non-binary."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(1)
         test_pop = self._make_dummy_test_pop(1)
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=1,
             tests_failed=0,
@@ -2081,15 +2297,21 @@ class TestArchitecturalWeaknesses:
         # Ensure only 0 and 1 values
         assert np.all((data.observation_matrix == 0) | (data.observation_matrix == 1))
 
-    def test_extremely_large_output_handling(self, mock_sandbox: Mock) -> None:
+    @patch("coevolution.services.execution.SafeCodeSandbox")
+    def test_extremely_large_output_handling(
+        self, MockSandboxClass, default_sandbox_config
+    ) -> None:
         """Test system behavior with massive log output."""
-        system = ExecutionSystem(mock_sandbox, enable_multiprocessing=False)
+        mock_sandbox_instance = Mock()
+        MockSandboxClass.from_config.return_value = mock_sandbox_instance
+
+        system = ExecutionSystem(default_sandbox_config, enable_multiprocessing=False)
         code_pop = self._make_dummy_code_pop(1)
         test_pop = self._make_dummy_test_pop(1)
 
         huge_string = "a" * 10_000_000  # 10MB string
 
-        mock_sandbox.execute_test_script.return_value = SandboxResult(
+        mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
             script_error=False,
             tests_passed=0,
             tests_failed=1,
