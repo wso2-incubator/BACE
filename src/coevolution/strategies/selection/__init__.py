@@ -3,4 +3,17 @@
 Contains parent and elite selection strategy implementations.
 """
 
-__all__ = ["elite_selection", "parent_selection"]
+from . import elite
+from .elite import (
+    CodeDiversityEliteSelector,
+    TestDiversityEliteSelector,
+    TopKEliteSelector,
+)
+
+__all__ = [
+    "elite",
+    "CodeDiversityEliteSelector",
+    "TestDiversityEliteSelector",
+    "TopKEliteSelector",
+    "parent_selection",
+]
