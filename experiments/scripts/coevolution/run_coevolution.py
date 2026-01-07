@@ -8,6 +8,7 @@ Optimized Pattern:
 - RUN SCOPE: Reuse the Orchestrator instance to process multiple problems.
 """
 
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -104,12 +105,15 @@ def main(
         test_method_timeout=30,
     )
 
+    cpu_count = os.cpu_count() or 4
+    logger.info(f"Detected CPU Count: {cpu_count}")
+
     # 3. Execution System (Heavy Resource: Process Pool)
     # Created once so the process pool persists across problems.
     execution_system = ExecutionSystem(
         sandbox_config=exec_sandbox_config,
         enable_multiprocessing=True,
-        num_workers=12,
+        num_workers=cpu_count,
     )
 
     # 4. Auxiliary Systems
@@ -153,7 +157,7 @@ def main(
         beta=0.2,
         gamma=0.1,
         learning_rate=0.05,
-        max_workers=10,
+        max_workers=cpu_count,
         diversity_enabled=True,
     )
 
@@ -171,7 +175,7 @@ def main(
         gamma=0.5,
         learning_rate=0.025,
         # Resource Partitioning:
-        max_workers=12,  # Total Budget
+        max_workers=cpu_count,  # Total Budget
         # Logic inside factory splits this (e.g., 4 threads, 3 workers each)
     )
 
