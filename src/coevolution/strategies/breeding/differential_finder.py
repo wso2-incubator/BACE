@@ -44,12 +44,16 @@ def _worker_entry(
         task_args: A tuple containing (idx, input_data, code_a, code_b, config)
                    Packed as a tuple to support pool.imap_unordered.
     """
+
     # Unpack arguments
     idx, input_data, code_a_snippet, code_b_snippet, config = task_args
 
     try:
-        # 1. Hydrate Sandbox (The "Cake" from the "Recipe")
+        # 1. Hydrate Sandbox
         # Ensure we set up logging in the child process if needed
+        from coevolution.utils.logging import setup_logging
+
+        setup_logging()
         # setup_logging(console_level="INFO", file_level="TRACE")
         sandbox = SafeCodeSandbox.from_config(config)
 
