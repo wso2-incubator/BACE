@@ -1,16 +1,8 @@
 from typing import Any, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-# Adjust imports to match your project structure
-from coevolution.strategies.breeding.differential_breeding import (
-    DifferentialBreedingStrategy,
-    DifferentialResult,
-    FunctionallyEquivGroup,
-    IDifferentialFinder,
-    IFunctionallyEquivalentCodeSelector,
-)
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
@@ -24,6 +16,15 @@ from coevolution.core.interfaces import (
     Problem,
 )
 from coevolution.core.population import CodePopulation, TestPopulation
+
+# Adjust imports to match your project structure
+from coevolution.strategies.breeding.differential_breeding import (
+    DifferentialBreedingStrategy,
+    DifferentialResult,
+    FunctionallyEquivGroup,
+    IDifferentialFinder,
+    IFunctionallyEquivalentCodeSelector,
+)
 from coevolution.strategies.operators.differential_llm_operator import (
     OPERATION_DISCOVERY,
     DifferentialLLMOperator,
@@ -157,9 +158,7 @@ def test_initialization_scaffold(
     mock_operator.generate_initial_snippets.assert_called_once()
 
 
-@patch("coevolution.strategies.breeding.differential_breeding.random.sample")
 def test_breed_via_discovery_success(
-    mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
@@ -180,35 +179,31 @@ def test_breed_via_discovery_success(
     )
     mock_func_eq_selector.select_functionally_equivalent_codes.return_value = [group]
 
-    # 3. Patch random.sample to return the *exact same* mock objects
-    # This allows strategy to access code_a.snippet and code_a.id
-    mock_random_sample.return_value = [code_a, code_b]
-
-    # 4. Mock Operator (LLM Script Gen)
+    # 3. Mock Operator (LLM Script Gen)
     mock_operator.apply.return_value = OperatorOutput(
         results=[OperatorResult(snippet="def fuzz(): ...")]
     )
     mock_operator.get_test_method_from_io.return_value = "def test_diff(): ..."
 
-    # 5. Mock Divergence Finder
+    # 4. Mock Divergence Finder
     # differential_finder receives (code_a.snippet, code_b.snippet, script)
-    divergence_result: DifferentialResult = {
-        "input_data": {"x": 1},
-        "output_a": 10,
-        "output_b": 20,
-    }
+    divergence_result = DifferentialResult(
+        input_data={"x": 1},
+        output_a=10,
+        output_b=20,
+    )
     mock_differential_finder.find_differential.return_value = [divergence_result]
 
-    # 6. Run Breed
+    # 5. Run Breed
     # We ask for 2 offspring, which aligns with 1 divergence -> 2 scenarios (A wins, B wins)
     offspring = strategy.breed(cast(CoevolutionContext, mock_context), num_offsprings=2)
 
-    # 7. Assertions
+    # 6. Assertions
     assert len(offspring) == 2
 
     # Check that differential finder was called with snippets, not IDs or Objects
     mock_differential_finder.find_differential.assert_called_with(
-        code_a.snippet, code_b.snippet, "def fuzz(): ..."
+        code_a.snippet, code_b.snippet, "def fuzz(): ...", limit=5
     )
 
     # Verify Metadata logic for the first offspring (Scenario 1: A is winner)
@@ -220,9 +215,7 @@ def test_breed_via_discovery_success(
     assert meta_a["divergence_outputs"] == {"A": [10], "B": [20]}
 
 
-@patch("coevolution.strategies.breeding.differential_breeding.random.sample")
 def test_breed_via_discovery_retries_on_failure(
-    mock_random_sample: MagicMock,
     strategy: DifferentialBreedingStrategy,
     mock_context: MagicMock,
     mock_func_eq_selector: MagicMock,
@@ -240,9 +233,6 @@ def test_breed_via_discovery_retries_on_failure(
         code_individuals=[code_a, code_b], passing_test_individuals={}
     )
     mock_func_eq_selector.select_functionally_equivalent_codes.return_value = [group]
-
-    # Return objects on sample
-    mock_random_sample.return_value = [code_a, code_b]
 
     # 2. Setup Operator
     mock_operator.apply.return_value
