@@ -39,7 +39,7 @@ Example Usage:
 """
 
 from infrastructure.llm_client import LLMClient
-from infrastructure.sandbox import SafeCodeSandbox
+from infrastructure.sandbox import SandboxConfig
 
 from ..core.individual import CodeIndividual, TestIndividual
 from ..core.interfaces import (
@@ -59,7 +59,7 @@ from ..strategies.operators.code_llm_operator import CodeLLMOperator
 from ..strategies.operators.differential_llm_operator import DifferentialLLMOperator
 from ..strategies.operators.unittest_llm_operator import UnittestLLMOperator
 from ..strategies.probability.assigner import ProbabilityAssigner
-from ..strategies.selection.elite_selection import (
+from ..strategies.selection.elite import (
     CodeDiversityEliteSelector,
     TestDiversityEliteSelector,
     TopKEliteSelector,
@@ -288,7 +288,7 @@ def create_unittest_test_profile(
 
 def create_differential_test_profile(
     llm_client: LLMClient,
-    sandbox: SafeCodeSandbox,
+    sandbox_config: SandboxConfig,
     initial_prior: float = 0.5,
     initial_population_size: int = 0,  # Bootstrap mode
     max_population_size: int = 20,
@@ -365,8 +365,30 @@ def create_differential_test_profile(
     )
     prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
 
-    # differential finder
-    differential_finder = DifferentialFinder(sandbox=sandbox)
+    # -------------------------------------------------------------------------
+    # RESOURCE PARTITIONING LOGIC
+    # -------------------------------------------------------------------------
+    # We split the global 'max_workers' budget between Breeding (Threads) and Finder (Processes).
+    # Goal: Maximize Finder parallelism (CPU-bound) while keeping Breeding active (I/O-bound).
+
+    # 1. Determine Breeding Threads (The "Width")
+    # We cap threads at 4. Why?
+    # - 4 threads are enough to keep the LLM busy.
+    # - We don't want 32 threads spawning 1 worker each (High overhead).
+    # - We prefer 4 threads spawning 8 workers each (High throughput).
+    breeding_workers = min(4, max_workers)
+
+    # 2. Determine Finder Workers per Thread (The "Depth")
+    # Distribute the remaining budget to the workers.
+    # Example: max_workers=12. breeding=4. finder = 12 // 4 = 3.
+    # Total processes = 4 * 3 = 12. Budget respected.
+    finder_workers = max(1, max_workers // breeding_workers)
+
+    differential_finder = DifferentialFinder(
+        sandbox_config=sandbox_config,
+        enable_multiprocessing=finder_workers > 1,
+        num_workers=finder_workers,
+    )
 
     # Create breeding strategy
     breeding_strategy = DifferentialBreedingStrategy(
@@ -377,7 +399,7 @@ def create_differential_test_profile(
         parent_selector=parent_selector,
         functionally_equivalent_code_selector=FunctionallyEqSelector(),
         differential_finder=differential_finder,
-        max_workers=max_workers,
+        max_workers=breeding_workers,
     )
 
     # Create elite selector (diversity-aware for differential tests)

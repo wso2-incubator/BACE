@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict, cast, override
+from typing import Any, Protocol, cast, override
 
 from loguru import logger
 
@@ -51,7 +51,8 @@ class IFunctionallyEquivalentCodeSelector(Protocol):
     ) -> list[FunctionallyEquivGroup]: ...
 
 
-class DifferentialResult(TypedDict):
+@dataclass(frozen=True)
+class DifferentialResult:
     """Represents a single input case where two code snippets behaved differently."""
 
     input_data: dict[str, Any]
@@ -166,7 +167,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         )
 
         # Store candidates as a list of lists: [ [GroupA_Pair1, GroupA_Pair2], [GroupB_Pair1] ]
-        candidates_by_group: list[list[tuple]] = []
+        candidates_by_group: list[
+            list[tuple[CodeIndividual, CodeIndividual, FunctionallyEquivGroup]]
+        ] = []
 
         # Stats for logging
         theoretical_max_pairs = 0
@@ -389,20 +392,18 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Scenario 1: Code A is the "Winner" (Source of Truth)
         # We collect all inputs and map them to A's outputs
         io_pairs_a: list[DifferentialInputOutput] = [
-            {"inputdata": div["input_data"], "output": div["output_a"]}
-            for div in divergences
+            {"inputdata": div.input_data, "output": div.output_a} for div in divergences
         ]
 
         # Scenario 2: Code B is the "Winner"
         io_pairs_b: list[DifferentialInputOutput] = [
-            {"inputdata": div["input_data"], "output": div["output_b"]}
-            for div in divergences
+            {"inputdata": div.input_data, "output": div.output_b} for div in divergences
         ]
 
         # Define Hypotheses: (Winner, Loser, IO_Pairs, Outputs_For_Metadata)
         scenarios = [
-            (code_a, code_b, io_pairs_a, [d["output_a"] for d in divergences]),
-            (code_b, code_a, io_pairs_b, [d["output_b"] for d in divergences]),
+            (code_a, code_b, io_pairs_a, [d.output_a for d in divergences]),
+            (code_b, code_a, io_pairs_b, [d.output_b for d in divergences]),
         ]
 
         for winner, loser, io_pairs, winner_outputs in scenarios:
@@ -424,7 +425,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                             winner.id: winner_outputs,
                             # The loser's outputs are the complement set
                             loser.id: [
-                                d["output_b"] if winner == code_a else d["output_a"]
+                                d.output_b if winner == code_a else d.output_a
                                 for d in divergences
                             ],
                         },

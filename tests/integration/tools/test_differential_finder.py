@@ -1,6 +1,6 @@
 # Integration test for DifferentialFinder using the real SafeCodeSandbox.
 from coevolution.strategies.breeding.differential_finder import DifferentialFinder
-from infrastructure.sandbox import SafeCodeSandbox
+from infrastructure.sandbox import SandboxConfig
 
 
 def test_integration_differential_finder_real_execution() -> None:
@@ -49,9 +49,15 @@ if __name__ == "__main__":
     generate_test_inputs(4)
 """
 
-    # 3. Initialize Real Sandbox & Finder
-    sandbox = SafeCodeSandbox()
-    finder = DifferentialFinder(sandbox=sandbox)
+    # 3. Initialize SandboxConfig & Finder
+    # Use specialized config for differential testing:
+    # - Aggressive timeout (5s) for fast input execution
+    # - Increased memory (200MB) for complex data structures
+    # - Larger output buffer (50KB) for output comparisons
+    sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
+    finder = DifferentialFinder(
+        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+    )
 
     # 4. Execute
     results = finder.find_differential(
@@ -67,15 +73,15 @@ if __name__ == "__main__":
 
     # Check First Divergence (Case 3: 6+5)
     div_1 = results[0]
-    assert div_1["input_data"] == {"x": 6, "y": 5}
-    assert div_1["output_a"] == "11"
-    assert div_1["output_b"] == "10"
+    assert div_1.input_data == {"x": 6, "y": 5}
+    assert div_1.output_a == "11"
+    assert div_1.output_b == "10"
 
     # Check Second Divergence (Case 4: 10+10)
     div_2 = results[1]
-    assert div_2["input_data"] == {"x": 10, "y": 10}
-    assert div_2["output_a"] == "20"
-    assert div_2["output_b"] == "10"
+    assert div_2.input_data == {"x": 10, "y": 10}
+    assert div_2.output_a == "20"
+    assert div_2.output_b == "10"
 
 
 def test_integration_complex_list_processing() -> None:
@@ -123,8 +129,10 @@ if __name__ == "__main__":
 """
 
     # 3. Execute
-    sandbox = SafeCodeSandbox()
-    finder = DifferentialFinder(sandbox=sandbox)
+    sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
+    finder = DifferentialFinder(
+        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+    )
 
     results = finder.find_differential(
         code_a_snippet, code_b_snippet, input_generator_script
@@ -135,10 +143,10 @@ if __name__ == "__main__":
 
     # Validate Divergence 1 (List length 4)
     res1 = results[0]
-    assert res1["input_data"] == {"nums": [1, 2, 3, 4]}
+    assert res1.input_data == {"nums": [1, 2, 3, 4]}
     # Note: Sandbox outputs are strings
-    assert res1["output_a"] == "[1, 2, 3, 4]"
-    assert res1["output_b"] == "[4, 3, 2, 1]"
+    assert res1.output_a == "[1, 2, 3, 4]"
+    assert res1.output_b == "[4, 3, 2, 1]"
 
 
 def test_integration_string_logic_and_crashes() -> None:
@@ -191,8 +199,10 @@ if __name__ == "__main__":
 """
 
     # 3. Execute
-    sandbox = SafeCodeSandbox()
-    finder = DifferentialFinder(sandbox=sandbox)
+    sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
+    finder = DifferentialFinder(
+        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+    )
 
     results = finder.find_differential(
         code_a_snippet, code_b_snippet, input_generator_script
@@ -207,9 +217,9 @@ if __name__ == "__main__":
 
     # Check Logical Divergence ("Racecar")
     res_logic = results[0]
-    assert res_logic["input_data"] == {"s": "Racecar"}
-    assert res_logic["output_a"] == "True"
-    assert res_logic["output_b"] == "False"
+    assert res_logic.input_data == {"s": "Racecar"}
+    assert res_logic.output_a == "True"
+    assert res_logic.output_b == "False"
 
     # Note: The empty string case ("") causes code_b to crash, so it's skipped
     # by the finder and not reported as a divergence
