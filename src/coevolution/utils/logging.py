@@ -13,6 +13,8 @@ Functions:
     log_final_survivors: Logs all surviving individuals at evolution end.
 """
 
+import multiprocessing
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -28,76 +30,108 @@ if TYPE_CHECKING:
 
 
 def setup_logging(
-    console_level: str = "INFO",
+    console_level: str = "DEBUG",
     file_level: str = "TRACE",
     log_file_base_name: str = "coevolution_run",
 ) -> None:
     """
-    Configures Loguru handlers for console and file logging.
-
-    This function removes the default handler and adds two new ones:
-    1. A console (stderr) handler with customizable level and color.
-    2. A rotating file handler with customizable level, trace context,
-       and support for multiprocessing (enqueue=True).
-
-    Both handlers are formatted to include 'run_id' and 'problem_id'
-    from the logger's `extra` context.
-
-    Args:
-        console_level: The minimum log level to display on the console (e.g., "DEBUG").
-        file_level: The minimum log level to write to the file (e.g., "TRACE").
-        log_file_base_name: The base name for the log file.
+    Architecturally robust logging setup that prevents multiprocessing corruption.
     """
-    logger.remove()  # Remove the default, unconfigured handler
+    logger.remove()
 
-    # Define a default context for logs outside a specific run/problem
-    default_context = {"run_id": "GLOBAL", "problem_id": "SETUP"}
+    # ------------------------------------------------------------------
+    # 1. PROCESS IDENTIFICATION
+    # ------------------------------------------------------------------
+    # Detect if we are the Main Process or a Child Worker
+    current_process = multiprocessing.current_process()
+    is_main_process = current_process.name == "MainProcess"
+    pid = os.getpid()
 
-    # Define format for the console (more concise)
+    # ------------------------------------------------------------------
+    # 2. CONTEXT CONFIGURATION
+    # ------------------------------------------------------------------
+    # Standardize context to ensure every log line has traceable metadata
+    default_context = {
+        "run_id": "GLOBAL",
+        "problem_id": "SETUP",
+        "proc_type": "MAIN" if is_main_process else "WORKER",
+    }
+
+    # Console Format (Concise)
     console_format = (
         "<green>{time:HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>[{extra[problem_id]: <8}]</cyan> | "  # Use extra context
+        "<cyan>[{extra[proc_type]}:{extra[problem_id]}]</cyan> | "
         "<cyan>{name}:{function}:{line}</cyan> - "
         "<level>{message}</level>"
     )
 
-    # Define format for the file (more detailed)
+    # File Format (Detailed with PID)
     file_format = (
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
         "{level: <8} | "
         "[{extra[run_id]}:{extra[problem_id]}] | "
-        "{process}:{thread} | "
+        "PID:{process} | "  # Crucial for debugging distributed systems
         "{name}:{function}:{line} - {message}"
     )
 
-    # Add the console logger
+    # ------------------------------------------------------------------
+    # 3. HANDLER REGISTRATION
+    # ------------------------------------------------------------------
+
+    # A. Console Handler (Safe for all processes to write to stderr)
     logger.add(
         sys.stderr,
         level=console_level.upper(),
         format=console_format,
         colorize=True,
+        enqueue=True,  # Ensure thread safety for console output
     )
 
-    # Add the file logger
-    log_file_path = f"logs/{log_file_base_name}_{{time:YYYYMMDD}}.log"
-    logger.add(
-        log_file_path,
-        level=file_level.upper(),
-        format=file_format,
-        rotation="1000 MB",
-        retention="365 days",
-        compression="zip",
-        enqueue=True,  # Makes logging safe for multiprocessing
-        serialize=True,  # JSON format for easier parsing
-    )
+    # B. File Handler (The Critical Fix)
+    if is_main_process:
+        # MAIN PROCESS: Writes to the master log file
+        # We REMOVE compression to prevent locking issues.
+        log_file_path = f"logs/{log_file_base_name}_{{time:YYYYMMDD}}_MASTER.log"
+        logger.add(
+            log_file_path,
+            level=file_level.upper(),
+            format=file_format,
+            rotation="1 GB",  # Rotate by size
+            retention="10 days",
+            compression=None,  # <--- CRITICAL: DISABLE COMPRESSION
+            enqueue=True,
+            serialize=True,
+        )
+    else:
+        # WORKER PROCESS: Writes to its own dedicated file
+        # This completely eliminates the "FileNotFound" race condition.
+        # We include the PID in the filename.
+        log_file_path = (
+            f"logs/workers/{log_file_base_name}_{{time:YYYYMMDD}}_WORKER_{pid}.log"
+        )
 
-    # Configure the extra context BEFORE any logging that uses it
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+        logger.add(
+            log_file_path,
+            level=file_level.upper(),
+            format=file_format,
+            rotation="500 MB",  # Smaller rotation for workers
+            retention="5 days",
+            compression=None,  # Disable compression here too
+            enqueue=True,
+            serialize=True,
+        )
+
+    # Apply context
     logger.configure(extra=default_context)
-    logger.info(
-        f"Logging configured. Console level: {console_level}, File level: {file_level}."
-    )
-    logger.info(f"Detailed logs will be written to {log_file_path}")
+
+    if is_main_process:
+        logger.info(f"Logging Initialized. Master log: {log_file_path}")
+    else:
+        logger.debug(f"Worker Logging Initialized. PID: {pid}")
 
 
 def log_section_header(level: str, message: str) -> None:
