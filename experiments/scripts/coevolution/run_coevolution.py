@@ -1,17 +1,11 @@
+# run_coevolution.py
+
 """
 Script to run the coevolution orchestrator on LiveCodeBench problems.
 
-This script demonstrates the new profile-based orchestrator builder pattern:
-- Profile factory functions for creating standard configurations
-- OrchestratorBuilder with fluent API for flexible assembly
-- Multiple test population types (unittest, differential, public)
-- Clean separation of concerns via dependency injection
-
-The new architecture supports:
-- Multiple evolved test populations with different strategies
-- Configurable breeding, selection, and Bayesian parameters per population
-- Easy customization through profile factories
-- Type-safe configuration with comprehensive validation
+Optimized Pattern:
+- GLOBAL SCOPE: Initialize heavy infrastructure (LLM, Sandbox, Execution Pools) ONCE.
+- RUN SCOPE: Reuse the Orchestrator instance to process multiple problems.
 """
 
 from datetime import datetime
@@ -65,13 +59,13 @@ def main(
         None,
         "--run-id",
         "-r",
-        help="Unique identifier for this run. If not provided, one will be auto-generated with timestamp.",
+        help="Unique identifier for this run. If not provided, one will be auto-generated.",
     ),
     problem_ids: Optional[list[str]] = typer.Option(
         None,
         "--problem-ids",
         "-p",
-        help="List of problem IDs to run. If not provided, runs on a default set of problems.",
+        help="List of problem IDs to run. If not provided, runs on a default set.",
     ),
 ) -> None:
     """Run a coevolution experiment on a LiveCodeBench problem."""
@@ -84,25 +78,25 @@ def main(
         run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
     logger.info(f"Run ID: {run_id}")
 
-    # ====================================
-    # Step 1: Create LLM and Sandbox
-    # ====================================
+    # =========================================================================
+    # PHASE 1: INFRASTRUCTURE INITIALIZATION (Run Once)
+    # =========================================================================
+    # These components are heavy and problem-agnostic. We build them once
+    # and reuse them to save startup time and resources.
 
-    # LLM and Sandbox created outside problem loop to reuse across problems
-    # There's token limit in llm and sandbox resource limitations
-    logger.info("Creating LLM client and sandbox...")
+    logger.info("Initializing Global Infrastructure...")
 
+    # 1. LLM Client
     llm_model = "gpt-5-mini"
-    llm_provider = "openai"
     llm_client = create_llm_client(
-        provider=llm_provider, model=llm_model, reasoning_effort="minimal"
+        provider="openai", model=llm_model, reasoning_effort="minimal"
     )
     logger.info(f"Using model: {llm_client.model}")
 
+    # 2. Sandbox Configurations
     differential_sandbox_config = SandboxConfig(
         timeout=20, max_memory_mb=100, max_output_size=10_000_000
     )
-
     exec_sandbox_config = SandboxConfig(
         timeout=180,
         max_memory_mb=100,
@@ -110,230 +104,178 @@ def main(
         test_method_timeout=30,
     )
 
-    logger.info("Sandbox created")
+    # 3. Execution System (Heavy Resource: Process Pool)
+    # Created once so the process pool persists across problems.
+    execution_system = ExecutionSystem(
+        sandbox_config=exec_sandbox_config,
+        enable_multiprocessing=True,
+        num_workers=12,
+    )
 
-    # ====================================
-    # Step 2: Load Problems
-    # ====================================
-    problems = load_problems()
-    if problem_ids is not None:
-        selected_problems = [
-            problem for problem in problems if problem.question_id in problem_ids
-        ]
+    # 4. Auxiliary Systems
+    bayesian_system = BayesianSystem()
+    test_block_rebuilder = LCBTestBlockRebuilder()
+    dataset_test_block_builder = LCBDatasetTestBlockBuilder()
+
+    logger.info("Infrastructure components ready.")
+
+    # =========================================================================
+    # PHASE 2: STRATEGY CONFIGURATION (Run Once)
+    # =========================================================================
+    logger.info("Configuring Coevolution Strategy...")
+
+    # 1. Profiles (The "Blueprints" for populations)
+    code_profile = create_default_code_profile(
+        llm_client=llm_client,
+        initial_prior=0.2,
+        initial_population_size=10,
+        max_population_size=15,
+        offspring_rate=0.3,
+        elitism_rate=0.3,
+        mutation_rate=0.2,
+        crossover_rate=0.2,
+        edit_rate=0.6,
+        max_workers=10,
+        diversity_enabled=True,
+    )
+
+    unittest_profile = create_unittest_test_profile(
+        llm_client=llm_client,
+        initial_prior=0.2,
+        initial_population_size=20,
+        max_population_size=20,
+        offspring_rate=0.8,
+        elitism_rate=0.4,
+        mutation_rate=0.3,
+        crossover_rate=0.2,
+        edit_rate=0.5,
+        alpha=0.2,
+        beta=0.2,
+        gamma=0.1,
+        learning_rate=0.05,
+        max_workers=10,
+        diversity_enabled=True,
+    )
+
+    differential_profile = create_differential_test_profile(
+        llm_client=llm_client,
+        sandbox_config=differential_sandbox_config,
+        initial_prior=0.2,
+        initial_population_size=0,  # Bootstrap
+        max_population_size=100,
+        offspring_rate=0.5,
+        elitism_rate=0.3,
+        discovery_rate=1.0,
+        alpha=0.3,
+        beta=0.5,
+        gamma=0.5,
+        learning_rate=0.025,
+        # Resource Partitioning:
+        max_workers=12,  # Total Budget
+        # Logic inside factory splits this (e.g., 4 threads, 3 workers each)
+    )
+
+    public_profile = create_public_test_profile(
+        alpha=0.001, beta=0.1, gamma=0.1, learning_rate=0.05
+    )
+
+    # 2. Schedule
+    schedule = (
+        ScheduleBuilder()
+        .alternating(total_duration=10, code_step=1, test_step=1, start_with="test")
+        .build()
+    )
+
+    # 3. Orchestrator Configuration
+    config = (
+        OrchestratorBuilder()
+        .with_evolution_config(schedule)
+        .with_code_profile(code_profile)
+        .add_test_profile("unittest", unittest_profile)
+        .add_test_profile("differential", differential_profile)
+        .with_public_test_profile(public_profile)
+        .with_execution_system(execution_system)
+        .with_bayesian_system(bayesian_system)
+        .with_test_block_rebuilder(test_block_rebuilder)
+        .with_dataset_test_block_builder(dataset_test_block_builder)
+        .build()
+    )
+
+    # 4. The Engine (Orchestrator)
+    # We build the engine ONCE. It is now ready to accept problems.
+    orchestrator = build_orchestrator_from_config(config)
+    logger.info("Orchestrator Engine Online.")
+
+    # =========================================================================
+    # PHASE 3: PROBLEM EXECUTION LOOP
+    # =========================================================================
+
+    all_problems = load_problems()
+
+    # Filter problems
+    if problem_ids:
+        selected_problems = [p for p in all_problems if p.question_id in problem_ids]
     else:
-        selected_problems = problems[:10]  # Default to first 10 problems
+        selected_problems = all_problems[:10]
 
-    for problem in selected_problems:
+    logger.info(f"Processing {len(selected_problems)} problems...")
+
+    for i, problem in enumerate(selected_problems):
+        # We use Context Managers to tag logs with the current problem
+        # This keeps the logs clean even though we reuse the engine
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
-            logger.info(f"Running coevolution on problem ID: {problem.question_id}")
+            logging_utils.log_section_header(
+                "INFO",
+                f"PROBLEM {i + 1}/{len(selected_problems)}: {problem.question_id}",
+            )
             logging_utils.log_problem(problem)
 
-            # ====================================
-            # Step 3: Create Infrastructure Components
-            # ====================================
-            logger.info("Creating infrastructure components...")
+            try:
+                # -------------------------------------------------------------
+                # THE CORE EXECUTION
+                # -------------------------------------------------------------
+                # The orchestrator is stateless regarding the problem.
+                # It initializes fresh populations for this specific problem
+                # using the profiles we configured earlier.
+                code_population, evolved_test_populations = orchestrator.run(problem)
 
-            # Execution System
-            execution_system = ExecutionSystem(
-                sandbox_config=exec_sandbox_config,
-                enable_multiprocessing=True,
-                num_workers=12,
-            )
+                # -------------------------------------------------------------
+                # RESULT LOGGING
+                # -------------------------------------------------------------
+                best_code = code_population.get_best_individual()
 
-            # Bayesian System (unified for all populations)
-            bayesian_system = BayesianSystem()
+                if best_code:
+                    logger.info(f"Best Code P(Correct): {best_code.probability:.4f}")
+                    logger.info(f"Best Code ID: {best_code.id}")
 
-            # Test Block Rebuilder
-            test_block_rebuilder = LCBTestBlockRebuilder()
+                logger.info(f"Final Code Pop Size: {code_population.size}")
 
-            # Dataset Test Block Builder
-            dataset_test_block_builder = LCBDatasetTestBlockBuilder()
-
-            logger.info("Infrastructure components created successfully")
-
-            # ====================================
-            # Step 4: Create Population Profiles
-            # ====================================
-            logger.info("Creating population profiles using factory functions...")
-
-            # Code Profile: Variable-size population with diversity-aware selection
-            code_profile = create_default_code_profile(
-                llm_client=llm_client,
-                initial_prior=0.2,
-                initial_population_size=10,
-                max_population_size=15,
-                offspring_rate=0.3,
-                elitism_rate=0.3,
-                mutation_rate=0.2,
-                crossover_rate=0.2,
-                edit_rate=0.6,
-                max_workers=10,  # Parallel breeding
-                diversity_enabled=True,  # use top-k selection based on elitism rate only
-            )
-
-            # Unittest Profile: Fixed-size population with discrimination-driven edit
-            unittest_profile = create_unittest_test_profile(
-                llm_client=llm_client,
-                initial_prior=0.2,
-                initial_population_size=20,
-                max_population_size=20,  # Fixed size
-                offspring_rate=0.8,
-                elitism_rate=0.4,
-                mutation_rate=0.3,
-                crossover_rate=0.2,
-                edit_rate=0.5,
-                alpha=0.2,
-                beta=0.2,
-                gamma=0.1,
-                learning_rate=0.05,
-                max_workers=10,
-                diversity_enabled=True,
-            )
-
-            # Differential Profile: Bootstrap from empty with discovery-based growth
-            differential_profile = create_differential_test_profile(
-                llm_client=llm_client,
-                sandbox_config=differential_sandbox_config,
-                initial_prior=0.2,
-                initial_population_size=0,  # Bootstrap mode
-                max_population_size=100,
-                offspring_rate=0.5,
-                elitism_rate=0.3,
-                discovery_rate=1.0,  # Discovery finds divergent code pairs
-                alpha=0.3,  # Lower reliability than unittest
-                beta=0.5,
-                gamma=0.5,
-                learning_rate=0.025,
-                max_workers=10,
-                diversity_enabled=True,
-                enable_multiprocessing=True,  # Enable parallel execution
-                num_finder_workers=4,  # Use 4 workers for high throughput
-            )
-
-            # Public Test Profile: Ground-truth anchoring tests
-            public_profile = create_public_test_profile(
-                alpha=0.001,  # Very high reliability
-                beta=0.1,
-                gamma=0.1,
-                learning_rate=0.05,
-            )
-
-            logger.info("All profiles created successfully")
-            logger.info(
-                f"  Code: {code_profile.population_config.initial_population_size} → "
-                f"{code_profile.population_config.max_population_size} individuals"
-            )
-            logger.info(
-                f"  Unittest: {unittest_profile.population_config.initial_population_size} tests (fixed)"
-            )
-            logger.info(
-                f"  Differential: {differential_profile.population_config.initial_population_size} → "
-                f"{differential_profile.population_config.max_population_size} tests (bootstrap)"
-            )
-
-            # ====================================
-            # Step 5: Build Orchestrator Configuration
-            # ====================================
-            logger.info("Building orchestrator configuration...")
-
-            # build schedule
-            schedule = (
-                ScheduleBuilder()
-                .alternating(
-                    total_duration=10,
-                    code_step=1,
-                    test_step=1,
-                    start_with="test",
-                )
-                .build()
-            )
-
-            config = (
-                OrchestratorBuilder()
-                .with_evolution_config(schedule)
-                .with_code_profile(code_profile)
-                .add_test_profile("unittest", unittest_profile)
-                .add_test_profile("differential", differential_profile)
-                .with_public_test_profile(public_profile)
-                .with_execution_system(execution_system)
-                .with_bayesian_system(bayesian_system)
-                .with_test_block_rebuilder(test_block_rebuilder)
-                .with_dataset_test_block_builder(dataset_test_block_builder)
-                .build()
-            )
-
-            logger.info("Configuration validated and built successfully")
-
-            # ====================================
-            # Step 6: Create Orchestrator
-            # ====================================
-            orchestrator = build_orchestrator_from_config(config)
-            logger.info("Orchestrator created successfully")
-
-            # ====================================
-            # Step 7: Run Coevolution
-            # ====================================
-            logger.info("Starting coevolution run...")
-            code_population, evolved_test_populations = orchestrator.run(problem)
-
-            # ====================================
-            # Step 8: Display Results
-            # ====================================
-            best_code = code_population.get_best_individual()
-
-            if best_code:
-                logger.info(f"Best code probability: {best_code.probability:.4f}")
-                logger.info(f"Best code ID: {best_code.id}")
-
-            logger.info(f"Final code population size: {code_population.size}")
-            logger.info(
-                f"Code population avg probability: {code_population.compute_average_probability():.4f}"
-            )
-
-            # Display results for each evolved test population
-            for test_type, test_population in evolved_test_populations.items():
-                best_test = test_population.get_best_individual()
-
-                if best_test:
-                    logger.info(
-                        f"Best {test_type} test probability: {best_test.probability:.4f}"
-                    )
-                    logger.info(f"Best {test_type} test ID: {best_test.id}")
-
-                logger.info(
-                    f"Final {test_type} population size: {test_population.size}"
-                )
-                logger.info(
-                    f"{test_type} population avg probability: "
-                    f"{test_population.compute_average_probability():.4f}"
-                )
-
-            # Log best solutions
-            logging_utils.log_subsection_header("INFO", "BEST CODE SOLUTION")
-            if best_code:
-                logger.info(f"ID: {best_code.id}")
-                logger.info(best_code.snippet)
-            else:
-                logger.info("No code solution found")
-
-            # Log best tests for each type
-            for test_type, test_population in evolved_test_populations.items():
-                best_test = test_population.get_best_individual()
-                logging_utils.log_subsection_header(
-                    "INFO", f"BEST {test_type.upper()} TEST CASE"
-                )
-                if best_test:
-                    logger.info(f"ID: {best_test.id}")
-                    logger.info(best_test.snippet)
+                # Log Code Solution
+                logging_utils.log_subsection_header("INFO", "BEST CODE SOLUTION")
+                if best_code:
+                    logger.info(best_code.snippet)
                 else:
-                    logger.info(f"No {test_type} test case found")
+                    logger.warning("No valid code solution found.")
 
-                logging_utils.log_subsection_header(
-                    "INFO", f"{test_type.upper()} TEST CLASS BLOCK"
+                # Log Test Stats
+                for t_type, t_pop in evolved_test_populations.items():
+                    best_t = t_pop.get_best_individual()
+                    logger.info(
+                        f"[{t_type}] Best Test P(Valid): {best_t.probability:.4f}"
+                        if best_t
+                        else f"[{t_type}] No valid tests"
+                    )
+                    logger.info(f"[{t_type}] Final Pop Size: {t_pop.size}")
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to process problem {problem.question_id}: {e}",
+                    exc_info=True,
                 )
-                logger.info(test_population.test_class_block)
+                # We catch the exception so one bad problem doesn't kill the whole batch
+                continue
 
-    logging_utils.log_section_header("INFO", "END OF EXPERIMENT")
+    logging_utils.log_section_header("INFO", "BATCH EXPERIMENT COMPLETE")
 
 
 if __name__ == "__main__":
