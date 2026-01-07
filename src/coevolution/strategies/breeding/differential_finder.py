@@ -51,9 +51,7 @@ def _worker_entry(
     try:
         # 1. Hydrate Sandbox
         # Ensure we set up logging in the child process if needed
-        from coevolution.utils.logging import setup_logging
-
-        setup_logging()
+        # No logging for now to reduce overhead
         # setup_logging(console_level="INFO", file_level="TRACE")
         sandbox = SafeCodeSandbox.from_config(config)
 
