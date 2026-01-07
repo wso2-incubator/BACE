@@ -192,6 +192,34 @@ class CodeDiversityEliteSelector(IEliteSelectionStrategy[CodeIndividual]):
                 elite_ids.add(code.id)
                 final_elites.append(code)
 
+        # ---------------------------------------------------------------------
+        # NEW STEP: THE BACKFILL (Fixes Shrinkage)
+        # ---------------------------------------------------------------------
+        # If we have selected fewer elites than allowed, and we have more
+        # people in the population, fill the empty seats with the
+        # next-best individuals (even if they are duplicates behaviorally).
+
+        # Current Count: 50. Max Allowed: 60.
+        if (
+            len(final_elites) < maximum_num_elites
+            and len(final_elites) < population.size
+        ):
+            # Sort full population by probability
+            all_sorted = self._sort_by_probability(list(population))
+
+            for ind in all_sorted:
+                if len(final_elites) >= maximum_num_elites:
+                    break
+
+                # If this individual isn't already selected, add them
+                if ind.id not in elite_ids:
+                    elite_ids.add(ind.id)
+                    final_elites.append(ind)
+
+            logger.debug(
+                f"Backfilled {len(final_elites) - len(elite_ids)} slots to maintain population size."
+            )
+
         # Truncate if exceeding maximum allowed elites
         if maximum_num_elites < len(final_elites):
             logger.debug(

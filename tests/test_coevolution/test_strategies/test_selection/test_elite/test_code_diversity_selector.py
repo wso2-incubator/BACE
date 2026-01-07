@@ -1,12 +1,16 @@
-from typing import List
+from typing import List, Set
 from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
 from coevolution.core.individual import CodeIndividual
-from coevolution.core.interfaces import CoevolutionContext, InteractionData
-from coevolution.core.population import BasePopulation, PopulationConfig
+from coevolution.core.interfaces import (
+    BasePopulation,
+    CoevolutionContext,
+    InteractionData,
+    PopulationConfig,
+)
 
 # Adjust imports to match your project structure
 from coevolution.strategies.selection.elite import CodeDiversityEliteSelector
@@ -17,12 +21,12 @@ from coevolution.strategies.selection.elite import CodeDiversityEliteSelector
 
 
 @pytest.fixture
-def selector():
+def selector() -> CodeDiversityEliteSelector:
     return CodeDiversityEliteSelector()
 
 
 @pytest.fixture
-def mock_config():
+def mock_config() -> Mock:
     """Default configuration for testing."""
     config = Mock(spec=PopulationConfig)
     config.max_population_size = 10
@@ -39,7 +43,7 @@ def create_mock_individual(ind_id: str, prob: float) -> Mock:
     ind.id = ind_id
     ind.probability = prob
     # Make string representation useful for debugging
-    ind.__repr__ = lambda x: f"Code({ind_id}, p={prob})"
+    ind.__repr__ = Mock(side_effect=lambda: f"Code({ind_id}, p={prob})")  # type: ignore[method-assign]
     return ind
 
 
@@ -52,9 +56,14 @@ def create_mock_population(individuals: List[Mock]) -> Mock:
     # Enable indexing: pop[i]
     pop.__getitem__ = lambda self, idx: individuals[idx]
 
+    # Enable iteration: list(pop)
+    pop.__iter__ = lambda self: iter(individuals)
+
     # Mock get_top_k_individuals logic
-    def get_top_k(k):
-        sorted_inds = sorted(individuals, key=lambda x: x.probability, reverse=True)
+    def get_top_k(k: int) -> list[Mock]:
+        sorted_inds: list[Mock] = sorted(
+            individuals, key=lambda x: x.probability, reverse=True
+        )
         return sorted_inds[:k]
 
     pop.get_top_k_individuals.side_effect = get_top_k
@@ -84,7 +93,9 @@ def create_mock_context(matrices: List[np.ndarray]) -> Mock:
 
 
 class TestCoreLogic:
-    def test_concatenate_matrices_success(self, selector):
+    def test_concatenate_matrices_success(
+        self, selector: CodeDiversityEliteSelector
+    ) -> None:
         """Test proper horizontal stacking of matrices."""
         # Matrix A: 3 codes x 2 tests
         mat_a = np.array([[1, 0], [1, 0], [0, 1]])
@@ -100,7 +111,9 @@ class TestCoreLogic:
         # Check first row merged correctly: [1, 0] + [0, 0, 1] -> [1, 0, 0, 0, 1]
         np.testing.assert_array_equal(result[0], np.array([1, 0, 0, 0, 1]))
 
-    def test_concatenate_matrices_dimension_mismatch(self, selector):
+    def test_concatenate_matrices_dimension_mismatch(
+        self, selector: CodeDiversityEliteSelector
+    ) -> None:
         """Test validation error when matrices have different row counts."""
         mat_a = np.zeros((3, 2))
         mat_b = np.zeros((4, 2))  # Mismatch!
@@ -110,7 +123,9 @@ class TestCoreLogic:
         with pytest.raises(ValueError, match="expected 3"):
             selector._concatenate_all_matrices(context, expected_rows=3)
 
-    def test_group_by_unique_rows_logic(self, selector):
+    def test_group_by_unique_rows_logic(
+        self, selector: CodeDiversityEliteSelector
+    ) -> None:
         """
         Verify the core diversity grouping logic.
 
@@ -150,78 +165,98 @@ class TestCoreLogic:
 
 
 class TestSelectionStrategy:
-    def test_basic_diversity_selection(self, selector, mock_config):
+    def test_basic_diversity_selection(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """
         Scenario: 4 individuals.
         Behaviors: 1 & 2 identical (Group A). 3 & 4 identical (Group B).
-        Probs: 1=0.9, 2=0.1, 3=0.8, 4=0.2.
-        Elitism: 0.0 (Only diversity matters).
         Expect: Indiv 1 (Best of A) and Indiv 3 (Best of B).
         """
         mock_config.elitism_rate = 0.0
 
+        # CRITICAL FIX: Constrain the bucket so Backfill doesn't keep everyone.
+        # We want to verify it prioritizes the 2 diverse ones.
+        mock_config.max_population_size = 2
+        mock_config.offspring_rate = 0.0
+
         ind1 = create_mock_individual("1", 0.9)
-        ind2 = create_mock_individual("2", 0.1)  # Same behavior as 1, lower prob
+        ind2 = create_mock_individual("2", 0.1)
         ind3 = create_mock_individual("3", 0.8)
-        ind4 = create_mock_individual("4", 0.2)  # Same behavior as 3, lower prob
+        ind4 = create_mock_individual("4", 0.2)
 
         population = create_mock_population([ind1, ind2, ind3, ind4])
 
-        # Matrix to enforce grouping: Rows 0,1 same; Rows 2,3 same
+        # Rows 0,1 same; Rows 2,3 same
         matrix = np.array([[1, 0], [1, 0], [0, 1], [0, 1]])
         context = create_mock_context([matrix])
 
         elites = selector.select_elites(population, mock_config, context)
 
+        # Now this assertion passes because capacity is exactly 2
         assert len(elites) == 2
         ids = {e.id for e in elites}
         assert ids == {"1", "3"}
 
-    def test_quality_guarantee(self, selector, mock_config):
+    def test_backfill_logic_fills_quota(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """
-        Scenario: 5 individuals, ALL Identical behavior.
-        Probs: [0.9, 0.8, 0.7, 0.6, 0.5]
-        Elitism: 0.4 (Top 2 guaranteed).
+        Scenario: Low Diversity, High Retention Target.
 
-        Diversity step selects: top 1 (0.9)
-        Quality step selects: top 2 (0.9, 0.8)
-        Union: {0.9, 0.8}
+        Pop Size: 10
+        Max Pop: 10
+        Offspring Rate: 0.4 -> Need 4 offspring -> Keep 6 Elites.
+
+        Behavior: ALL IDENTICAL (Zero Diversity).
+
+        Old Behavior (Shrinkage):
+           Would select 1 diverse + 0 quality (if elitism low) = 1 elite.
+           Final Pop = 1 elite + 4 offspring = 5. (Shrunk from 10 to 5).
+
+        New Behavior (Backfill):
+           Diverse Step -> 1 elite.
+           Backfill Step -> Fills remaining 5 slots with next best.
+           Returns 6 elites.
+           Final Pop = 6 elites + 4 offspring = 10. (Stable).
         """
-        mock_config.elitism_rate = 0.4
         mock_config.max_population_size = 10
-        mock_config.offspring_rate = 0.0  # Plenty of room
+        mock_config.offspring_rate = 0.4  # Target 6 elites
+        mock_config.elitism_rate = 0.0  # Don't rely on forced quality
 
-        inds = [
-            create_mock_individual(str(i), p)
-            for i, p in enumerate([0.9, 0.8, 0.7, 0.6, 0.5])
-        ]
+        # 10 Individuals, probs 0.0 to 0.9
+        inds = [create_mock_individual(str(i), i / 10) for i in range(10)]
         population = create_mock_population(inds)
 
-        # All identical rows
-        matrix = np.zeros((5, 2))
+        # All rows identical (Zero Diversity)
+        matrix = np.zeros((10, 2))
         context = create_mock_context([matrix])
 
         elites = selector.select_elites(population, mock_config, context)
 
-        # Should return 2 elites (Best diversity + 2nd Best quality)
-        assert len(elites) == 2
+        # MUST return exactly 6 elites to maintain population size
+        assert len(elites) == 6
+
+        # Should be the top 6 highest probability individuals
         ids = {e.id for e in elites}
-        assert ids == {"0", "1"}  # 0.9 and 0.8
+        expected_ids = {"9", "8", "7", "6", "5", "4"}  # Probs 0.9 down to 0.4
+        assert ids == expected_ids
 
-    def test_population_limit_truncation(self, selector, mock_config):
+    def test_population_limit_truncation(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """
-        Scenario:
-        Pop Size: 5. All Unique Behaviors.
-        Probs: [0.1, 0.2, 0.3, 0.4, 0.5] (Reverse order)
+        Scenario: High Diversity, Low Retention Target.
 
+        Pop Size: 5. All Unique Behaviors.
         Constraints:
-        Max Pop: 10
-        Offspring Rate: 0.8 -> Offspring = 8.
-        Available Slots = 10 - 8 = 2 slots.
+           Max Pop: 10
+           Offspring Rate: 0.8 -> Offspring = 8.
+           Available Slots = 10 - 8 = 2 slots.
 
         Diversity Step finds 5 unique elites.
         But we only have room for 2.
-        Expect: Return ONLY the top 2 highest probability (0.5, 0.4).
+        Expect: Return ONLY the top 2 highest probability.
         """
         mock_config.max_population_size = 10
         mock_config.offspring_rate = 0.8
@@ -241,11 +276,6 @@ class TestSelectionStrategy:
         ids = {e.id for e in elites}
         assert ids == {"4", "3"}
 
-        # Verify strict probability ordering
-        probs = [e.probability for e in elites]
-        assert max(probs) == 0.5
-        assert min(probs) == 0.4
-
 
 # -----------------------------------------------------------------------------
 # 3. Edge Cases & Fallbacks
@@ -253,7 +283,9 @@ class TestSelectionStrategy:
 
 
 class TestEdgeCases:
-    def test_empty_population(self, selector, mock_config):
+    def test_empty_population(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """Test handling of empty population."""
         population = create_mock_population([])
         context = create_mock_context([])
@@ -261,7 +293,9 @@ class TestEdgeCases:
         elites = selector.select_elites(population, mock_config, context)
         assert elites == []
 
-    def test_fallback_on_matrix_error(self, selector, mock_config):
+    def test_fallback_on_matrix_error(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """Test fallback to top-k when matrices are missing/invalid."""
         mock_config.elitism_rate = 0.5  # Should pick top 2 of 4
 
@@ -281,16 +315,19 @@ class TestEdgeCases:
         ids = {e.id for e in elites}
         assert ids == {"1", "3"}  # 0.9 and 0.8
 
-    def test_zero_elitism_rate(self, selector, mock_config):
+    def test_zero_elitism_rate(
+        self, selector: CodeDiversityEliteSelector, mock_config: Mock
+    ) -> None:
         """
         Test elitism_rate = 0.
         Should strictly rely on diversity (1 per unique group).
         """
         mock_config.elitism_rate = 0.0
 
-        # 2 Groups.
-        # Grp 1: Ind A (0.9), Ind B (0.1) -> Pick A
-        # Grp 2: Ind C (0.2) -> Pick C
+        # CRITICAL FIX: Constrain bucket to force selection
+        mock_config.max_population_size = 2
+        mock_config.offspring_rate = 0.0
+
         indA = create_mock_individual("A", 0.9)
         indB = create_mock_individual("B", 0.1)
         indC = create_mock_individual("C", 0.2)
