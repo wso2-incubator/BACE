@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from .analyzer import PytestXmlAnalyzer
-from .types import BasicExecutionResult, TestExecutionResult, TestResult
+from .types import BasicExecutionResult, SandboxConfig, TestExecutionResult, TestResult
 
 
 class SafeCodeSandbox:
@@ -512,3 +512,23 @@ class SafeCodeSandbox:
                 os.unlink(xml_file_path)
             except OSError:
                 pass
+
+    @classmethod
+    def from_config(cls, config: SandboxConfig) -> "SafeCodeSandbox":
+        """
+        Create a SafeCodeSandbox instance from a SandboxConfig.
+
+        Args:
+            config: SandboxConfig object with configuration parameters
+
+        Returns:
+            SafeCodeSandbox instance
+        """
+        return cls(
+            timeout=config.timeout,
+            max_memory_mb=config.max_memory_mb,
+            max_output_size=config.max_output_size,
+            allowed_imports=config.allowed_imports,
+            python_executable=config.python_executable,
+            test_method_timeout=config.test_method_timeout,
+        )
