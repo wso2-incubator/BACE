@@ -106,7 +106,7 @@ class SafeCodeSandbox:
         # ]
 
         # TODO: Re-evaluate blocked patterns, for now we disable blocking to allow more flexibility
-        self.blocked_patterns = []
+        self.blocked_patterns: list[str] = []
 
     def _check_code_safety(self, code: str) -> bool:
         """
