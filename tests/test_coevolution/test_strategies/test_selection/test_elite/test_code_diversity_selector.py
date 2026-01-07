@@ -1,4 +1,3 @@
-from typing import List, Set
 from unittest.mock import Mock
 
 import numpy as np
@@ -47,7 +46,7 @@ def create_mock_individual(ind_id: str, prob: float) -> Mock:
     return ind
 
 
-def create_mock_population(individuals: List[Mock]) -> Mock:
+def create_mock_population(individuals: list[Mock]) -> Mock:
     """Helper to create a mock BasePopulation."""
     pop = Mock(spec=BasePopulation)
     pop.size = len(individuals)
@@ -70,10 +69,10 @@ def create_mock_population(individuals: List[Mock]) -> Mock:
     return pop
 
 
-def create_mock_context(matrices: List[np.ndarray]) -> Mock:
+def create_mock_context(matrices: list[np.ndarray]) -> Mock:
     """
     Helper to create a context with multiple interaction matrices.
-    matrices: List of numpy arrays to be placed in interactions.
+    matrices: list of numpy arrays to be placed in interactions.
     """
     context = Mock(spec=CoevolutionContext)
     interactions = {}
