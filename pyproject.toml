@@ -178,6 +178,10 @@ ignore_errors = true
 module = "fire"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "networkx.*"
+ignore_missing_imports = true
+
 [tool.uv.workspace]
 members = [
     "external/human-eval",
