@@ -3,10 +3,10 @@ from unittest.mock import MagicMock, PropertyMock
 import numpy as np
 import pytest
 
-from coevolution.strategies.breeding.differential_breeding import FunctionallyEquivGroup
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import CoevolutionContext, InteractionData
 from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.strategies.breeding.differential_breeding import FunctionallyEquivGroup
 from coevolution.strategies.selection.functionally_eq_selection import (
     FunctionallyEqSelector,
 )
@@ -225,6 +225,58 @@ def test_select_complex_groups_multiple_test_types(
     assert g_c is not None
     assert len(g_c.code_individuals) == 1
     assert tests_pub[1] in g_c.passing_test_individuals["public"]  # Passed Pub_T1
+
+
+def test_three_types(selector: FunctionallyEqSelector, mock_context: MagicMock) -> None:
+    """
+    Scenario with 3 test types with each 3 tests.
+    Validates grouping across multiple dimensions.
+
+    Code | Public (T0,T1,T2) | Private (T3,T4,T5) | Differential (T6,T7,T8) | Signature
+    --------------------------------------------------------------------------------------
+    C0   | 1,0,1             | 1,1,0             | 0,1,1                 | [1,0,1,1,1,0,0,1,1]
+    C1   | 1,0,1             | 1,1,0             | 0,1,1                 | [1,0,1,1,1,0,0,1,1] -> Group A
+    C2   | 1,0,1             | 0,1,0             | 0,1,1                 | [1,0,1,0,1,0,0,1,1] -> Group B
+    C3   | 0,1,1             | 1,1,0             | 0,1,1                 | [0,1,1,1,1,0,0,1,1] -> Group C
+    C4   | 1,0,1             | 1,1,0             | 1,0,1                 | [1,0,1,1,1,0,1,0,1] -> Group D
+    """
+
+    # Setup code population (5 codes)
+    codes = setup_code_pop(mock_context, size=5)
+
+    # Public Tests Matrix (3 tests)
+    mat_public = [
+        [1, 0, 1],  # C0
+        [1, 0, 1],  # C1
+        [1, 0, 1],  # C2
+        [0, 1, 1],  # C3
+        [1, 0, 1],  # C4
+    ]
+    setup_interaction(mock_context, "public", mat_public)
+
+    # Private Tests Matrix (3 tests)
+    mat_private = [
+        [1, 1, 0],  # C0
+        [1, 1, 0],  # C1
+        [0, 1, 0],  # C2
+        [1, 1, 0],  # C3
+        [1, 1, 0],  # C4
+    ]
+    setup_interaction(mock_context, "private", mat_private)
+
+    # Differential Tests Matrix (3 tests)
+    mat_differential = [
+        [0, 1, 1],  # C0
+        [0, 1, 1],  # C1
+        [0, 1, 1],  # C2
+        [0, 1, 1],  # C3
+        [1, 0, 1],  # C4
+    ]
+    setup_interaction(mock_context, "differential", mat_differential)
+
+    groups = selector.select_functionally_equivalent_codes(mock_context)
+
+    assert len(groups) == 4
 
 
 def test_select_mismatch_matrix_shape(
