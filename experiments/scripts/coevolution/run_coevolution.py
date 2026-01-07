@@ -99,8 +99,8 @@ def main(
     )
     logger.info(f"Using model: {llm_client.model}")
 
-    sandbox_for_differential = SafeCodeSandbox(
-        timeout=20, max_memory_mb=256, max_output_size=10_000_000
+    differential_sandbox_config = SandboxConfig(
+        timeout=20, max_memory_mb=100, max_output_size=10_000_000
     )
 
     exec_sandbox_config = SandboxConfig(
@@ -193,7 +193,7 @@ def main(
             # Differential Profile: Bootstrap from empty with discovery-based growth
             differential_profile = create_differential_test_profile(
                 llm_client=llm_client,
-                sandbox=sandbox_for_differential,
+                sandbox_config=differential_sandbox_config,
                 initial_prior=0.2,
                 initial_population_size=0,  # Bootstrap mode
                 max_population_size=100,
@@ -206,6 +206,8 @@ def main(
                 learning_rate=0.025,
                 max_workers=10,
                 diversity_enabled=True,
+                enable_multiprocessing=True,  # Enable parallel execution
+                num_finder_workers=4,  # Use 4 workers for high throughput
             )
 
             # Public Test Profile: Ground-truth anchoring tests
