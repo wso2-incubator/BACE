@@ -40,7 +40,7 @@ from coevolution.factories import (
 from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from infrastructure.llm_client import create_llm_client
-from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
+from infrastructure.sandbox import SandboxConfig
 
 
 def load_problems() -> list[LCBCodeGenerationProblem]:
