@@ -5,7 +5,7 @@
 # ==========================================
 SCRIPT_PATH="experiments/scripts/coevolution/run_coevolution.py"
 START_GLOBAL=0
-END_GLOBAL=40
+END_GLOBAL=20
 
 # ------------------------------------------
 # 🎛️ SCALING KNOB
