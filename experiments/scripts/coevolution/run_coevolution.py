@@ -177,8 +177,9 @@ def main(
         test_method_timeout=30,
     )
 
-    cpu_count = os.cpu_count() or 4
-    logger.info(f"Detected CPU Count: {cpu_count}")
+    # Get worker count from environment variable, fallback to 4
+    cpu_count = int(os.environ.get("COEVOLUTION_WORKERS", "4"))
+    logger.info(f"Using worker count: {cpu_count} (from COEVOLUTION_WORKERS env var or default)")
 
     # 3. Execution System (Heavy Resource: Process Pool)
     # Created once so the process pool persists across problems.
