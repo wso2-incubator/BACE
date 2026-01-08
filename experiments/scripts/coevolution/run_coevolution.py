@@ -38,38 +38,110 @@ from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
 
 
-def load_problems() -> list[LCBCodeGenerationProblem]:
-    """Load a problem from LiveCodeBench dataset."""
-    logger.info("Loading problem from LiveCodeBench dataset...")
+def load_problems(
+    release_version: str = "release_v6",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    difficulty: Optional[Difficulty] = None,
+) -> list[LCBCodeGenerationProblem]:
+    """Load problems from LiveCodeBench dataset.
+
+    Args:
+        release_version: Dataset version to load
+        start_date: Filter problems from this date onwards (YYYY-MM-DD)
+        end_date: Filter problems up to this date (YYYY-MM-DD)
+        difficulty: Filter by difficulty level
+
+    Returns:
+        List of problems matching the criteria
+    """
+    logger.info("Loading problems from LiveCodeBench dataset...")
 
     problems = load_code_generation_dataset(
-        release_version="release_v6",
-        start_date="2025-03-01",
-        end_date="2025-05-10",
-        difficulty=Difficulty.HARD,
+        release_version=release_version,
+        start_date=start_date,
+        end_date=end_date,
+        difficulty=difficulty,
     )
 
     if not problems:
         raise ValueError("No problems found matching criteria")
 
+    logger.info(f"Loaded {len(problems)} problems from dataset.")
     return problems
 
 
 def main(
+    # --- Experiment Identity ---
     run_id: Optional[str] = typer.Option(
         None,
         "--run-id",
         "-r",
         help="Unique identifier for this run. If not provided, one will be auto-generated.",
     ),
+    # --- Dataset Configuration ---
+    dataset_version: str = typer.Option(
+        "release_v6",
+        "--dataset-version",
+        "-v",
+        help="LiveCodeBench dataset version to use.",
+    ),
+    start_date: str = typer.Option(
+        "2025-03-01",
+        "--start-date",
+        help="Filter problems from this date onwards (YYYY-MM-DD).",
+    ),
+    end_date: str = typer.Option(
+        "2025-05-10",
+        "--end-date",
+        help="Filter problems up to this date (YYYY-MM-DD).",
+    ),
+    difficulty: Difficulty = typer.Option(
+        Difficulty.HARD,
+        "--difficulty",
+        "-d",
+        help="Filter problems by difficulty level.",
+    ),
+    # --- Selection Filters ---
     problem_ids: Optional[list[str]] = typer.Option(
         None,
         "--problem-ids",
         "-p",
-        help="List of problem IDs to run. If not provided, runs on a default set.",
+        help="Specific problem IDs to run (overrides index slicing).",
+    ),
+    # --- Sharding Controls ---
+    start_index: int = typer.Option(
+        0,
+        "--start-index",
+        "-s",
+        help="Index of the first problem to process (for sharding).",
+    ),
+    end_index: Optional[int] = typer.Option(
+        None,
+        "--end-index",
+        "-e",
+        help="Index of the last problem to process (exclusive). If omitted, processes until the end.",
     ),
 ) -> None:
-    """Run a coevolution experiment on a LiveCodeBench problem."""
+    """Run a coevolution experiment on LiveCodeBench problems.
+
+    Supports horizontal scaling via sharding:
+    - Use --start-index and --end-index to process a slice of the dataset
+    - Use --problem-ids to run specific problems (overrides slicing)
+
+    Examples:
+        # Process first 100 problems
+        python run_coevolution.py --start-index 0 --end-index 100
+
+        # Process problems 100-200 (for parallel execution)
+        python run_coevolution.py --start-index 100 --end-index 200
+
+        # Process from index 500 to end
+        python run_coevolution.py --start-index 500
+
+        # Run specific problems
+        python run_coevolution.py --problem-ids Q123 Q456 Q789
+    """
     logging_utils.setup_logging(console_level="DEBUG", file_level="TRACE")
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
@@ -211,26 +283,76 @@ def main(
     logger.info("Orchestrator Engine Online.")
 
     # =========================================================================
-    # PHASE 3: PROBLEM EXECUTION LOOP
+    # PHASE 3: PROBLEM LOADING & SELECTION
     # =========================================================================
 
-    all_problems = load_problems()
+    # 1. Load the raw dataset
+    all_problems = load_problems(
+        release_version=dataset_version,
+        start_date=start_date,
+        end_date=end_date,
+        difficulty=difficulty,
+    )
 
-    # Filter problems
+    if not all_problems:
+        logger.error("Dataset empty. Aborting run.")
+        return
+
+    # 2. Select specific problems (Priority 1)
     if problem_ids:
+        logger.info(f"Running specific list of {len(problem_ids)} problems.")
         selected_problems = [p for p in all_problems if p.question_id in problem_ids]
+
+        if not selected_problems:
+            logger.warning("None of the requested problem IDs found in dataset.")
+            return
+
+    # 3. Slice for Sharding (Priority 2)
     else:
-        selected_problems = all_problems[:10]
+        # Validate indices
+        total_available = len(all_problems)
+
+        # Handle 'None' end_index (process till end)
+        actual_end = end_index if end_index is not None else total_available
+
+        # Clamp values to prevent index errors
+        actual_start = max(0, start_index)
+        actual_end = min(total_available, actual_end)
+
+        if actual_start >= actual_end:
+            logger.warning(
+                f"Start index ({actual_start}) >= End index ({actual_end}). "
+                "No problems to process in this shard."
+            )
+            return
+
+        # Python List Slicing
+        selected_problems = all_problems[actual_start:actual_end]
+
+        logger.info(
+            f"Shard Configuration:\n"
+            f"  - Total Problems Available: {total_available}\n"
+            f"  - Shard Range: [{actual_start}:{actual_end}]\n"
+            f"  - Shard Size: {len(selected_problems)}"
+        )
+
+    # =========================================================================
+    # PHASE 4: EXECUTION LOOP
+    # =========================================================================
 
     logger.info(f"Processing {len(selected_problems)} problems...")
 
     for i, problem in enumerate(selected_problems):
+        # Calculate global index for logging clarity
+        global_idx = (start_index if not problem_ids else 0) + i
+
         # We use Context Managers to tag logs with the current problem
         # This keeps the logs clean even though we reuse the engine
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
             logging_utils.log_section_header(
                 "INFO",
-                f"PROBLEM {i + 1}/{len(selected_problems)}: {problem.question_id}",
+                f"PROBLEM {i + 1}/{len(selected_problems)} "
+                f"(Global Index: {global_idx}): {problem.question_id}",
             )
             logging_utils.log_problem(problem)
 
