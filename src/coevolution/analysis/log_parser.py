@@ -83,22 +83,27 @@ def parse_coevolution_log(
     # defaultdict handles any new test type automatically
     matrix_store: dict[str, list[pd.DataFrame]] = defaultdict(list)
 
+    # Auto-select problem_id if not provided
     if target_problem_id is None:
         problem_ids = get_problem_ids(log_dir, log_filename_pattern, target_run_id)
-        logger.info(
-            "No target_problem_id provided. "
-            f"Following problems are available: {', '.join(problem_ids)}"
-            "Using the first one for parsing."
-        )
+
         if not problem_ids:
-            logger.warning("No problems found for the specified run_id.")
+            logger.error(
+                f"No problem_id found for run_id='{target_run_id}'. "
+                "Cannot proceed with parsing."
+            )
             return {
                 "gen_stats": pd.DataFrame(),
                 "individuals": pd.DataFrame(),
                 "matrices": {},
             }
+
+        # Auto-select first problem alphabetically
         target_problem_id = sorted(problem_ids)[0]
-        logger.info(f"Selected problem_id: {target_problem_id}")
+        logger.warning(
+            f"No target_problem_id specified. Auto-selected '{target_problem_id}' "
+            f"from {len(problem_ids)} available: {', '.join(sorted(problem_ids))}"
+        )
 
     # 2. Stream Process
     for line_str in _log_line_generator(log_dir, log_filename_pattern):
