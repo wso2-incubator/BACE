@@ -739,8 +739,20 @@ def build_test_method_from_io(
         # We use repr() to ensure strings get quotes, lists are formatted correctly, etc.
         input_args = ", ".join(f"{k}={repr(v)}" for k, v in input_dict.items())
 
-        # Use repr() on output so a string '9' becomes the string literal '9' in code
-        expected_val = repr(expected_output)
+        # Parse string outputs from sandbox back to Python objects for proper type checking
+        # This handles outputs like "5" -> 5, "[1,2,3]" -> [1,2,3], "True" -> True
+        if isinstance(expected_output, str):
+            try:
+                expected_output_obj = ast.literal_eval(expected_output)
+            except (ValueError, SyntaxError):
+                # If parsing fails, it's likely an actual string value or complex format
+                # Keep the original string
+                expected_output_obj = expected_output
+        else:
+            expected_output_obj = expected_output
+
+        # Use repr() so the value becomes the correct Python literal in generated code
+        expected_val = repr(expected_output_obj)
 
         # Append assertion block
         assertions.append(
