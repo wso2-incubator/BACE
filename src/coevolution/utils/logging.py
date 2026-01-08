@@ -251,7 +251,7 @@ def log_individual_complete(
     record["status"] = status
 
     # Log with structured format for easy parsing
-    logger.trace(
+    logger.debug(
         f"{population_type}_INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}"
     )
     logger.debug(f"Logged complete record for {individual.id} with status {status}")
@@ -606,8 +606,8 @@ def log_observation_matrix(
 
     # 3. Log the entire pre-formatted string.
     #    Add a newline to ensure it starts on its own line.
-    logger.debug(f"\n{df.to_string()}")
-    logger.trace(f"{test_type.upper()} serialized | {df.to_json()}")
+    logger.info(f"\n{df.to_string()}")
+    logger.debug(f"{test_type.upper()} serialized | {df.to_json()}")
 
     # --- End New Method ---
 
