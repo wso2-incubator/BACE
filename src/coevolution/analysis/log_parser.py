@@ -71,7 +71,7 @@ def parse_coevolution_log(
     log_dir: str,
     log_filename_pattern: str,
     target_run_id: str,
-    target_problem_id: str,
+    target_problem_id: str | None = None,
 ) -> ParsedLog:
     """
     Flexible parser that dynamically discovers matrix types.
@@ -82,6 +82,23 @@ def parse_coevolution_log(
     ind_data = []
     # defaultdict handles any new test type automatically
     matrix_store: dict[str, list[pd.DataFrame]] = defaultdict(list)
+
+    if target_problem_id is None:
+        problem_ids = get_problem_ids(log_dir, log_filename_pattern, target_run_id)
+        logger.info(
+            "No target_problem_id provided. "
+            f"Following problems are available: {', '.join(problem_ids)}"
+            "Using the first one for parsing."
+        )
+        if not problem_ids:
+            logger.warning("No problems found for the specified run_id.")
+            return {
+                "gen_stats": pd.DataFrame(),
+                "individuals": pd.DataFrame(),
+                "matrices": {},
+            }
+        target_problem_id = sorted(problem_ids)[0]
+        logger.info(f"Selected problem_id: {target_problem_id}")
 
     # 2. Stream Process
     for line_str in _log_line_generator(log_dir, log_filename_pattern):
