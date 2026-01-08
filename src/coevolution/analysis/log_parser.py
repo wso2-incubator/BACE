@@ -204,3 +204,28 @@ def get_problem_ids(log_dir: str, log_filename_pattern: str, run_id: str) -> set
             problem_ids.add(pid)
 
     return problem_ids
+
+
+def get_run_ids(log_dir: str, log_filename_pattern: str) -> set[str]:
+    """
+    Scans log files to extract all unique run IDs present.
+    """
+    run_ids = set()
+
+    for line_str in _log_line_generator(log_dir, log_filename_pattern):
+        if not line_str.strip():
+            continue
+
+        try:
+            log_entry = json.loads(line_str)
+        except json.JSONDecodeError:
+            continue  # Skip partial lines
+
+        record = log_entry.get("record", {})
+        extra = record.get("extra", {})
+
+        rid = extra.get("run_id")
+        if rid and isinstance(rid, str):
+            run_ids.add(rid)
+
+    return run_ids
