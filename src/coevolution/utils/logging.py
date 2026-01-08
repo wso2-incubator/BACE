@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 def setup_logging(
     console_level: str = "DEBUG",
-    file_level: str = "TRACE",
+    file_level: str = "DEBUG",
     log_file_base_name: str = "coevolution_run",
 ) -> None:
     """
