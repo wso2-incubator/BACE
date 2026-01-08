@@ -114,6 +114,7 @@ def load_code_generation_dataset(
 ) -> list[LCBCodeGenerationProblem]:
     dataset = load_dataset(
         "livecodebench/code_generation_lite",
+        trust_remote_code=True,
         version_tag=release_version,
     )
 
