@@ -7,7 +7,7 @@ name = "APR-research-wso2"
 version = "0.1.0"
 description = "Automated Program Repair using LLMs"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 
 # List all external dependencies here
 dependencies = [
