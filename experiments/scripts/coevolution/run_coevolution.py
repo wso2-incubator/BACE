@@ -179,7 +179,9 @@ def main(
 
     # Get worker count from environment variable, fallback to 4
     cpu_count = int(os.environ.get("COEVOLUTION_WORKERS", "4"))
-    logger.info(f"Using worker count: {cpu_count} (from COEVOLUTION_WORKERS env var or default)")
+    logger.info(
+        f"Using worker count: {cpu_count} (from COEVOLUTION_WORKERS env var or default)"
+    )
 
     # 3. Execution System (Heavy Resource: Process Pool)
     # Created once so the process pool persists across problems.
@@ -205,13 +207,14 @@ def main(
     code_profile = create_default_code_profile(
         llm_client=llm_client,
         initial_prior=0.2,
-        initial_population_size=10,
-        max_population_size=15,
+        initial_population_size=1,
+        max_population_size=1,
         offspring_rate=0.3,
         elitism_rate=0.3,
         mutation_rate=0.2,
         crossover_rate=0.2,
         edit_rate=0.6,
+        init_pop_batch_size=1,
         max_workers=10,
         diversity_enabled=True,
     )
@@ -219,8 +222,8 @@ def main(
     unittest_profile = create_unittest_test_profile(
         llm_client=llm_client,
         initial_prior=0.2,
-        initial_population_size=20,
-        max_population_size=20,
+        initial_population_size=0,
+        max_population_size=0,
         offspring_rate=0.8,
         elitism_rate=0.4,
         mutation_rate=0.3,
@@ -239,7 +242,7 @@ def main(
         sandbox_config=differential_sandbox_config,
         initial_prior=0.2,
         initial_population_size=0,  # Bootstrap
-        max_population_size=100,
+        max_population_size=0,
         offspring_rate=0.5,
         elitism_rate=0.3,
         discovery_rate=1.0,
@@ -259,7 +262,8 @@ def main(
     # 2. Schedule
     schedule = (
         ScheduleBuilder()
-        .alternating(total_duration=10, code_step=1, test_step=1, start_with="test")
+        .warmup_code(duration=1)
+        # .alternating(total_duration=10, code_step=1, test_step=1, start_with="test")
         .build()
     )
 

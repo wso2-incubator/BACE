@@ -79,6 +79,7 @@ def create_default_code_profile(
     mutation_rate: float = 0.2,
     crossover_rate: float = 0.2,
     edit_rate: float = 0.6,
+    init_pop_batch_size: int = 2,
     max_workers: int = 10,
     diversity_enabled: bool = True,
     prob_assigner_strategy: str = "min",
@@ -104,6 +105,7 @@ def create_default_code_profile(
         mutation_rate: Probability of mutation operation (default: 0.2)
         crossover_rate: Probability of crossover operation (default: 0.2)
         edit_rate: Probability of edit operation (default: 0.6)
+        init_pop_batch_size: Number of individuals to generate per batch during initialization (default: 2)
         max_workers: Parallel workers for breeding (default: 1)
         diversity_enabled: Use diversity selector vs simple top-k (default: True)
 
@@ -157,6 +159,7 @@ def create_default_code_profile(
         probability_assigner=prob_assigner,
         parent_selector=parent_selector,
         failing_test_selector=FailingTestSelector,
+        init_pop_batch_size=init_pop_batch_size,
         max_workers=max_workers,
     )
 
