@@ -117,6 +117,8 @@ def main(
         # 4. Collect summary data
         # Check if best individual (highest probability) in final population passes all tests
         solved = False
+        champion_infos = []
+        
         if not last_matrix.empty:
             num_tests = last_matrix.shape[1]
             pass_counts = last_matrix.sum(axis=1)
@@ -136,7 +138,6 @@ def main(
                     champions = final_codes[final_codes["probability"] == max_prob]
 
                     # Collect champion IDs with their test pass counts
-                    champion_infos = []
                     any_champion_solved = False
 
                     for idx, champ_row in champions.iterrows():
@@ -164,7 +165,7 @@ def main(
         total_final = len(last_matrix)
 
         # Format champion code ID with test pass info
-        champion_info = ", ".join(champion_infos) if not final_codes.empty else "N/A"
+        champion_info = ", ".join(champion_infos) if champion_infos else "N/A"
 
         summary_data.append(
             {
