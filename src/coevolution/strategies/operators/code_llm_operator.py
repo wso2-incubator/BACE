@@ -10,9 +10,6 @@ from typing import List
 
 from loguru import logger
 
-from infrastructure.code_preprocessing import CodeParsingError, analysis, extraction
-from infrastructure.code_preprocessing.exceptions import CodeTransformationError
-
 from coevolution.core.interfaces import (
     BaseOperatorInput,
     InitialInput,
@@ -24,8 +21,12 @@ from coevolution.utils.prompts import (
     CROSSOVER_CODE,
     EDIT_CODE_FIX_FAIL_ONLY,
     INITIAL_CODE_POPULATION,
+    INITIAL_CODE_SINGLE_SOLUTION,
     MUTATE_CODE,
 )
+from infrastructure.code_preprocessing import CodeParsingError, analysis, extraction
+from infrastructure.code_preprocessing.exceptions import CodeTransformationError
+
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
 
@@ -60,7 +61,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
     def _contains_starter_code(self, code: str, starter_code: str) -> bool:
         return analysis.contains_starter_code(code, starter_code)
 
-    @llm_retry((ValueError, CodeParsingError))
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def generate_initial_snippets(
         self, input_dto: InitialInput
     ) -> tuple[OperatorOutput, str | None]:
@@ -68,14 +69,25 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         problem_description = input_dto.question_content
         starter_code = input_dto.starter_code
 
-        prompt: str = INITIAL_CODE_POPULATION.format(
-            population_size=population_size,
-            question_content=problem_description,
-            starter_code=starter_code,
+        prompt = (
+            INITIAL_CODE_SINGLE_SOLUTION.format(
+                question_content=problem_description,
+                starter_code=starter_code,
+            )
+            if population_size == 1
+            else INITIAL_CODE_POPULATION.format(
+                population_size=population_size,
+                question_content=problem_description,
+                starter_code=starter_code,
+            )
         )
 
         response: str = self._generate(prompt)
-        code_blocks: List[str] = self._extract_all_code_blocks(response)
+        code_blocks: list[str] = (
+            [extraction.extract_code_block_from_response(response)]
+            if population_size == 1
+            else self._extract_all_code_blocks(response)
+        )
 
         for code in code_blocks:
             if not self._contains_starter_code(code, starter_code):

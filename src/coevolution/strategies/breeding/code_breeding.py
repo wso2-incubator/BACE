@@ -56,6 +56,7 @@ from coevolution.core.interfaces import (
     PopulationConfig,
     Problem,
 )
+
 from ..operators.code_llm_operator import (
     CodeCrossoverInput,
     CodeEditInput,
@@ -101,8 +102,21 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         probability_assigner: IProbabilityAssigner,
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         failing_test_selector: IFailingTestSelector,
+        init_pop_batch_size: int = 2,
         max_workers: int = 1,
     ) -> None:
+        """
+        Initialize the CodeBreedingStrategy.
+        Args:
+            operator: The CodeLLMOperator to use for breeding operations.
+            op_rates_config: Configuration for operation rates.
+            pop_config: Population configuration parameters.
+            probability_assigner: Strategy for assigning probabilities to offspring.
+            parent_selector: Strategy for selecting parent individuals.
+            failing_test_selector: Strategy for selecting failing tests for edit operations.
+            init_pop_batch_size: Number of individuals to generate per batch during initialization.
+            max_workers: Maximum number of parallel workers for initialization.
+        """
         self.operator = operator
         self.op_rates_config = op_rates_config
         self.pop_config = pop_config
@@ -110,6 +124,15 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         self.parent_selector = parent_selector
         self.failing_test_selector = failing_test_selector
         self.max_workers = max_workers
+        self.init_pop_batch_size = init_pop_batch_size
+
+        if pop_config.initial_population_size < init_pop_batch_size:
+            self.init_pop_batch_size = pop_config.initial_population_size
+            logger.info(
+                f"Adjusted init_pop_batch_size to {self.init_pop_batch_size} "
+                f"to not exceed initial_population_size."
+            )
+
         # validate operations in rates config are supported by the operator
         for op in self.op_rates_config.operation_rates.keys():
             if op not in self.operator.supported_operations():
@@ -132,17 +155,18 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         """
         individuals: list[CodeIndividual] = []
         initial_pop_size = self.pop_config.initial_population_size
-        pop_batch_size: int = 2
 
         # Calculate number of batches needed
         # equivalent to math.ceil(initial_pop_size / pop_batch_size)
-        num_batches = (initial_pop_size + pop_batch_size - 1) // pop_batch_size
+        num_batches = (
+            initial_pop_size + self.init_pop_batch_size - 1
+        ) // self.init_pop_batch_size
 
         input_dto = InitialInput(
             operation=OPERATION_INITIAL,
             question_content=problem.question_content,
             starter_code=problem.starter_code,
-            population_size=pop_batch_size,
+            population_size=self.init_pop_batch_size,
         )
 
         logger.info(
