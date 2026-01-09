@@ -131,13 +131,26 @@ def main(
                 ]
 
                 if not final_codes.empty:
-                    # Find code with highest probability
-                    best_code_row = final_codes.loc[final_codes["probability"].idxmax()]
-                    best_code_id = best_code_row["id"]
+                    # Find all codes with highest probability
+                    max_prob = final_codes["probability"].max()
+                    champions = final_codes[final_codes["probability"] == max_prob]
 
-                    # Check if this code passes all tests
-                    if best_code_id in pass_counts.index:
-                        solved = bool(pass_counts.loc[best_code_id] == num_tests)
+                    # Collect champion IDs with their test pass counts
+                    champion_infos = []
+                    any_champion_solved = False
+
+                    for idx, champ_row in champions.iterrows():
+                        champ_id = champ_row["id"]
+                        champ_pass_count = 0
+                        if champ_id in pass_counts.index:
+                            champ_pass_count = int(pass_counts.loc[champ_id])
+                            if champ_pass_count == num_tests:
+                                any_champion_solved = True
+                        champion_infos.append(
+                            f"{champ_id} ({champ_pass_count}/{num_tests})"
+                        )
+
+                    solved = any_champion_solved
 
         # Count initial and final codes passing all tests
         num_initial_passing = len(
@@ -150,11 +163,14 @@ def main(
         )
         total_final = len(last_matrix)
 
+        # Format champion code ID with test pass info
+        champion_info = ", ".join(champion_infos) if not final_codes.empty else "N/A"
+
         summary_data.append(
             {
                 "problem_id": pid,
                 "solved": solved,
-                "champion_code_id": best_code_id if not final_codes.empty else "N/A",
+                "champion_code_id": champion_info,
                 "initial_passing": f"{num_initial_passing}/{total_initial}",
                 "final_passing": f"{num_final_passing}/{total_final}",
             }
