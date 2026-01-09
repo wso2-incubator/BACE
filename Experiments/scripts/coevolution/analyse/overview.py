@@ -77,6 +77,9 @@ def main(
     print(f"ANALYSIS REPORT: {run_id}")
     print("=" * 80)
 
+    # Track summary data for final table
+    summary_data = []
+
     # 2. Iterate through each problem
     for pid in sorted(list(problem_ids)):
         print(f"\nPROBLEM: {pid}")
@@ -101,13 +104,75 @@ def main(
         first_matrix = matrices[0]
         last_matrix = matrices[-1]
 
+        print(first_matrix)
         analyze_matrix(first_matrix, "START (First Matrix)")
 
         # Only print 'End' if it's different from 'Start'
         if len(matrices) > 1:
+            print(last_matrix)
             analyze_matrix(last_matrix, "END (Last Matrix)")
         else:
             print("Run had not progressed; only one matrix present.")
+
+        # 4. Collect summary data
+        # Check if best individual (highest probability) in final population passes all tests
+        solved = False
+        if not last_matrix.empty:
+            num_tests = last_matrix.shape[1]
+            pass_counts = last_matrix.sum(axis=1)
+
+            # Get individuals dataframe and find the one with highest probability in final generation
+            individuals_df = parsed_data.get("individuals", pd.DataFrame())
+            if not individuals_df.empty:
+                # Filter for code individuals in the last generation
+                final_codes = individuals_df[
+                    (individuals_df["status"].str.lower() == "survived")
+                    & (individuals_df["type"] == "code")
+                ]
+
+                if not final_codes.empty:
+                    # Find code with highest probability
+                    best_code_row = final_codes.loc[final_codes["probability"].idxmax()]
+                    best_code_id = best_code_row["id"]
+
+                    # Check if this code passes all tests
+                    if best_code_id in pass_counts.index:
+                        solved = bool(pass_counts.loc[best_code_id] == num_tests)
+
+        # Count initial and final codes passing all tests
+        num_initial_passing = len(
+            first_matrix.sum(axis=1)[first_matrix.sum(axis=1) == first_matrix.shape[1]]
+        )
+        total_initial = len(first_matrix)
+
+        num_final_passing = len(
+            last_matrix.sum(axis=1)[last_matrix.sum(axis=1) == last_matrix.shape[1]]
+        )
+        total_final = len(last_matrix)
+
+        summary_data.append(
+            {
+                "problem_id": pid,
+                "solved": solved,
+                "champion_code_id": best_code_id if not final_codes.empty else "N/A",
+                "initial_passing": f"{num_initial_passing}/{total_initial}",
+                "final_passing": f"{num_final_passing}/{total_final}",
+            }
+        )
+
+    # 5. Print summary table
+    print("\n" + "=" * 80)
+    print("SUMMARY TABLE")
+    print("=" * 80)
+    print(
+        f"{'Problem ID':<30} {'Solved':<10} {'Champion Code ID':<20} {'Initial Passing':<20} {'Final Passing':<20}"
+    )
+    print("-" * 80)
+    for row in summary_data:
+        solved_str = "Yes" if row["solved"] else "No"
+        print(
+            f"{row['problem_id']:<30} {solved_str:<10} {row['champion_code_id']:<20} {row['initial_passing']:<20} {row['final_passing']:<20}"
+        )
 
     print("\n" + "=" * 80)
     print("End of Report")
