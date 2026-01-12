@@ -17,12 +17,13 @@ from typing import Any
 import pytest
 from loguru import logger
 
-import coevolution.logging_utils as logging_utils
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import (
     BayesianConfig,
     CodeProfile,
     EvolutionConfig,
+    EvolutionPhase,
+    EvolutionSchedule,
     IEliteSelectionStrategy,
     OperatorRatesConfig,
     PopulationConfig,
@@ -44,6 +45,7 @@ from coevolution.core.mock import (
 )
 from coevolution.core.orchestrator import Orchestrator
 from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.utils import logging as logging_utils
 
 
 def create_profiles(
@@ -89,7 +91,14 @@ def create_configurations() -> tuple[
     """Create all configuration objects for the experiment."""
 
     # Evolution configuration
-    evo_config = EvolutionConfig.simple(generations=5)
+    phase = EvolutionPhase(
+        name="evolution",
+        duration=5,
+        evolve_code=True,
+        evolve_tests=True,
+    )
+    schedule = EvolutionSchedule(phases=[phase])
+    evo_config = EvolutionConfig(schedule=schedule)
 
     # Code population configuration
     code_pop_config = PopulationConfig(
