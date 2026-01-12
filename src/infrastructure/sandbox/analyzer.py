@@ -26,6 +26,10 @@ class PytestXmlAnalyzer:
     # Matches examples like: /var/.../tmppjtsol6j.py:425 or C:\Temp\tmppjtsol6j.py:425
     TEMP_PATH_PATTERN = re.compile(r"(?:(?:[A-Za-z]:\\)|/)[^\s:<>\"]+\.py(?::\d+)?")
 
+    # Regex to capture relative temp file references
+    # Matches examples like: tmphhckiio3.py:80: or tmphhckiio3.py:64:
+    TEMP_FILENAME_PATTERN = re.compile(r"\btmp\w{7,12}\.py(?::\d+)?:?")
+
     # Regex to capture module-like prefixes in instance/class representations
     # Example: "<tmppjtsol6j.TestMakeAEqualB testMethod=test_x>" -> "<TestMakeAEqualB testMethod=test_x>"
     MODULE_PREFIX_PATTERN = re.compile(r"<[A-Za-z0-9_]+\.([A-Za-z_][A-Za-z0-9_]*)")
@@ -65,7 +69,20 @@ class PytestXmlAnalyzer:
 
         sanitized = self.TEMP_PATH_PATTERN.sub(_path_repl, sanitized)
 
-        # 3. Clean up the class/module instance representation
+        # 3. Replace relative temp file references with generic name, preserving line numbers
+        def _filename_repl(m: re.Match[str]) -> str:
+            match_text = m.group(0)
+            # Extract line number if present (before the trailing colon)
+            # Handle cases like tmpXXX.py:80: or tmpXXX.py:64
+            if ":" in match_text:
+                parts = match_text.rstrip(":").split(":")
+                if len(parts) == 2 and parts[1].isdigit():
+                    return f"test_script.py:{parts[1]}"
+            return "test_script.py"
+
+        sanitized = self.TEMP_FILENAME_PATTERN.sub(_filename_repl, sanitized)
+
+        # 4. Clean up the class/module instance representation
         sanitized = self.MODULE_PREFIX_PATTERN.sub(r"<\1", sanitized)
 
         return sanitized
