@@ -540,6 +540,33 @@ if input is functional, each dict should be of the form:
 
 """
 
+AGENT_CODER_PROGRAMMER_INIT = """
+**Role**: You are a software programmer.
+
+**Task**: As a programmer, you are required to solve the following problem. Use a Chain-of-Thought approach to break down the problem, create pseudocode, and then write the code in Python language.
+
+**Problem**:
+{question_content}
+
+**Code Formatting**: Please write code in 
+```python
+{starter_code}
+``` 
+format.
+
+**Instructions**:
+1. **Understand and Clarify**: Make sure you understand the task. 
+2. **Algorithm/Method Selection**: Decide on the most efficient way.
+3. **Pseudocode Creation**: Write down the steps you will follow in pseudocode. 
+4. **Code Generation**: Translate your pseudocode into executable Python code. 
+"""
+
+AGENT_CODER_PROGRAMMER_EDIT = """
+Your code solution needs improvement based on the following feedback:
+{feedback}
+
+Your task is to analyze the feedback, identify the issues in your current solution, and provide an improved version of the code.
+"""
 
 __all__ = [
     "INITIAL_TEST_AGENT_CODER_STYLE",
