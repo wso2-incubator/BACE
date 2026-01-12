@@ -67,6 +67,7 @@ class BaseLLMOperator:
         self._llm = llm
         logger.debug(f"Initialized {self.__class__.__name__}")
 
+    @llm_retry(exception_types=(LLMGenerationError,))
     def _generate(self, prompt: Any) -> str:
         logger.debug("Sending prompt to LLM")
         logger.trace(f"Prompt preview: {prompt[:100]}...")
