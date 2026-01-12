@@ -180,12 +180,12 @@ class PopulationConfig:
             )
 
         # Validate offspring_rate
-        if not (0.0 < self.offspring_rate <= 1.0):
+        if not (0.0 <= self.offspring_rate <= 1.0):
             raise ValueError("offspring_rate must be in the range (0.0, 1.0]")
 
         # Validate elitism_rate
-        if not (0.0 < self.elitism_rate < 1.0):
-            raise ValueError("elitism_rate must be in the range (0.0, 1.0)")
+        if not (0.0 <= self.elitism_rate <= 1.0):
+            raise ValueError("elitism_rate must be in the range (0.0, 1.0]")
 
     @property
     def is_fixed_size(self) -> bool:
