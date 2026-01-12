@@ -354,7 +354,7 @@ class TestBasePopulationSharedBehavior:
         assert sample_code_population.size == 0
         assert len(sample_code_population.individuals) == 0
 
-    @patch("coevolution.core.interfaces.logger")
+    @patch("coevolution.core.interfaces.base.logger")
     def test_set_next_generation_logs_changes(
         self,
         mock_logger: MagicMock,
