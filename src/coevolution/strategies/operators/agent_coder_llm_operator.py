@@ -14,7 +14,7 @@ from coevolution.core.interfaces import (
 )
 from coevolution.utils.prompts import (
     AGENT_CODER_PROGRAMMER_EDIT,
-    AGENT_CODER_PROGRAMMER_INIT,  # Ensure this exists, or we use a generic one
+    AGENT_CODER_PROGRAMMER_INIT,
 )
 from infrastructure.code_preprocessing import CodeParsingError, extraction
 from infrastructure.code_preprocessing.exceptions import CodeTransformationError

@@ -38,6 +38,12 @@ Example Usage:
     >>> public_profile = create_public_test_profile(alpha=0.001)
 """
 
+from coevolution.strategies.breeding.agent_coder_breeding import (
+    AgentCoderBreedingStrategy,
+)
+from coevolution.strategies.operators.agent_coder_llm_operator import (
+    AgentCoderLLMOperator,
+)
 from infrastructure.llm_client import LLMClient
 from infrastructure.sandbox import SandboxConfig
 
@@ -457,3 +463,67 @@ def create_public_test_profile(
     )
 
     return PublicTestProfile(bayesian_config=bayesian_config)
+
+
+def create_agent_coder_code_profile(
+    llm_client: LLMClient,
+    initial_prior: float = 0.2,
+    max_workers: int = 1,
+    prob_assigner_strategy: str = "min",
+) -> CodeProfile:
+    """
+    Create an 'AgentCoder' style code profile (Iterative Repair).
+
+    This factory configures a single-agent evolution loop:
+    - Fixed Population Size = 1 (Linear Evolution)
+    - Stateful LLM Operator (maintains conversation history)
+    - Edit-only evolution (No mutation/crossover)
+    - Elitism = 0 (Offspring always replaces parent if valid)
+
+    Args:
+        llm_client: LLM client for code generation.
+        initial_prior: Initial probability for new code (default: 0.2).
+        max_workers: Parallel workers for initialization (default: 1).
+        prob_assigner_strategy: Strategy for assigning probabilities (default: "min").
+
+    Returns:
+        CodeProfile configured for AgentCoder.
+    """
+    # 1. Enforce Linear Constraints
+    # AgentCoder works by modifying a single file iteratively.
+    population_config = PopulationConfig(
+        initial_prior=initial_prior,
+        initial_population_size=1,
+        max_population_size=1,
+        offspring_rate=1.0,  # 1 offspring replaces 1 parent
+        elitism_rate=0.0,  # No elitism, we rely on the loop
+        diversity_selection=False,  # Diversity irrelevant for size 1
+    )
+
+    # 2. Create Stateful Operator
+    # Note: The Orchestrator MUST manage the lifecycle (reset_session) of this operator.
+    agent_operator = AgentCoderLLMOperator(llm=llm_client)
+
+    # 3. Configure Operations (Edit Only)
+    operator_rates = OperatorRatesConfig(operation_rates={"edit": 1.0})
+
+    # 4. Helpers
+    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
+
+    # 5. Create Strategy
+    breeding_strategy = AgentCoderBreedingStrategy(
+        operator=agent_operator,
+        op_rates_config=operator_rates,
+        pop_config=population_config,
+        probability_assigner=prob_assigner,
+        max_workers=max_workers,
+    )
+
+    # 6. Selector (TopK is sufficient/fastest for size 1)
+    elite_selector: IEliteSelectionStrategy[CodeIndividual] = TopKEliteSelector()
+
+    return CodeProfile(
+        population_config=population_config,
+        breeding_strategy=breeding_strategy,
+        elite_selector=elite_selector,
+    )
