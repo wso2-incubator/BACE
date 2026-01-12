@@ -27,6 +27,7 @@ from coevolution.factories import (
     OrchestratorBuilder,
     ScheduleBuilder,
     build_orchestrator_from_config,
+    create_agent_coder_code_profile,
     create_default_code_profile,
     create_differential_test_profile,
     create_public_test_profile,
@@ -207,23 +208,28 @@ def main(
     code_profile = create_default_code_profile(
         llm_client=llm_client,
         initial_prior=0.2,
-        initial_population_size=1,
-        max_population_size=1,
+        initial_population_size=10,
+        max_population_size=15,
         offspring_rate=0.3,
         elitism_rate=0.3,
         mutation_rate=0.2,
         crossover_rate=0.2,
         edit_rate=0.6,
-        init_pop_batch_size=1,
+        init_pop_batch_size=2,
         max_workers=10,
         diversity_enabled=True,
+    )
+
+    agent_coder_code_profile = create_agent_coder_code_profile(
+        llm_client=llm_client,
+        initial_prior=0.2,
     )
 
     unittest_profile = create_unittest_test_profile(
         llm_client=llm_client,
         initial_prior=0.2,
-        initial_population_size=0,
-        max_population_size=0,
+        initial_population_size=20,
+        max_population_size=20,
         offspring_rate=0.8,
         elitism_rate=0.4,
         mutation_rate=0.3,
@@ -242,7 +248,7 @@ def main(
         sandbox_config=differential_sandbox_config,
         initial_prior=0.2,
         initial_population_size=0,  # Bootstrap
-        max_population_size=0,
+        max_population_size=100,
         offspring_rate=0.5,
         elitism_rate=0.3,
         discovery_rate=1.0,
@@ -262,7 +268,7 @@ def main(
     # 2. Schedule
     schedule = (
         ScheduleBuilder()
-        .warmup_code(duration=1)
+        .warmup_code(duration=5)
         # .alternating(total_duration=10, code_step=1, test_step=1, start_with="test")
         .build()
     )
@@ -271,9 +277,9 @@ def main(
     config = (
         OrchestratorBuilder()
         .with_evolution_config(schedule)
-        .with_code_profile(code_profile)
+        .with_code_profile(agent_coder_code_profile)
         .add_test_profile("unittest", unittest_profile)
-        .add_test_profile("differential", differential_profile)
+        # .add_test_profile("differential", differential_profile)
         .with_public_test_profile(public_profile)
         .with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
