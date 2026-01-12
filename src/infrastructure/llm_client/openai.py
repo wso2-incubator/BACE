@@ -1,6 +1,6 @@
 """OpenAI LLM client implementations."""
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from loguru import logger
 
@@ -9,6 +9,7 @@ from .base import LLMClient
 if TYPE_CHECKING:
     from openai.types.chat.chat_completion import ChatCompletion
     from openai.types.responses.response import Response
+    from openai.types.responses.response_input_param import ResponseInputParam
 
 
 class OpenAIChatClient(LLMClient):
@@ -93,7 +94,7 @@ class OpenAIClient(LLMClient):
                 self._estimate_tokens(response.output_text)
             )
 
-    def generate(self, prompt: str, **kwargs: Any) -> str:
+    def generate(self, prompt: Union[str, "ResponseInputParam"], **kwargs: Any) -> str:
         # Allow overriding reasoning effort for this specific call
         reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
 

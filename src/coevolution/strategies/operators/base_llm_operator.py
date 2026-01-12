@@ -5,7 +5,7 @@ and the `BaseLLMOperator` class which handles LLM invocation and basic
 extraction helpers. Concrete operators import these utilities.
 """
 
-from typing import Callable, Protocol, Tuple, Type
+from typing import Any, Callable, Protocol, Tuple, Type
 
 from loguru import logger
 from tenacity import (
@@ -67,7 +67,7 @@ class BaseLLMOperator:
         self._llm = llm
         logger.debug(f"Initialized {self.__class__.__name__}")
 
-    def _generate(self, prompt: str) -> str:
+    def _generate(self, prompt: Any) -> str:
         logger.debug("Sending prompt to LLM")
         logger.trace(f"Prompt preview: {prompt[:100]}...")
 

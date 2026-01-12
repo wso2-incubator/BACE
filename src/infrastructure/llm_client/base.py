@@ -40,7 +40,7 @@ class LLMClient(ABC):
         )
 
     @abstractmethod
-    def generate(self, prompt: str, **kwargs: Any) -> str:
+    def generate(self, prompt: Any, **kwargs: Any) -> str:
         """Generate text from the model."""
         pass
 
