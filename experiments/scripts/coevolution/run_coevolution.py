@@ -405,8 +405,11 @@ def main(
                     logger.info(f"[{t_type}] Final Pop Size: {t_pop.size}")
 
             except Exception as e:
+                # Use str.replace to escape curly braces in error message to avoid
+                # loguru formatting issues when exception messages contain dict literals
+                error_msg = str(e).replace("{", "{{").replace("}", "}}")
                 logger.error(
-                    f"Failed to process problem {problem.question_id}: {e}",
+                    f"Failed to process problem {problem.question_id}: {error_msg}",
                     exc_info=True,
                 )
                 # We catch the exception so one bad problem doesn't kill the whole batch
