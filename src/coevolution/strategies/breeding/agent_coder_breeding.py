@@ -168,9 +168,9 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
 
         if not failing_tests:
             logger.info(
-                f"No failing tests found for code individual ID {code_parent.id}. Skipping edit."
+                f"No failing tests found for code individual ID {code_parent.id}. Skipping edit and returning parent unchanged."
             )
-            return []
+            return [code_parent]
 
         # Prepare edit input
         edit_input = AgentCoderEditInput(
