@@ -41,7 +41,7 @@ def _log_line_generator(
     abstracting away Zip/Text differences.
     """
     search_path = os.path.join(log_dir, log_filename_pattern)
-    found_files = sorted(glob.glob(search_path))
+    found_files = sorted(glob.glob(search_path), key=lambda x: os.path.getmtime(x))
 
     if not found_files:
         logger.warning(f"No log files found at {search_path}")
