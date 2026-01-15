@@ -80,10 +80,19 @@ class Orchestrator:
         strategies, not by orchestrator. Orchestrator only interacts with breeding strategies,
         which delegate to operators and manage their own operation rate configs internally.
 
+        Important: Test Type Update Order
+        The order in which evolved test types update probabilities during cooperative updates
+        is determined by the insertion order of keys in evolved_test_profiles. Python 3.7+
+        guarantees dict maintains insertion order, so the order you pass profiles controls
+        the update sequence. Example:
+            evolved_test_profiles = {"differential": ..., "unittest": ...}
+            # Updates in order: public (anchor) → differential → unittest
+
         Args:
             evo_config: Top-level evolution configuration
             code_profile: Complete profile for code population (config + strategies)
-            evolved_test_profiles: Map test_type → profile for that evolved test type
+            evolved_test_profiles: Map test_type → profile for that evolved test type.
+                The order of keys determines the order of probability updates.
             public_test_profile: Profile for public/ground-truth tests
             execution_system: System for executing code against tests
             bayesian_system: System for belief updates
@@ -368,8 +377,8 @@ class Orchestrator:
         code_pop.update_probabilities(code_post_public, test_type="public")
         ledger.commit_interactions(code_ids, public_ids, "public", "CODE", mask_pub)
         # 3 & 4. For each evolved test population: Calculate and Apply updates
-        # Sort test types for deterministic ordering across runs
-        for test_type in sorted(self.evolved_test_types):
+        # Iterate in the order profiles were provided (dict maintains insertion order in Python 3.7+)
+        for test_type in self.evolved_test_profiles.keys():
             test_pop = context.test_populations[test_type]
             test_ids = [ind.id for ind in test_pop.individuals]
             test_obs_matrix = context.interactions[test_type].observation_matrix
