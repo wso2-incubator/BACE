@@ -8,7 +8,7 @@ differential:
 
 # Main execution sandbox
 execution:
-  timeout: 180
+  timeout: 240
   max_memory_mb: 100
   max_output_size: 10000000
   test_method_timeout: 30

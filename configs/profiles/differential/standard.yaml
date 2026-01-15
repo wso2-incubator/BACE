@@ -11,11 +11,11 @@ elitism_rate: 0.3
 discovery_rate: 1.0
 
 # Bayesian parameters (less reliable than unit tests)
-alpha: 0.3
-beta: 0.5
-gamma: 0.5
+alpha: 0.2
+beta: 0.2
+gamma: 0.3
 learning_rate: 0.025
 
 # Performance - independent scaling
-llm_workers: 4   # Parallel LLM script generation
+llm_workers: 10   # Parallel LLM script generation
 cpu_workers: 4   # Parallel sandbox execution (from env COEVOLUTION_WORKERS)

@@ -19,6 +19,5 @@ gamma: 0.1   # P(pass | both incorrect)
 learning_rate: 0.05
 
 # Performance
-llm_workers: 4
-
+llm_workers: 10
 diversity_enabled: true

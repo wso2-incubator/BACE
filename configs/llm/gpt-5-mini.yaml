@@ -9,8 +9,3 @@ reasoning_effort: "minimal"
 # api_key: "${OPENAI_API_KEY}"
 # base_url: "${OPENAI_BASE_URL}"
 # organization: "${OPENAI_ORG_ID}"
-
-# Generation parameters
-temperature: 0.7
-max_tokens: null  # Use model default
-top_p: 1.0
