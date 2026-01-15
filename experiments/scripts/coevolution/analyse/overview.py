@@ -193,6 +193,7 @@ def main(
             {
                 "run_id": run_id,
                 "problem_id": pid,
+                "solved": solved,
                 "champion_code_ids": champion_ids_str,
                 "champion_passing": champion_passing_str,
                 "champion_probability": round(champion_probability, 4),
@@ -203,19 +204,20 @@ def main(
         )
 
     # 5. Print summary table
-    print("\n" + "=" * 120)
+    print("\n" + "=" * 140)
     print("SUMMARY TABLE")
-    print("=" * 120)
+    print("=" * 140)
     print(
-        f"{'Run ID':<15} {'Problem ID':<20} {'Champion ID':<15} {'Champion Pass':<13} {'Champion Prob':<13} {'Init P@10':<10} {'Final P@15':<11} {'Final P@10':<11}"
+        f"{'Run ID':<15} {'Problem ID':<20} {'Solved':<8} {'Champion ID':<15} {'Champion Pass':<14} {'Champion Prob':<14} {'Init P@10':<11} {'Final P@15':<12} {'Final P@10':<12}"
     )
-    print("-" * 120)
+    print("-" * 140)
     for row in summary_data:
+        solved_str = "Yes" if row["solved"] else "No"
         print(
-            f"{row['run_id']:<15} {row['problem_id']:<20} {row['champion_code_ids']:<15} {row['champion_passing']:<13} {row['champion_probability']:<13.4f} {row['initial_pass_at_10']:<10} {row['final_pass_at_15']:<11} {row['final_pass_at_10']:<11}"
+            f"{row['run_id']:<15} {row['problem_id']:<20} {solved_str:<8} {row['champion_code_ids']:<15} {row['champion_passing']:<14} {row['champion_probability']:<14.4f} {row['initial_pass_at_10']:<11} {row['final_pass_at_15']:<12} {row['final_pass_at_10']:<12}"
         )
 
-    print("\n" + "=" * 120)
+    print("\n" + "=" * 140)
     print("End of Report")
 
 
