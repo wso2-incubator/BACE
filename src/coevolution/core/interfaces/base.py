@@ -503,26 +503,22 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
             raise ValueError("Length of new_probabilities must match population size.")
 
         old_avg = self.compute_average_probability()
-        change_count = 0
 
         for ind, new_prob in zip(self._individuals, new_probabilities, strict=False):
             old_prob = ind.probability
             ind.probability = float(new_prob)
             probability_change = float(new_prob) - old_prob
 
-            # Only log if probability actually changed (beyond floating point noise)
-            if abs(probability_change) > 1e-10:
-                ind.notify_probability_updated(
-                    generation=self._generation,
-                    test_type=test_type,
-                    probability_change=probability_change,
-                )
-                change_count += 1
+            ind.notify_probability_updated(
+                generation=self._generation,
+                test_type=test_type,
+                probability_change=probability_change,
+            )
 
         new_avg = self.compute_average_probability()
         logger.info(
             f"Updated probabilities for {self.__class__.__name__} (gen {self._generation}, test_type={test_type}): "
-            f"avg {old_avg:.4f} -> {new_avg:.4f} (Δ{new_avg - old_avg:+.4f}), {change_count}/{self.size} individuals changed"
+            f"avg {old_avg:.4f} -> {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
         )
 
     def get_index_of_individual(self, individual: T_Individual) -> int:
