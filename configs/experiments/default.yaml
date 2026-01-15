@@ -11,7 +11,7 @@ code_profile: "profiles/code/standard.yaml"
 unittest_profile: "profiles/unittest/standard.yaml"
 differential_profile: "profiles/differential/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
-infrastructure: "infrastructure/sandbox-default.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
 schedule: "schedules/alternating-6gen.yaml"
 
 # Dataset configuration

@@ -317,7 +317,7 @@ def _run_experiment(config: dict, run_id: str) -> None:
     unittest_profile_config = config.get("unittest_profile", {})
     differential_profile_config = config.get("differential_profile", {})
     public_profile_config = config.get("public_profile", {})
-    infrastructure_config = config.get("infrastructure", {})
+    sandbox_config = config.get("sandbox", {})
     schedule_config = config.get("schedule", {})
     dataset_config = config.get("dataset", {})
     subset_config = config.get("subset", {})
@@ -336,26 +336,26 @@ def _run_experiment(config: dict, run_id: str) -> None:
     logger.info(f"Using model: {llm_client.model}")
 
     # 2. Sandbox Configurations
-    infra_diff_config = infrastructure_config.get("differential", {})
+    sandbox_diff_config = sandbox_config.get("differential", {})
     differential_sandbox_config = SandboxConfig(
-        timeout=infra_diff_config.get("timeout", 20),
-        max_memory_mb=infra_diff_config.get("max_memory_mb", 100),
-        max_output_size=infra_diff_config.get("max_output_size", 10_000_000),
+        timeout=sandbox_diff_config.get("timeout", 20),
+        max_memory_mb=sandbox_diff_config.get("max_memory_mb", 100),
+        max_output_size=sandbox_diff_config.get("max_output_size", 10_000_000),
     )
 
-    infra_exec_config = infrastructure_config.get("execution", {})
+    sandbox_exec_config = sandbox_config.get("execution", {})
     exec_sandbox_config = SandboxConfig(
-        timeout=infra_exec_config.get("timeout", 180),
-        max_memory_mb=infra_exec_config.get("max_memory_mb", 100),
-        max_output_size=infra_exec_config.get("max_output_size", 10_000_000),
-        test_method_timeout=infra_exec_config.get("test_method_timeout", 30),
+        timeout=sandbox_exec_config.get("timeout", 180),
+        max_memory_mb=sandbox_exec_config.get("max_memory_mb", 100),
+        max_output_size=sandbox_exec_config.get("max_output_size", 10_000_000),
+        test_method_timeout=sandbox_exec_config.get("test_method_timeout", 30),
     )
 
     # Worker count from config or environment
     cpu_count = int(
         os.environ.get(
             "COEVOLUTION_WORKERS",
-            infrastructure_config.get("workers", {}).get("cpu_count", 4),
+            sandbox_config.get("workers", {}).get("cpu_count", 4),
         )
     )
     logger.info(f"Using worker count: {cpu_count}")
@@ -594,7 +594,7 @@ def _run_experiment(config: dict, run_id: str) -> None:
 def list_configs(
     config_type: str = typer.Argument(
         ...,
-        help="Type of configs to list: llm, code, unittest, differential, public, infrastructure, schedule, experiment",
+        help="Type of configs to list: llm, code, unittest, differential, public, sandbox, schedule, experiment",
     ),
 ) -> None:
     """List available configuration files of a specific type."""
@@ -605,7 +605,7 @@ def list_configs(
         "unittest": "profiles/unittest",
         "differential": "profiles/differential",
         "public": "profiles/public",
-        "infrastructure": "infrastructure",
+        "sandbox": "sandbox",
         "schedule": "schedules",
         "experiment": "experiments",
     }
