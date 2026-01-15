@@ -137,17 +137,30 @@ class BaseIndividual(ABC):
             event=LifecycleEvent.SURVIVED,
         )
 
-    def notify_probability_updated(self, generation: int) -> None:
+    def notify_probability_updated(
+        self,
+        generation: int,
+        test_type: str | None = None,
+        probability_change: float | None = None,
+    ) -> None:
         """
         Called when this individual's probability is updated.
 
         Args:
             generation: The generation number when this update occurred.
+            test_type: The type of test that triggered the update (e.g., 'public', 'unittest', 'differential').
+            probability_change: The absolute change in probability (new - old). If None, change is not tracked.
         """
+        details: dict[str, Any] = {"probability": self.probability}
+        if test_type is not None:
+            details["test_type"] = test_type
+        if probability_change is not None:
+            details["probability_change"] = probability_change
+
         self._log_event(
             generation=generation,
             event=LifecycleEvent.PROBABILITY_UPDATED,
-            probability=self.probability,
+            **details,
         )
 
     def get_complete_record(self) -> dict[str, Any]:
@@ -474,8 +487,15 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
             :k
         ]
 
-    def update_probabilities(self, new_probabilities: np.ndarray) -> None:
-        """Updates the probabilities of individuals in the population."""
+    def update_probabilities(
+        self, new_probabilities: np.ndarray, test_type: str | None = None
+    ) -> None:
+        """Updates the probabilities of individuals in the population.
+
+        Args:
+            new_probabilities: Array of new probability values for each individual.
+            test_type: The type of test that triggered the update (e.g., 'public', 'unittest', 'differential').
+        """
         if len(new_probabilities) != self.size:
             logger.error(
                 f"Length mismatch: {len(new_probabilities)} probabilities vs {self.size} individuals."
@@ -483,15 +503,26 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
             raise ValueError("Length of new_probabilities must match population size.")
 
         old_avg = self.compute_average_probability()
+        change_count = 0
 
         for ind, new_prob in zip(self._individuals, new_probabilities, strict=False):
+            old_prob = ind.probability
             ind.probability = float(new_prob)
-            ind.notify_probability_updated(generation=self._generation)
+            probability_change = float(new_prob) - old_prob
+
+            # Only log if probability actually changed (beyond floating point noise)
+            if abs(probability_change) > 1e-10:
+                ind.notify_probability_updated(
+                    generation=self._generation,
+                    test_type=test_type,
+                    probability_change=probability_change,
+                )
+                change_count += 1
 
         new_avg = self.compute_average_probability()
         logger.info(
-            f"Updated probabilities for {self.__class__.__name__} (gen {self._generation}): "
-            f"avg {old_avg:.4f} -> {new_avg:.4f} (Δ{new_avg - old_avg:+.4f})"
+            f"Updated probabilities for {self.__class__.__name__} (gen {self._generation}, test_type={test_type}): "
+            f"avg {old_avg:.4f} -> {new_avg:.4f} (Δ{new_avg - old_avg:+.4f}), {change_count}/{self.size} individuals changed"
         )
 
     def get_index_of_individual(self, individual: T_Individual) -> int:

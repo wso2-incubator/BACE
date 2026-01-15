@@ -365,10 +365,11 @@ class Orchestrator:
             code_update_mask_matrix=mask_pub,
             config=self.public_test_profile.bayesian_config,
         )
-        code_pop.update_probabilities(code_post_public)
+        code_pop.update_probabilities(code_post_public, test_type="public")
         ledger.commit_interactions(code_ids, public_ids, "public", "CODE", mask_pub)
         # 3 & 4. For each evolved test population: Calculate and Apply updates
-        for test_type in self.evolved_test_types:
+        # Sort test types for deterministic ordering across runs
+        for test_type in sorted(self.evolved_test_types):
             test_pop = context.test_populations[test_type]
             test_ids = [ind.id for ind in test_pop.individuals]
             test_obs_matrix = context.interactions[test_type].observation_matrix
@@ -412,9 +413,9 @@ class Orchestrator:
                 config=test_profile.bayesian_config,
             )
 
-            # Apply updates
-            test_pop.update_probabilities(test_post)
-            code_pop.update_probabilities(code_evolved_post)
+            # Apply updates with test_type tracking
+            test_pop.update_probabilities(test_post, test_type=test_type)
+            code_pop.update_probabilities(code_evolved_post, test_type=test_type)
             ledger.commit_interactions(code_ids, test_ids, test_type, "TEST", test_mask)
             ledger.commit_interactions(
                 code_ids, test_ids, test_type, "CODE", code_mask_for_this_test
