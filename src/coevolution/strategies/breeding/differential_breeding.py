@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, override
+from typing import Any, Optional, Protocol, cast, override
 
 from loguru import logger
 
@@ -76,6 +76,26 @@ class IDifferentialFinder(Protocol):
         Returns empty list if no divergence is found.
         """
         ...
+
+
+# --- Pipeline DTOs ---
+
+
+@dataclass
+class DiscoveryTask:
+    """Represents a pair identified for potential divergence."""
+
+    code_a: CodeIndividual
+    code_b: CodeIndividual
+    group: FunctionallyEquivGroup
+
+
+@dataclass
+class DiscoveryContext:
+    """Represents a task with its generated script, ready for execution."""
+
+    task: DiscoveryTask
+    generator_script: str
 
 
 class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
@@ -148,28 +168,93 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self, coevolution_context: CoevolutionContext, num_offsprings: int
     ) -> list[TestIndividual]:
         """
-        Deterministic breeding implementation with Round-Robin Group Scheduling.
+        Staged Pipeline Implementation:
 
-        Improvements:
-        - Prevents "Diversity Starvation" by interleaving pairs from different functional groups.
-        - Prioritizes best pairs WITHIN each group, but ensures all groups get a turn.
+        Phase 1: Select candidate pairs (CPU - cheap)
+        Phase 2: Generate input scripts via LLM (I/O - parallel ThreadPoolExecutor)
+        Phase 3: Execute scripts and find divergences (CPU - DifferentialFinder handles parallelism)
+
+        This architecture decouples LLM workers from CPU workers, eliminating the
+        complex budget calculations and enabling independent scaling.
         """
         offspring_list: list[TestIndividual] = []
 
-        # --- Step 1: Gather Candidates By Group ---
+        # --- PHASE 1: SELECT CANDIDATES ---
+        candidates = self._select_candidates(coevolution_context)
+
+        if not candidates:
+            logger.warning(
+                "No new unexplored pairs available for differential testing."
+            )
+            return []
+
+        # Calculate how many scripts to generate
+        # Generate more than needed to account for pairs that may not find divergences
+        target_script_count = min(len(candidates), num_offsprings * 2)
+        selected_candidates = candidates[:target_script_count]
+
+        logger.info(
+            f"Phase 1 Complete: Selected {len(selected_candidates)} candidate pairs "
+            f"from {len(candidates)} available (targeting {num_offsprings} offspring)"
+        )
+
+        # --- PHASE 2: BATCH GENERATE SCRIPTS (I/O - Threaded) ---
+        logger.info(
+            f"Phase 2: Generating input scripts for {len(selected_candidates)} pairs "
+            f"using {self.llm_workers} LLM workers..."
+        )
+        discovery_contexts = self._batch_generate_scripts(
+            coevolution_context, selected_candidates
+        )
+
+        logger.info(
+            f"Phase 2 Complete: Successfully generated {len(discovery_contexts)} scripts"
+        )
+
+        if not discovery_contexts:
+            logger.warning(
+                "No scripts generated; cannot proceed with divergence finding."
+            )
+            return []
+
+        # --- PHASE 3: BATCH FIND DIVERGENCES (CPU - Sequential with internal parallelism) ---
+        logger.info(
+            f"Phase 3: Executing {len(discovery_contexts)} scripts to find divergences..."
+        )
+        offspring_list = self._batch_find_divergences(
+            coevolution_context, discovery_contexts, num_offsprings
+        )
+
+        logger.info(
+            f"Phase 3 Complete: Generated {len(offspring_list)} test offspring "
+            f"from {len(discovery_contexts)} executed scripts"
+        )
+
+        return offspring_list[:num_offsprings]
+
+    # --------------------------------------------------------------------------
+    # PHASE 1: CANDIDATE SELECTION
+    # --------------------------------------------------------------------------
+
+    def _select_candidates(self, context: CoevolutionContext) -> list[DiscoveryTask]:
+        """
+        Select candidate pairs using Round-Robin Group Scheduling.
+
+        Returns a flat, interleaved list of DiscoveryTask objects ordered by:
+        - Round-robin across groups (prevents diversity starvation)
+        - Local elitism within each group (best pairs first)
+        """
         logger.debug("Scanning for functionally equivalent code pairs...")
         groups = self.func_eq_code_selector.select_functionally_equivalent_codes(
-            coevolution_context
+            context
         )
 
         logger.info(
             f"Identified {len(groups)} functionally equivalent code groups for differential breeding."
         )
 
-        # Store candidates as a list of lists: [ [GroupA_Pair1, GroupA_Pair2], [GroupB_Pair1] ]
-        candidates_by_group: list[
-            list[tuple[CodeIndividual, CodeIndividual, FunctionallyEquivGroup]]
-        ] = []
+        # Store candidates grouped by their source group
+        candidates_by_group: list[list[DiscoveryTask]] = []
 
         # Stats for logging
         theoretical_max_pairs = 0
@@ -194,185 +279,202 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                     code_b = sorted_inds[j]
 
                     if not self._is_pair_explored(code_a, code_b):
-                        group_pairs.append((code_a, code_b, group))
+                        group_pairs.append(
+                            DiscoveryTask(code_a=code_a, code_b=code_b, group=group)
+                        )
 
             if group_pairs:
                 # Local Elitism: Sort pairs within this group by quality
                 group_pairs.sort(
-                    key=lambda p: p[0].probability + p[1].probability, reverse=True
+                    key=lambda t: t.code_a.probability + t.code_b.probability,
+                    reverse=True,
                 )
                 candidates_by_group.append(group_pairs)
                 total_unexplored += len(group_pairs)
 
-        # Log Capacity
+        # Log capacity analysis
         potential_offspring = total_unexplored * self.divergence_limit * 2
         logger.info(
-            f"Differential Capacity Analysis: "
-            f"Candidate Groups={len(candidates_by_group)}, "
+            f"Candidate Analysis: Groups={len(candidates_by_group)}, "
             f"Total Pairs (nCr)={theoretical_max_pairs}, "
             f"Unexplored={total_unexplored}, "
-            f"Max Potential Offspring={potential_offspring} "
-            f"(Requested: {num_offsprings})"
+            f"Max Potential Offspring={potential_offspring}"
         )
 
-        if total_unexplored == 0:
-            logger.warning(
-                "No new unexplored pairs available for differential testing."
-            )
-            return []
+        # Round-Robin Interleaving
+        # Transform [ [A1, A2, A3], [B1, B2] ] -> [A1, B1, A2, B2, A3]
+        interleaved_candidates = []
 
-        # --- Step 2: Interleave (Round-Robin Flattening) ---
-        # We transform [ [A1, A2, A3], [B1, B2] ] -> [A1, B1, A2, B2, A3]
-        final_candidate_queue = []
-
-        # We loop until all groups are exhausted
         while candidates_by_group:
-            # Iterate through a copy so we can remove empty groups safely
             for group_list in list(candidates_by_group):
                 if group_list:
-                    # Take the best remaining pair from this group
-                    final_candidate_queue.append(group_list.pop(0))
+                    interleaved_candidates.append(group_list.pop(0))
 
-                # If group is now empty, remove it from rotation
+                # Remove empty groups
                 if not group_list:
                     candidates_by_group.remove(group_list)
 
         logger.debug(
-            f"Scheduled {len(final_candidate_queue)} pairs via Round-Robin selection."
+            f"Scheduled {len(interleaved_candidates)} pairs via Round-Robin selection."
         )
 
-        # --- Step 3: Batch Execution (Standard) ---
-        # Now we just consume the interleaved queue
-        total_candidates = len(final_candidate_queue)
-        candidate_idx = 0
-
-        if self.llm_workers <= 1:
-            while (
-                len(offspring_list) < num_offsprings
-                and candidate_idx < total_candidates
-            ):
-                code_a, code_b, group = final_candidate_queue[candidate_idx]
-                candidate_idx += 1
-                self._mark_pair_explored(code_a, code_b)
-                new_inds = self._process_pair(
-                    coevolution_context, code_a, code_b, group
-                )
-                offspring_list.extend(new_inds)
-            return offspring_list[:num_offsprings]
-
-        # Multi-threaded logic (same as before, just using final_candidate_queue)
-        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
-            while (
-                len(offspring_list) < num_offsprings
-                and candidate_idx < total_candidates
-            ):
-                remaining_needed = num_offsprings - len(offspring_list)
-                batch_size = min(remaining_needed + 2, self.llm_workers * 2)
-
-                current_batch_futures = []
-                for _ in range(batch_size):
-                    if candidate_idx >= total_candidates:
-                        break
-                    cA, cB, grp = final_candidate_queue[candidate_idx]
-                    candidate_idx += 1
-                    self._mark_pair_explored(cA, cB)
-
-                    current_batch_futures.append(
-                        executor.submit(
-                            self._process_pair, coevolution_context, cA, cB, grp
-                        )
-                    )
-
-                if not current_batch_futures:
-                    break
-
-                for future in as_completed(current_batch_futures):
-                    try:
-                        res = future.result()
-                        offspring_list.extend(res)
-                        if len(offspring_list) >= num_offsprings:
-                            for f in current_batch_futures:
-                                f.cancel()
-                            break
-                    except Exception as e:
-                        logger.error(f"Worker failed: {e}")
-
-        return offspring_list[:num_offsprings]
+        return interleaved_candidates
 
     # --------------------------------------------------------------------------
-    # WORKER LOGIC
+    # PHASE 2: SCRIPT GENERATION (I/O BOUND - PARALLEL)
     # --------------------------------------------------------------------------
 
-    def _process_pair(
-        self,
-        context: CoevolutionContext,
-        code_a: CodeIndividual,
-        code_b: CodeIndividual,
-        group: FunctionallyEquivGroup,
-    ) -> list[TestIndividual]:
+    def _generate_single_script(
+        self, context: CoevolutionContext, task: DiscoveryTask
+    ) -> Optional[DiscoveryContext]:
         """
-        The actual work unit.
+        Generate an input generator script for a single code pair using LLM.
+
+        This is the unit of work for Phase 2 parallelism (I/O-bound LLM calls).
         """
-        logger.debug(f"Processing code pair ({code_a.id}, {code_b.id}) for divergence.")
         try:
-            # 1. Prepare Context (Same as before)
-            diff_tests = group.passing_test_individuals.get("differential", [])
+            # Prepare passing test context
+            diff_tests = task.group.passing_test_individuals.get("differential", [])
             passing_io_pairs: list[DifferentialInputOutput] = []
             for t in diff_tests:
                 pairs = t.metadata.get("io_pairs", [])
                 if pairs:
                     passing_io_pairs.append(pairs[0])
 
+            # Create LLM input
             dto = DifferentialGenScriptInput(
                 operation=OPERATION_DISCOVERY,
                 question_content=context.problem.question_content,
-                equivalent_code_snippet_1=code_a.snippet,
-                equivalent_code_snippet_2=code_b.snippet,
+                equivalent_code_snippet_1=task.code_a.snippet,
+                equivalent_code_snippet_2=task.code_b.snippet,
                 passing_differential_test_io_pairs=passing_io_pairs,
-                num_inputs_to_generate=100,  # This is inputs generated by script
+                num_inputs_to_generate=100,
             )
 
-            # 2. Run LLM Operator
+            # Call LLM operator
             op_output = self.operator.apply(dto)
             script = op_output.results[0].snippet
 
-            # 3. Run Differential Finder
-            divergences = self.differential_finder.find_differential(
-                code_a.snippet,
-                code_b.snippet,
-                script,
-                limit=self.divergence_limit,
+            logger.debug(
+                f"Generated script for pair ({task.code_a.id}, {task.code_b.id})"
             )
 
-            if not divergences:
-                logger.debug(
-                    f"No divergences found for code pair ({code_a.id}, {code_b.id})."
-                )
-                return []
-
-            # 4. Assign Probability & Create Individuals (Same as before)
-            parent_probs = []
-            for test_type, test_inds in group.passing_test_individuals.items():
-                if test_type == "differential":
-                    for ind in test_inds:
-                        parent_probs.append(ind.probability)
-
-            if parent_probs:
-                prob = self.probability_assigner.assign_probability(
-                    operation=OPERATION_DISCOVERY,
-                    parent_probs=parent_probs,
-                    initial_prior=self.pop_config.initial_prior,
-                )
-            else:
-                prob = self.pop_config.initial_prior
-
-            return self._create_divergence_tests(
-                context, code_a, code_b, divergences, prob
-            )
+            return DiscoveryContext(task=task, generator_script=script)
 
         except Exception as e:
-            logger.error(f"Error processing pair {code_a.id} vs {code_b.id}: {e}")
-            return []
+            logger.error(
+                f"Script generation failed for {task.code_a.id} vs {task.code_b.id}: {e}"
+            )
+            return None
+
+    def _batch_generate_scripts(
+        self, context: CoevolutionContext, tasks: list[DiscoveryTask]
+    ) -> list[DiscoveryContext]:
+        """
+        Generate input scripts for multiple pairs in parallel using ThreadPoolExecutor.
+
+        Uses self.llm_workers threads to maximize LLM API throughput.
+        """
+        results = []
+
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
+            future_to_task = {
+                executor.submit(self._generate_single_script, context, task): task
+                for task in tasks
+            }
+
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    discovery_ctx = future.result()
+                    if discovery_ctx:
+                        # Mark pair as explored (script successfully generated)
+                        self._mark_pair_explored(task.code_a, task.code_b)
+                        results.append(discovery_ctx)
+                except Exception as e:
+                    logger.error(f"Script generation task failed: {e}")
+
+        return results
+
+    # --------------------------------------------------------------------------
+    # PHASE 3: DIVERGENCE FINDING (CPU BOUND - SEQUENTIAL WITH INTERNAL PARALLELISM)
+    # --------------------------------------------------------------------------
+
+    def _batch_find_divergences(
+        self,
+        context: CoevolutionContext,
+        discovery_contexts: list[DiscoveryContext],
+        limit: int,
+    ) -> list[TestIndividual]:
+        """
+        Execute generator scripts and find divergences sequentially.
+
+        The DifferentialFinder internally uses multiprocessing for CPU-bound work,
+        so we iterate sequentially here to avoid nested parallelism.
+
+        Stops early when offspring limit is reached.
+        """
+        offspring = []
+
+        for ctx in discovery_contexts:
+            if len(offspring) >= limit:
+                logger.debug(f"Offspring limit {limit} reached; stopping early.")
+                break
+
+            task = ctx.task
+
+            try:
+                # DifferentialFinder handles CPU parallelism internally
+                divergences = self.differential_finder.find_differential(
+                    task.code_a.snippet,
+                    task.code_b.snippet,
+                    ctx.generator_script,
+                    limit=self.divergence_limit,
+                )
+
+                if not divergences:
+                    logger.debug(
+                        f"No divergences found for pair ({task.code_a.id}, {task.code_b.id})"
+                    )
+                    continue
+
+                # Calculate probability for new tests
+                parent_probs = []
+                for test_type, test_inds in task.group.passing_test_individuals.items():
+                    if test_type == "differential":
+                        for ind in test_inds:
+                            parent_probs.append(ind.probability)
+
+                if parent_probs:
+                    prob = self.probability_assigner.assign_probability(
+                        operation=OPERATION_DISCOVERY,
+                        parent_probs=parent_probs,
+                        initial_prior=self.pop_config.initial_prior,
+                    )
+                else:
+                    prob = self.pop_config.initial_prior
+
+                # Create test individuals
+                new_tests = self._create_divergence_tests(
+                    context, task.code_a, task.code_b, divergences, prob
+                )
+                offspring.extend(new_tests)
+
+                logger.debug(
+                    f"Found {len(divergences)} divergences → {len(new_tests)} tests "
+                    f"for pair ({task.code_a.id}, {task.code_b.id})"
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"Divergence finding failed for {task.code_a.id} vs {task.code_b.id}: {e}"
+                )
+
+        return offspring[:limit]
+
+    # --------------------------------------------------------------------------
+    # HELPER METHODS
+    # --------------------------------------------------------------------------
 
     def _create_divergence_tests(
         self,
