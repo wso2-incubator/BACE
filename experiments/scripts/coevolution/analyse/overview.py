@@ -117,8 +117,10 @@ def main(
         # 4. Collect summary data
         # Check if best individual (highest probability) in final population passes all tests
         solved = False
-        champion_infos = []
-        
+        champion_ids = []
+        champion_passing_info = []
+        champion_probability = 0.0
+
         if not last_matrix.empty:
             num_tests = last_matrix.shape[1]
             pass_counts = last_matrix.sum(axis=1)
@@ -135,9 +137,10 @@ def main(
                 if not final_codes.empty:
                     # Find all codes with highest probability
                     max_prob = final_codes["probability"].max()
+                    champion_probability = max_prob
                     champions = final_codes[final_codes["probability"] == max_prob]
 
-                    # Collect champion IDs with their test pass counts
+                    # Collect champion IDs and their test pass counts separately
                     any_champion_solved = False
 
                     for idx, champ_row in champions.iterrows():
@@ -147,9 +150,8 @@ def main(
                             champ_pass_count = int(pass_counts.loc[champ_id])
                             if champ_pass_count == num_tests:
                                 any_champion_solved = True
-                        champion_infos.append(
-                            f"{champ_id} ({champ_pass_count}/{num_tests})"
-                        )
+                        champion_ids.append(champ_id)
+                        champion_passing_info.append(f"{champ_pass_count}/{num_tests}")
 
                     solved = any_champion_solved
 
@@ -157,41 +159,63 @@ def main(
         num_initial_passing = len(
             first_matrix.sum(axis=1)[first_matrix.sum(axis=1) == first_matrix.shape[1]]
         )
-        total_initial = len(first_matrix)
 
         num_final_passing = len(
             last_matrix.sum(axis=1)[last_matrix.sum(axis=1) == last_matrix.shape[1]]
         )
-        total_final = len(last_matrix)
 
-        # Format champion code ID with test pass info
-        champion_info = ", ".join(champion_infos) if champion_infos else "N/A"
+        # Calculate final pass@10 from top 10 survived codes by probability
+        num_final_pass_at_10 = 0
+        if not individuals_df.empty:
+            final_codes = individuals_df[
+                (individuals_df["status"].str.lower() == "survived")
+                & (individuals_df["type"] == "code")
+            ]
+            if not final_codes.empty:
+                # Sort by probability descending and take top 10
+                top_10_codes = final_codes.nlargest(
+                    min(10, len(final_codes)), "probability"
+                )
+                # Count how many of top 10 pass all tests
+                for _, code_row in top_10_codes.iterrows():
+                    code_id = code_row["id"]
+                    if code_id in pass_counts.index:
+                        if int(pass_counts.loc[code_id]) == num_tests:
+                            num_final_pass_at_10 += 1
+
+        # Format champion code IDs and passing info
+        champion_ids_str = ", ".join(champion_ids) if champion_ids else "N/A"
+        champion_passing_str = (
+            ", ".join(champion_passing_info) if champion_passing_info else "N/A"
+        )
 
         summary_data.append(
             {
+                "run_id": run_id,
                 "problem_id": pid,
-                "solved": solved,
-                "champion_code_id": champion_info,
-                "initial_passing": f"{num_initial_passing}/{total_initial}",
-                "final_passing": f"{num_final_passing}/{total_final}",
+                "champion_code_ids": champion_ids_str,
+                "champion_passing": champion_passing_str,
+                "champion_probability": round(champion_probability, 4),
+                "initial_pass_at_10": num_initial_passing,
+                "final_pass_at_15": num_final_passing,
+                "final_pass_at_10": num_final_pass_at_10,
             }
         )
 
     # 5. Print summary table
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 120)
     print("SUMMARY TABLE")
-    print("=" * 80)
+    print("=" * 120)
     print(
-        f"{'Problem ID':<30} {'Solved':<10} {'Champion Code ID':<20} {'Initial Passing':<20} {'Final Passing':<20}"
+        f"{'Run ID':<15} {'Problem ID':<20} {'Champion ID':<15} {'Champion Pass':<13} {'Champion Prob':<13} {'Init P@10':<10} {'Final P@15':<11} {'Final P@10':<11}"
     )
-    print("-" * 80)
+    print("-" * 120)
     for row in summary_data:
-        solved_str = "Yes" if row["solved"] else "No"
         print(
-            f"{row['problem_id']:<30} {solved_str:<10} {row['champion_code_id']:<20} {row['initial_passing']:<20} {row['final_passing']:<20}"
+            f"{row['run_id']:<15} {row['problem_id']:<20} {row['champion_code_ids']:<15} {row['champion_passing']:<13} {row['champion_probability']:<13.4f} {row['initial_pass_at_10']:<10} {row['final_pass_at_15']:<11} {row['final_pass_at_10']:<11}"
         )
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 120)
     print("End of Report")
 
 
