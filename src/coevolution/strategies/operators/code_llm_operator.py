@@ -19,7 +19,7 @@ from coevolution.core.interfaces import (
 )
 from coevolution.utils.prompts import (
     CROSSOVER_CODE,
-    EDIT_CODE_FIX_FAIL_ONLY,
+    EDIT_CODE_FIX_MULTIPLE_FAILS,
     INITIAL_CODE_POPULATION,
     INITIAL_CODE_SINGLE_SOLUTION,
     MUTATE_CODE,
@@ -46,8 +46,7 @@ class CodeCrossoverInput(BaseOperatorInput):
 @dataclass(frozen=True)
 class CodeEditInput(BaseOperatorInput):
     parent_snippet: str
-    failing_test_case: str
-    error_trace: str
+    failing_tests_with_trace: list[tuple[str, str]]
     starter_code: str
 
 
@@ -157,13 +156,26 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_edit(self, input_dto: CodeEditInput) -> OperatorOutput:
-        logger.debug("Performing edit on individual code snippet based on feedback")
-        prompt = EDIT_CODE_FIX_FAIL_ONLY.format(
+        logger.debug(
+            f"Performing edit on individual code snippet based on "
+            f"{len(input_dto.failing_tests_with_trace)} failing test(s)"
+        )
+
+        # Format multiple test cases into feedback
+        feedback_parts = []
+        for idx, (test_case, error_trace) in enumerate(
+            input_dto.failing_tests_with_trace, start=1
+        ):
+            feedback_parts.append(
+                f"Failing Test #{idx}:\n{test_case}\n\nError Trace:\n{error_trace}"
+            )
+        feedback = "\n\n" + "=" * 80 + "\n\n".join(feedback_parts)
+
+        prompt = EDIT_CODE_FIX_MULTIPLE_FAILS.format(
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
             individual=input_dto.parent_snippet,
-            failing_test_case=input_dto.failing_test_case,
-            error_trace=input_dto.error_trace,
+            feedback=feedback,
         )
         response = self._generate(prompt)
         edited_code = extraction.extract_code_block_from_response(response)
@@ -174,7 +186,13 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
 
         return OperatorOutput(
             results=[
-                OperatorResult(snippet=edited_code, metadata={"operation": "edit"})
+                OperatorResult(
+                    snippet=edited_code,
+                    metadata={
+                        "operation": "edit",
+                        "num_failing_tests": len(input_dto.failing_tests_with_trace),
+                    },
+                )
             ]
         )
 

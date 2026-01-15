@@ -165,6 +165,33 @@ EDIT_CODE_FIX_FAIL_ONLY = (
     + "\n"
 )
 
+EDIT_CODE_FIX_MULTIPLE_FAILS = (
+    _CODER_ROLE + "\n\n"
+    "<problem>\n"
+    "{question_content}\n"
+    "</problem>\n\n"
+    "<current_solution>\n"
+    "```python\n{individual}\n```\n"
+    "</current_solution>\n\n"
+    "<failing_tests_feedback>\n"
+    "{feedback}\n"
+    "</failing_tests_feedback>\n\n"
+    "<task>\n"
+    "The current solution fails multiple test cases. Your task is to analyze ALL the failing tests and their error traces provided above, "
+    "identify the root causes of the failures, and generate an improved code solution that addresses ALL the issues.\n\n"
+    "Important guidelines:\n"
+    "- Focus on making the code pass ALL the failing test cases shown above.\n"
+    "- Look for common patterns across the failures to identify the core issues.\n"
+    "- Ensure your revised solution maintains the starter code structure.\n"
+    "</task>\n\n"
+    + _STARTER_CODE_BLOCK
+    + "\n"
+    + _STARTER_CODE_NOTE
+    + "\n"
+    + _CODE_FORMAT_INSTRUCTION
+    + "\n"
+)
+
 
 EDIT_CODE_AGENTIC = (
     """<system_role>

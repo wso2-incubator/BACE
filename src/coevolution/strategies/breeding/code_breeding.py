@@ -72,19 +72,21 @@ class IFailingTestSelector(Protocol):
     """Protocol for selecting failing tests for code individuals."""
 
     @staticmethod
-    def select_failing_test(
+    def select_k_failing_tests(
         coevolution_context: CoevolutionContext,
         code_individual: CodeIndividual,
-    ) -> tuple[TestIndividual, TestPopulationType] | None:
-        """Select a failing test for the given code individual index.
+        k: int = 10,
+    ) -> list[tuple[TestIndividual, TestPopulationType]]:
+        """Select up to k failing tests for the given code individual.
 
         Args:
             coevolution_context: Current coevolution context with populations and interactions.
-            code_individual: The code individual for which to select a failing test.
+            code_individual: The code individual for which to select failing tests.
+            k: Maximum number of failing tests to select.
 
         Returns:
-            A tuple of (selected_test_individual, test_population_type) if a failing test is found,
-            otherwise None.
+            A list of tuples (selected_test_individual, test_population_type).
+            Empty list if no failing tests are found.
         """
         ...
 
@@ -104,6 +106,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         failing_test_selector: IFailingTestSelector,
         init_pop_batch_size: int = 2,
         llm_workers: int = 1,
+        k_failing_tests: int = 10,
     ) -> None:
         """
         Initialize the CodeBreedingStrategy.
@@ -116,6 +119,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             failing_test_selector: Strategy for selecting failing tests for edit operations.
             init_pop_batch_size: Number of individuals to generate per batch during initialization.
             llm_workers: Maximum number of parallel workers for initialization.
+            k_failing_tests: Maximum number of failing tests to select for edit operations (default: 10).
         """
         self.operator = operator
         self.op_rates_config = op_rates_config
@@ -125,6 +129,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         self.failing_test_selector = failing_test_selector
         self.llm_workers = llm_workers
         self.init_pop_batch_size = init_pop_batch_size
+        self.k_failing_tests = k_failing_tests
 
         if pop_config.initial_population_size < init_pop_batch_size:
             self.init_pop_batch_size = pop_config.initial_population_size
@@ -325,39 +330,45 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             return []
         parent: CodeIndividual = parents[0]
 
-        # 2. Select Failing Test
-        failing_test_selection = self.failing_test_selector.select_failing_test(
-            coevolution_context, parent
+        # 2. Select K Failing Tests
+        failing_test_selections = self.failing_test_selector.select_k_failing_tests(
+            coevolution_context, parent, k=self.k_failing_tests
         )
-        if not failing_test_selection:
+        if not failing_test_selections:
             logger.warning(
-                f"No failing test found for code individual '{parent.id}' during edit."
+                f"No failing tests found for code individual '{parent.id}' during edit."
             )
             return []
 
-        failing_test_ind, test_population_type = failing_test_selection
-        error_trace = (
-            coevolution_context.interactions[test_population_type]
-            .execution_results[parent.id]
-            .test_results[failing_test_ind.id]
-            .details
-        )
+        # 3. Collect test cases with error traces
+        failing_tests_with_trace: list[tuple[str, str]] = []
+        test_ids: list[str] = []
 
-        if not error_trace:
-            logger.warning(
-                f"No error trace found for failing test '{failing_test_ind.id}' "
-                f"and code individual '{parent.id}'."
+        for failing_test_ind, test_population_type in failing_test_selections:
+            error_trace = (
+                coevolution_context.interactions[test_population_type]
+                .execution_results[parent.id]
+                .test_results[failing_test_ind.id]
+                .details
             )
-            error_trace = "No error trace available."
 
-        # 3. Execution
+            if not error_trace:
+                logger.warning(
+                    f"No error trace found for failing test '{failing_test_ind.id}' "
+                    f"and code individual '{parent.id}'."
+                )
+                error_trace = "No error trace available."
+
+            failing_tests_with_trace.append((failing_test_ind.snippet, error_trace))
+            test_ids.append(failing_test_ind.id)
+
+        # 4. Execution
         dto = CodeEditInput(
             operation=OPERATION_EDIT,
             question_content=coevolution_context.problem.question_content,
             parent_snippet=parent.snippet,
-            failing_test_case=failing_test_ind.snippet,
+            failing_tests_with_trace=failing_tests_with_trace,
             starter_code=coevolution_context.problem.starter_code,
-            error_trace=error_trace,
         )
 
         try:
@@ -366,7 +377,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             logger.warning(f"Edit operator failed: {e}")
             return []
 
-        # 4. Construction
+        # 5. Construction
         offspring = []
         for res in output.results:
             prob = self.probability_assigner.assign_probability(
@@ -381,9 +392,11 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
                     probability=prob,
                     creation_op=OPERATION_EDIT,
                     generation_born=coevolution_context.code_population.generation + 1,
-                    parents={"code": [parent.id], "test": [failing_test_ind.id]},
-                    # extend res.metadata with failing test info
-                    metadata={**res.metadata, "fixed_error_trace": error_trace},
+                    parents={"code": [parent.id], "test": test_ids},
+                    metadata={
+                        **res.metadata,
+                        "num_failing_tests_used": len(failing_tests_with_trace),
+                    },
                 )
             )
 

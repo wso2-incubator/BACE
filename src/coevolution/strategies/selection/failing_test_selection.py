@@ -35,28 +35,30 @@ class FailingTestSelector:
         return int(ranked_items[selected_rank_index][0])
 
     @staticmethod
-    def select_failing_test(
+    def select_k_failing_tests(
         coevolution_context: CoevolutionContext,
         code_individual: CodeIndividual,
-    ) -> tuple[TestIndividual, TestPopulationType] | None:
-        """Select a failing test for the given code individual.
+        k: int = 10,
+    ) -> list[tuple[TestIndividual, TestPopulationType]]:
+        """Select up to k failing tests for the given code individual.
 
         Aggregates failing tests from all test populations and uses rank selection
-        to pick one, favoring tests with higher belief (probability).
+        to pick up to k tests, favoring tests with higher belief (probability).
+        If fewer than k failing tests exist, returns all available failing tests.
 
         Args:
             coevolution_context: Current coevolution context with populations and interactions.
-            code_individual: The code individual for which to select a failing test.
+            code_individual: The code individual for which to select failing tests.
+            k: Maximum number of failing tests to select (default: 10).
 
         Returns:
-            A tuple of (selected_test_individual, test_population_type) if a failing test is found,
-            otherwise None.
+            A list of tuples (selected_test_individual, test_population_type).
+            Empty list if no failing tests are found.
         """
-
         # List of candidates: (TestIndividual, TestPopulationType)
         candidates: list[tuple[TestIndividual, TestPopulationType]] = []
 
-        # 2. Iterate over all test populations (Unit, Differential, Public, etc.)
+        # Iterate over all test populations (Unit, Differential, Public, etc.)
         for test_type, test_pop in coevolution_context.test_populations.items():
             if test_type not in coevolution_context.interactions:
                 logger.warning(f"No interaction data for test population '{test_type}'")
@@ -80,11 +82,28 @@ class FailingTestSelector:
                     candidates.append((test_ind, test_type))
 
         if not candidates:
-            return None
+            return []
 
-        # 3. Rank Selection
+        # Limit to available tests if fewer than k exist
+        num_to_select = min(k, len(candidates))
+
         # Extract probabilities from the TestIndividual objects
         probabilities = [ind.probability for ind, _ in candidates]
-        selected_idx = FailingTestSelector._rank_selection(probabilities)
 
-        return candidates[selected_idx]
+        # Select k tests using rank selection (with replacement prevention)
+        selected_tests: list[tuple[TestIndividual, TestPopulationType]] = []
+        remaining_candidates = candidates.copy()
+        remaining_probabilities = probabilities.copy()
+
+        for _ in range(num_to_select):
+            if not remaining_candidates:
+                break
+
+            selected_idx = FailingTestSelector._rank_selection(remaining_probabilities)
+            selected_tests.append(remaining_candidates[selected_idx])
+
+            # Remove selected item to prevent duplicates
+            remaining_candidates.pop(selected_idx)
+            remaining_probabilities.pop(selected_idx)
+
+        return selected_tests

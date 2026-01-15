@@ -6,9 +6,7 @@ import numpy as np
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import CoevolutionContext, InteractionData
-from coevolution.strategies.selection.failing_test_selection import (
-    FailingTestSelector,
-)
+from coevolution.strategies.selection.failing_test_selection import FailingTestSelector
 from infrastructure.sandbox import TestExecutionResult, TestResult
 
 
@@ -54,7 +52,7 @@ class TestFailingTestSelector(unittest.TestCase):
             self.assertEqual(selected_index, 0)
 
     # =========================================================================
-    # select_failing_test Tests
+    # select_k_failing_tests Tests
     # =========================================================================
 
     def _create_mock_population_data(
@@ -114,16 +112,16 @@ class TestFailingTestSelector(unittest.TestCase):
         self.mock_context.interactions[test_type] = mock_interaction
 
     def test_select_failing_test_no_failures(self) -> None:
-        """Should return None if all tests passed."""
+        """Should return empty list if all tests passed."""
         self._create_mock_population_data(
             "unittest",
             [{"status": "passed", "prob": 0.5}, {"status": "passed", "prob": 0.5}],
         )
 
-        result = FailingTestSelector.select_failing_test(
-            self.mock_context, self.mock_code_individual
+        result = FailingTestSelector.select_k_failing_tests(
+            self.mock_context, self.mock_code_individual, k=1
         )
-        self.assertIsNone(result)
+        self.assertEqual(result, [])
 
     def test_select_failing_test_single_failure(self) -> None:
         """Should return the specific failing test tuple correctly."""
@@ -133,13 +131,13 @@ class TestFailingTestSelector(unittest.TestCase):
         )
 
         with patch.object(FailingTestSelector, "_rank_selection", return_value=0):
-            result = FailingTestSelector.select_failing_test(
-                self.mock_context, self.mock_code_individual
+            result = FailingTestSelector.select_k_failing_tests(
+                self.mock_context, self.mock_code_individual, k=1
             )
 
-            self.assertIsNotNone(result)
+            self.assertEqual(len(result), 1)
             if result:
-                selected_test, population_type = result
+                selected_test, population_type = result[0]
                 self.assertEqual(population_type, "unittest")
                 self.assertEqual(selected_test.id, "unittest_0")
                 self.assertEqual(selected_test.probability, 0.9)
@@ -182,13 +180,13 @@ class TestFailingTestSelector(unittest.TestCase):
 
         # Mock rank selection to pick the second candidate (the differential one)
         with patch.object(FailingTestSelector, "_rank_selection", return_value=1):
-            result = FailingTestSelector.select_failing_test(
-                self.mock_context, self.mock_code_individual
+            result = FailingTestSelector.select_k_failing_tests(
+                self.mock_context, self.mock_code_individual, k=1
             )
 
-            self.assertIsNotNone(result)
+            self.assertEqual(len(result), 1)
             if result:
-                selected_test, population_type = result
+                selected_test, population_type = result[0]
                 self.assertEqual(population_type, "differential")
                 self.assertEqual(selected_test.id, "diff_0")
 
@@ -200,14 +198,14 @@ class TestFailingTestSelector(unittest.TestCase):
         interaction = self.mock_context.interactions["unittest"]
         interaction.execution_results[self.mock_code_individual.id].script_error = True
 
-        result = FailingTestSelector.select_failing_test(
-            self.mock_context, self.mock_code_individual
+        result = FailingTestSelector.select_k_failing_tests(
+            self.mock_context, self.mock_code_individual, k=1
         )
         # Using only the observation_matrix for selection means script_error
         # should not prevent choosing a failing test when the matrix indicates one.
-        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 1)
         if result:
-            selected_test, population_type = result
+            selected_test, population_type = result[0]
             self.assertEqual(selected_test.id, "unittest_0")
 
     def test_select_failing_test_missing_execution_result(self) -> None:
@@ -218,12 +216,12 @@ class TestFailingTestSelector(unittest.TestCase):
         interaction = self.mock_context.interactions["unittest"]
         interaction.execution_results = {}
 
-        result = FailingTestSelector.select_failing_test(
-            self.mock_context, self.mock_code_individual
+        result = FailingTestSelector.select_k_failing_tests(
+            self.mock_context, self.mock_code_individual, k=1
         )
-        # Should return None since execution_results are missing and no fallback
+        # Should return empty list since execution_results are missing and no fallback
         if result:
-            selected_test, population_type = result
+            selected_test, population_type = result[0]
             self.assertEqual(selected_test.id, "unittest_0")
 
     def test_select_failing_test_missing_details(self) -> None:
@@ -234,32 +232,32 @@ class TestFailingTestSelector(unittest.TestCase):
         )
 
         with patch.object(FailingTestSelector, "_rank_selection", return_value=0):
-            result = FailingTestSelector.select_failing_test(
-                self.mock_context, self.mock_code_individual
+            result = FailingTestSelector.select_k_failing_tests(
+                self.mock_context, self.mock_code_individual, k=1
             )
 
-            self.assertIsNotNone(result)
+            self.assertEqual(len(result), 1)
             if result:
-                selected_test, _ = result
+                selected_test, _ = result[0]
                 self.assertEqual(selected_test.id, "unittest_0")
 
     def test_select_failing_test_interaction_missing(self) -> None:
         """Should skip if test type exists in populations but not in interactions."""
         self.mock_context.test_populations["ghost_pop"] = MagicMock()
 
-        result = FailingTestSelector.select_failing_test(
-            self.mock_context, self.mock_code_individual
+        result = FailingTestSelector.select_k_failing_tests(
+            self.mock_context, self.mock_code_individual, k=1
         )
-        self.assertIsNone(result)
+        self.assertEqual(result, [])
 
     def test_select_failing_test_individual_not_found(self) -> None:
-        """Should return None if code individual is not in population."""
+        """Should return empty list if code individual is not in population."""
         self.mock_context.code_population.get_index_of_individual.return_value = -1
 
-        result = FailingTestSelector.select_failing_test(
-            self.mock_context, self.mock_code_individual
+        result = FailingTestSelector.select_k_failing_tests(
+            self.mock_context, self.mock_code_individual, k=1
         )
-        self.assertIsNone(result)
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":
