@@ -144,6 +144,15 @@ class OrchestratorBuilder:
         """
         Add an evolved test population profile.
 
+        The ORDER in which you call this method determines the order of probability
+        updates during cooperative evolution. Test types are updated in the order
+        they were added (after public tests which always update first).
+
+        Example:
+            builder.add_test_profile("differential", diff_profile)  # Updates first
+            builder.add_test_profile("unittest", unit_profile)      # Updates second
+            # Result: public → differential → unittest
+
         Args:
             test_type: Unique key for this test population (e.g., "unittest", "differential")
             profile: Complete test population configuration
