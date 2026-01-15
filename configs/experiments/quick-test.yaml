@@ -1,0 +1,67 @@
+# Quick Test Configuration
+# Minimal settings for fast debugging
+
+experiment:
+  name: "quick-test"
+  description: "Fast test run with small populations"
+
+llm: "llm/gpt-5-mini.yaml"
+
+# Smaller populations for speed
+code_profile:
+  initial_prior: 0.2
+  initial_population_size: 3
+  max_population_size: 5
+  offspring_rate: 0.3
+  elitism_rate: 0.3
+  mutation_rate: 0.2
+  crossover_rate: 0.2
+  edit_rate: 0.6
+  k_failing_tests: 5
+  init_pop_batch_size: 1
+  llm_workers: 3
+  diversity_enabled: false
+  prob_assigner_strategy: "min"
+
+unittest_profile:
+  initial_prior: 0.2
+  initial_population_size: 5
+  max_population_size: 5
+  offspring_rate: 0.8
+  elitism_rate: 0.4
+  mutation_rate: 0.3
+  crossover_rate: 0.2
+  edit_rate: 0.5
+  alpha: 0.2
+  beta: 0.2
+  gamma: 0.1
+  learning_rate: 0.05
+  llm_workers: 2
+  diversity_enabled: false
+
+differential_profile: "profiles/differential/standard.yaml"
+public_profile: "profiles/public/standard.yaml"
+infrastructure: "infrastructure/sandbox-default.yaml"
+
+# Short schedule
+schedule:
+  total_duration: 3
+  code_step: 1
+  test_step: 1
+  start_with: "test"
+
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "easy"
+
+subset:
+  start_index: 0
+  end_index: 2  # Just first 2 problems
+  problem_ids: null
+
+logging:
+  console_level: "INFO"
+  file_level: "DEBUG"
+  log_file_base_name: "quick_test"

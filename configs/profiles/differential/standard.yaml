@@ -1,0 +1,21 @@
+# Standard Differential Test Profile
+# Settings for differential test discovery
+
+initial_prior: 0.2
+initial_population_size: 0  # Bootstrap from discoveries
+max_population_size: 100
+offspring_rate: 0.5
+elitism_rate: 0.3
+
+# Operation rate (discovery-only initially)
+discovery_rate: 1.0
+
+# Bayesian parameters (less reliable than unit tests)
+alpha: 0.3
+beta: 0.5
+gamma: 0.5
+learning_rate: 0.025
+
+# Performance - independent scaling
+llm_workers: 4   # Parallel LLM script generation
+cpu_workers: 4   # Parallel sandbox execution (from env COEVOLUTION_WORKERS)

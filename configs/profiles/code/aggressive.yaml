@@ -1,0 +1,21 @@
+# Aggressive Code Profile
+# High mutation and edit rates for faster exploration
+
+initial_prior: 0.2
+initial_population_size: 15
+max_population_size: 20
+offspring_rate: 0.5
+elitism_rate: 0.2
+
+# Operation rates - favor exploration
+mutation_rate: 0.3
+crossover_rate: 0.1
+edit_rate: 0.6
+
+k_failing_tests: 15
+
+init_pop_batch_size: 3
+llm_workers: 15
+
+diversity_enabled: true
+prob_assigner_strategy: "min"

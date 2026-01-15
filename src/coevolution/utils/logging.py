@@ -34,9 +34,16 @@ def setup_logging(
     console_level: str = "DEBUG",
     file_level: str = "DEBUG",
     log_file_base_name: str = "coevolution_run",
+    run_id: str | None = None,
 ) -> None:
     """
     Architecturally robust logging setup that prevents multiprocessing corruption.
+
+    Args:
+        console_level: Log level for console output (default: "DEBUG")
+        file_level: Log level for file output (default: "DEBUG")
+        log_file_base_name: Base name for log files (default: "coevolution_run")
+        run_id: Unique identifier for this run, included in log file names (default: generates UUID)
     """
     logger.remove()
 
@@ -48,12 +55,16 @@ def setup_logging(
     is_main_process = current_process.name == "MainProcess"
     pid = os.getpid()
 
+    # Generate or use provided run_id
+    if run_id is None:
+        run_id = uuid.uuid4().hex[:8]
+
     # ------------------------------------------------------------------
     # 2. CONTEXT CONFIGURATION
     # ------------------------------------------------------------------
     # Standardize context to ensure every log line has traceable metadata
     default_context = {
-        "run_id": "GLOBAL",
+        "run_id": run_id,
         "problem_id": "SETUP",
         "proc_type": "MAIN" if is_main_process else "WORKER",
     }
@@ -93,8 +104,9 @@ def setup_logging(
     if is_main_process:
         # MAIN PROCESS: Writes to the master log file
         # We REMOVE compression to prevent locking issues.
-        # FIXME: uuid was added to filename to avoid name collision in repeated runs.
-        log_file_path = f"logs/{log_file_base_name}_{{time:YYYYMMDD}}_{uuid.uuid4().hex[:8]}_MASTER.log"
+        log_file_path = (
+            f"logs/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_MASTER.log"
+        )
         logger.add(
             log_file_path,
             level=file_level.upper(),
@@ -109,8 +121,7 @@ def setup_logging(
         # WORKER PROCESS: Writes to its own dedicated file
         # This completely eliminates the "FileNotFound" race condition.
         # We include the PID in the filename.
-        # FIXME: uuid was added to filename to avoid name collision in repeated runs.
-        log_file_path = f"logs/workers/{log_file_base_name}_{{time:YYYYMMDD}}_WORKER_{pid}_{uuid.uuid4().hex[:8]}.log"
+        log_file_path = f"logs/workers/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_WORKER_{pid}.log"
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)

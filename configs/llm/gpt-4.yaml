@@ -1,0 +1,10 @@
+# GPT-4 Configuration
+# Higher capability model for complex reasoning
+
+provider: "openai"
+model: "gpt-4"
+reasoning_effort: "medium"
+
+temperature: 0.7
+max_tokens: null
+top_p: 1.0

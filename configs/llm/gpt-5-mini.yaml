@@ -1,0 +1,16 @@
+# GPT-5 Mini Configuration
+# High performance, lower cost model for codevolution experiments
+
+provider: "openai"
+model: "gpt-5-mini"
+reasoning_effort: "minimal"
+
+# Optional: API configuration (uses environment variables by default)
+# api_key: "${OPENAI_API_KEY}"
+# base_url: "${OPENAI_BASE_URL}"
+# organization: "${OPENAI_ORG_ID}"
+
+# Generation parameters
+temperature: 0.7
+max_tokens: null  # Use model default
+top_p: 1.0

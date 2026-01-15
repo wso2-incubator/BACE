@@ -1,0 +1,12 @@
+# Alternating Evolution Schedule - 6 Generations
+# Alternates between code and test evolution
+
+total_duration: 6
+code_step: 1
+test_step: 1
+start_with: "test"
+
+# Optional: warmup phase (commented out)
+# warmup:
+#   target: "code"
+#   duration: 5
