@@ -103,7 +103,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         failing_test_selector: IFailingTestSelector,
         init_pop_batch_size: int = 2,
-        max_workers: int = 1,
+        llm_workers: int = 1,
     ) -> None:
         """
         Initialize the CodeBreedingStrategy.
@@ -115,7 +115,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             parent_selector: Strategy for selecting parent individuals.
             failing_test_selector: Strategy for selecting failing tests for edit operations.
             init_pop_batch_size: Number of individuals to generate per batch during initialization.
-            max_workers: Maximum number of parallel workers for initialization.
+            llm_workers: Maximum number of parallel workers for initialization.
         """
         self.operator = operator
         self.op_rates_config = op_rates_config
@@ -123,7 +123,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         self.probability_assigner = probability_assigner
         self.parent_selector = parent_selector
         self.failing_test_selector = failing_test_selector
-        self.max_workers = max_workers
+        self.llm_workers = llm_workers
         self.init_pop_batch_size = init_pop_batch_size
 
         if pop_config.initial_population_size < init_pop_batch_size:
@@ -173,7 +173,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             f"Initializing population of size {initial_pop_size} in {num_batches} parallel batches."
         )
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             # Submit all batch tasks at once
             future_to_batch = {
                 executor.submit(self.operator.generate_initial_snippets, input_dto): i

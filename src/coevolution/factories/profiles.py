@@ -86,7 +86,7 @@ def create_default_code_profile(
     crossover_rate: float = 0.2,
     edit_rate: float = 0.6,
     init_pop_batch_size: int = 2,
-    max_workers: int = 10,
+    llm_workers: int = 4,
     diversity_enabled: bool = True,
     prob_assigner_strategy: str = "min",
 ) -> CodeProfile:
@@ -112,7 +112,7 @@ def create_default_code_profile(
         crossover_rate: Probability of crossover operation (default: 0.2)
         edit_rate: Probability of edit operation (default: 0.6)
         init_pop_batch_size: Number of individuals to generate per batch during initialization (default: 2)
-        max_workers: Parallel workers for breeding (default: 1)
+        llm_workers: Number of parallel LLM workers for breeding (default: 4)
         diversity_enabled: Use diversity selector vs simple top-k (default: True)
 
     Returns:
@@ -166,7 +166,7 @@ def create_default_code_profile(
         parent_selector=parent_selector,
         failing_test_selector=FailingTestSelector,
         init_pop_batch_size=init_pop_batch_size,
-        max_workers=max_workers,
+        llm_workers=llm_workers,
     )
 
     # Create elite selector
@@ -198,7 +198,7 @@ def create_unittest_test_profile(
     beta: float = 0.3,
     gamma: float = 0.3,
     learning_rate: float = 0.05,
-    max_workers: int = 1,
+    llm_workers: int = 1,
     diversity_enabled: bool = True,
 ) -> TestProfile:
     """
@@ -223,7 +223,7 @@ def create_unittest_test_profile(
         beta: P(pass | code incorrect, test correct) (default: 0.3)
         gamma: P(pass | both incorrect) (default: 0.3)
         learning_rate: Belief update learning rate (default: 0.05)
-        max_workers: Parallel workers for breeding (default: 1)
+        llm_workers: Number of parallel LLM workers for breeding (default: 1)
 
     Returns:
         TestProfile with configured components
@@ -271,7 +271,7 @@ def create_unittest_test_profile(
         pop_config=population_config,
         probability_assigner=prob_assigner,
         parent_selector=parent_selector,
-        max_workers=max_workers,
+        llm_workers=llm_workers,
     )
 
     # Create elite selector (diversity-aware for tests)
@@ -308,7 +308,8 @@ def create_differential_test_profile(
     beta: float = 0.3,
     gamma: float = 0.3,
     learning_rate: float = 0.05,
-    max_workers: int = 1,
+    llm_workers: int = 4,
+    cpu_workers: int = 8,
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
 ) -> TestProfile:
@@ -335,7 +336,8 @@ def create_differential_test_profile(
         beta: P(pass | code incorrect, test correct) (default: 0.3)
         gamma: P(pass | both incorrect) (default: 0.3)
         learning_rate: Belief update learning rate (default: 0.05)
-        max_workers: Parallel workers for breeding (default: 1)
+        llm_workers: Number of parallel LLM workers for script generation (default: 4)
+        cpu_workers: Number of parallel CPU workers for sandbox execution (default: 8)
 
     Returns:
         TestProfile with configured components
@@ -374,29 +376,10 @@ def create_differential_test_profile(
     )
     prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
 
-    # -------------------------------------------------------------------------
-    # RESOURCE PARTITIONING LOGIC
-    # -------------------------------------------------------------------------
-    # We split the global 'max_workers' budget between Breeding (Threads) and Finder (Processes).
-    # Goal: Maximize Finder parallelism (CPU-bound) while keeping Breeding active (I/O-bound).
-
-    # 1. Determine Breeding Threads (The "Width")
-    # We cap threads at 4. Why?
-    # - 4 threads are enough to keep the LLM busy.
-    # - We don't want 32 threads spawning 1 worker each (High overhead).
-    # - We prefer 4 threads spawning 8 workers each (High throughput).
-    breeding_workers = min(4, max_workers)
-
-    # 2. Determine Finder Workers per Thread (The "Depth")
-    # Distribute the remaining budget to the workers.
-    # Example: max_workers=12. breeding=4. finder = 12 // 4 = 3.
-    # Total processes = 4 * 3 = 12. Budget respected.
-    finder_workers = max(1, max_workers // breeding_workers)
-
     differential_finder = DifferentialFinder(
         sandbox_config=sandbox_config,
-        enable_multiprocessing=finder_workers > 1,
-        num_workers=finder_workers,
+        enable_multiprocessing=cpu_workers > 1,
+        cpu_workers=cpu_workers,
     )
 
     # Create breeding strategy
@@ -408,7 +391,7 @@ def create_differential_test_profile(
         parent_selector=parent_selector,
         functionally_equivalent_code_selector=FunctionallyEqSelector(),
         differential_finder=differential_finder,
-        max_workers=breeding_workers,
+        llm_workers=llm_workers,
     )
 
     # Create elite selector (diversity-aware for differential tests)
@@ -468,7 +451,7 @@ def create_public_test_profile(
 def create_agent_coder_code_profile(
     llm_client: LLMClient,
     initial_prior: float = 0.2,
-    max_workers: int = 1,
+    llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
 ) -> CodeProfile:
     """
@@ -483,7 +466,7 @@ def create_agent_coder_code_profile(
     Args:
         llm_client: LLM client for code generation.
         initial_prior: Initial probability for new code (default: 0.2).
-        max_workers: Parallel workers for initialization (default: 1).
+        llm_workers: Number of parallel workers for initialization (default: 1).
         prob_assigner_strategy: Strategy for assigning probabilities (default: "min").
 
     Returns:
@@ -516,7 +499,7 @@ def create_agent_coder_code_profile(
         op_rates_config=operator_rates,
         pop_config=population_config,
         probability_assigner=prob_assigner,
-        max_workers=max_workers,
+        llm_workers=llm_workers,
     )
 
     # 6. Selector (TopK is sufficient/fastest for size 1)

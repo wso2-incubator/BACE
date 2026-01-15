@@ -252,7 +252,7 @@ class TestExecutionSystemInitialization:
         system = ExecutionSystem(default_sandbox_config)
         assert system.sandbox_config is default_sandbox_config
         assert system.enable_multiprocessing is True
-        assert system._num_workers is None
+        assert system._cpu_workers is None
 
     def test_initialization_with_multiprocessing_disabled(
         self, default_sandbox_config
@@ -263,15 +263,15 @@ class TestExecutionSystemInitialization:
 
     def test_initialization_with_custom_workers(self, default_sandbox_config) -> None:
         """Test initialization with custom number of workers."""
-        system = ExecutionSystem(default_sandbox_config, num_workers=4)
-        assert system._num_workers == 4
+        system = ExecutionSystem(default_sandbox_config, cpu_workers=4)
+        assert system._cpu_workers == 4
 
     def test_initialization_multiprocessing_off_ignores_workers(
         self, default_sandbox_config
     ) -> None:
-        """Test that num_workers is ignored when multiprocessing is disabled."""
+        """Test that cpu_workers is ignored when multiprocessing is disabled."""
         system = ExecutionSystem(
-            default_sandbox_config, enable_multiprocessing=False, num_workers=8
+            default_sandbox_config, enable_multiprocessing=False, cpu_workers=8
         )
         num_workers = system._get_num_workers(100)
         assert num_workers == 1  # Should be 1 when multiprocessing is off
@@ -288,15 +288,15 @@ class TestWorkerCountDetermination:
         assert system._get_num_workers(100) == 1
 
     def test_get_num_workers_with_custom_count(self, default_sandbox_config) -> None:
-        """Test worker count respects custom num_workers."""
-        system = ExecutionSystem(default_sandbox_config, num_workers=4)
+        """Test worker count respects custom cpu_workers."""
+        system = ExecutionSystem(default_sandbox_config, cpu_workers=4)
         assert system._get_num_workers(100) == 4
 
     def test_get_num_workers_limited_by_population(
         self, default_sandbox_config
     ) -> None:
         """Test that worker count doesn't exceed population size."""
-        system = ExecutionSystem(default_sandbox_config, num_workers=10)
+        system = ExecutionSystem(default_sandbox_config, cpu_workers=10)
         assert system._get_num_workers(3) == 3
 
     @patch("os.cpu_count", return_value=8)
@@ -781,7 +781,7 @@ if __name__ == '__main__':
         MockSandboxClass.from_config.return_value = real_sandbox
 
         system = ExecutionSystem(
-            real_sandbox_config, enable_multiprocessing=True, num_workers=2
+            real_sandbox_config, enable_multiprocessing=True, cpu_workers=2
         )
 
         # Execute tests with real sandbox and multiprocessing
@@ -1729,7 +1729,7 @@ class TestSequentialVsMultiprocessing:
 
         # Run multiprocessing (with 1 worker to be deterministic)
         system_mp = ExecutionSystem(
-            mock_sandbox, enable_multiprocessing=True, num_workers=1
+            default_sandbox_config, enable_multiprocessing=True, cpu_workers=1
         )
         data_mp = system_mp.execute_tests(
             simple_code_population, simple_test_population

@@ -6,13 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from loguru import logger
 
-from coevolution.strategies.breeding.base_breeding import BaseBreedingStrategy
 from coevolution.core.interfaces import (
     BaseIndividual,
     CoevolutionContext,
     OperatorRatesConfig,
     Problem,
 )
+from coevolution.strategies.breeding.base_breeding import BaseBreedingStrategy
 
 
 # --- 1. Mocks & Test Implementation ---
@@ -68,9 +68,9 @@ class TestStrategy(BaseBreedingStrategy[MockIndividual]):
     """
 
     def __init__(
-        self, op_rates_config: OperatorRatesConfig, max_workers: int = 1
+        self, op_rates_config: OperatorRatesConfig, llm_workers: int = 1
     ) -> None:
-        super().__init__(op_rates_config, max_workers)
+        super().__init__(op_rates_config, llm_workers)
         # Register handlers that we can swap out during tests
         self._strategies = {"op_fast": self._handle_fast, "op_slow": self._handle_slow}
 
@@ -100,13 +100,13 @@ class TestStrategy(BaseBreedingStrategy[MockIndividual]):
 @pytest.fixture
 def strategy(mock_rates_config: OperatorRatesConfig) -> TestStrategy:
     """Default single-threaded strategy."""
-    return TestStrategy(mock_rates_config, max_workers=1)
+    return TestStrategy(mock_rates_config, llm_workers=1)
 
 
 @pytest.fixture
 def parallel_strategy(mock_rates_config: OperatorRatesConfig) -> TestStrategy:
     """Parallel strategy with 4 workers."""
-    return TestStrategy(mock_rates_config, max_workers=4)
+    return TestStrategy(mock_rates_config, llm_workers=4)
 
 
 # --- 2. Unit Tests: Selector & Attempt Wrapper ---
@@ -206,7 +206,7 @@ def test_breed_parallel_smart_batching(
     parallel_strategy.mock_fast_return = [MockIndividual("HighYield") for _ in range(5)]
 
     # We want 10.
-    # Batch size is max_workers * 2 = 8.
+    # Batch size is llm_workers * 2 = 8.
     # 8 tasks * 5 yield = 40 potentials.
     # But early exit should catch it.
 

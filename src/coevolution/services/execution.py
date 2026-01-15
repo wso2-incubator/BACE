@@ -84,7 +84,7 @@ class ExecutionSystem(IExecutionSystem):
         self,
         sandbox_config: SandboxConfig,
         enable_multiprocessing: bool = True,
-        num_workers: int | None = None,
+        cpu_workers: int | None = None,
     ):
         """
         Initialize the execution system with sandbox configuration.
@@ -92,11 +92,11 @@ class ExecutionSystem(IExecutionSystem):
         Args:
             sandbox_config: Configuration for creating sandbox instances
             enable_multiprocessing: Whether to use multiprocessing for parallel execution
-            num_workers: Number of worker processes (None = auto-detect from CPU count)
+            cpu_workers: Number of worker processes (None = auto-detect from CPU count)
         """
         self.sandbox_config = sandbox_config
         self.enable_multiprocessing = enable_multiprocessing
-        self._num_workers = num_workers
+        self._cpu_workers = cpu_workers
 
         # Create a local sandbox instance for sequential execution
         # (multiprocessing workers will create their own)
@@ -107,8 +107,8 @@ class ExecutionSystem(IExecutionSystem):
         if not self.enable_multiprocessing:
             return 1
 
-        if self._num_workers is not None:
-            return min(self._num_workers, num_codes)
+        if self._cpu_workers is not None:
+            return min(self._cpu_workers, num_codes)
 
         try:
             cpu_count = os.cpu_count() or 1

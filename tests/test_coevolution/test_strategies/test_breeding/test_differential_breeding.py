@@ -106,7 +106,7 @@ def strategy(
         functionally_equivalent_code_selector=cast(
             IFunctionallyEquivalentCodeSelector, mock_func_eq_selector
         ),
-        max_workers=1,
+        llm_workers=1,
     )
 
 

@@ -103,7 +103,7 @@ class DifferentialFinder(IDifferentialFinder):
         self,
         sandbox_config: SandboxConfig,
         enable_multiprocessing: bool = True,
-        num_workers: int = 4,
+        cpu_workers: int = 4,
     ) -> None:
         """
         Initialize the finder with configuration.
@@ -111,11 +111,11 @@ class DifferentialFinder(IDifferentialFinder):
         Args:
             sandbox_config: Configuration to create sandboxes.
             enable_multiprocessing: Whether to use parallel workers.
-            num_workers: Number of worker processes (default 4).
+            cpu_workers: Number of worker processes (default 4).
         """
         self.sandbox_config = sandbox_config
         self.enable_multiprocessing = enable_multiprocessing
-        self.num_workers = num_workers
+        self.cpu_workers = cpu_workers
 
         # Create a local sandbox for generator execution (lightweight task)
         # or for sequential fallback.
@@ -166,7 +166,7 @@ class DifferentialFinder(IDifferentialFinder):
 
         # 2. Check Execution Mode
         # If disabled or strictly 1 worker, use legacy sequential path
-        if not self.enable_multiprocessing or self.num_workers <= 1:
+        if not self.enable_multiprocessing or self.cpu_workers <= 1:
             return self._find_differential_sequential(
                 code_a_snippet, code_b_snippet, test_inputs, limit
             )
@@ -223,10 +223,10 @@ class DifferentialFinder(IDifferentialFinder):
         # Calculate optimal chunk size
         # Formula: total // (workers * multiplier)
         # e.g., 100 inputs / (4 workers * 4) = 6 items per chunk
-        chunk_size = max(1, len(inputs) // (self.num_workers * 4))
+        chunk_size = max(1, len(inputs) // (self.cpu_workers * 4))
 
         try:
-            with multiprocessing.Pool(processes=self.num_workers) as pool:
+            with multiprocessing.Pool(processes=self.cpu_workers) as pool:
                 # Use imap_unordered to stream results as they finish
                 result_iterator = pool.imap_unordered(
                     _worker_entry, tasks, chunksize=chunk_size

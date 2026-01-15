@@ -25,6 +25,7 @@ from coevolution.core.interfaces import (
     PopulationConfig,
     Problem,
 )
+
 from ..operators.unittest_llm_operator import (
     UnittestCrossoverInput,
     UnittestEditInput,
@@ -46,10 +47,10 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         pop_config: PopulationConfig,
         probability_assigner: IProbabilityAssigner,
         parent_selector: IParentSelectionStrategy[TestIndividual],
-        max_workers: int = 1,
+        llm_workers: int = 1,
     ) -> None:
-        # Initialize Base Class (sets up op_rates, max_workers, and strategies dict)
-        super().__init__(op_rates_config, max_workers)
+        # Initialize Base Class (sets up op_rates, llm_workers, and strategies dict)
+        super().__init__(op_rates_config, llm_workers)
 
         self.operator = operator
         self.pop_config = pop_config

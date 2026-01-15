@@ -23,10 +23,10 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
     def __init__(
         self,
         op_rates_config: OperatorRatesConfig,
-        max_workers: int = 1,
+        llm_workers: int = 1,
     ) -> None:
         self.op_rates_config = op_rates_config
-        self.max_workers = max_workers
+        self.llm_workers = llm_workers
         self._strategies: dict[str, Callable[[CoevolutionContext], list[T]]] = {}
 
     def _operator_selector(self) -> str:
@@ -67,7 +67,7 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
         offspring_list: list[T] = []
 
         # Optimization: Bypass overhead if single-threaded
-        if self.max_workers <= 1:
+        if self.llm_workers <= 1:
             failures = 0
             max_failures = 10  # TODO: make configurable
 
@@ -91,7 +91,7 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
         consecutive_failures = 0
         max_consecutive_failures = 10  # TODO: make configurable
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             while len(offspring_list) < num_offsprings:
                 # 1. Circuit Breaker Check
                 if consecutive_failures >= max_consecutive_failures:
@@ -109,7 +109,7 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
                 # Don't submit 100 tasks if we only have 5 workers.
                 # Submit enough to fill the pool + a buffer.
                 # This allows us to stop early if the first batch yields high returns.
-                batch_cap = self.max_workers * 2
+                batch_cap = self.llm_workers * 2
                 batch_size = min(needed, batch_cap)
 
                 futures = [

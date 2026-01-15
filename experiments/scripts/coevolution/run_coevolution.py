@@ -216,7 +216,7 @@ def main(
         crossover_rate=0.2,
         edit_rate=0.6,
         init_pop_batch_size=2,
-        max_workers=10,
+        llm_workers=10,
         diversity_enabled=True,
     )
 
@@ -239,7 +239,7 @@ def main(
         beta=0.2,
         gamma=0.1,
         learning_rate=0.05,
-        max_workers=cpu_count,
+        llm_workers=cpu_count,
         diversity_enabled=True,
     )
 
@@ -256,9 +256,9 @@ def main(
         beta=0.5,
         gamma=0.5,
         learning_rate=0.025,
-        # Resource Partitioning:
-        max_workers=cpu_count,  # Total Budget
-        # Logic inside factory splits this (e.g., 4 threads, 3 workers each)
+        # Resource Partitioning: Independent scaling of LLM and CPU workers
+        llm_workers=4,  # Parallel LLM script generation
+        cpu_workers=cpu_count,  # Parallel sandbox execution
     )
 
     public_profile = create_public_test_profile(

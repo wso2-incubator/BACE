@@ -92,10 +92,10 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         probability_assigner: IProbabilityAssigner,
         parent_selector: IParentSelectionStrategy[TestIndividual],
         functionally_equivalent_code_selector: IFunctionallyEquivalentCodeSelector,
-        max_workers: int = 1,
+        llm_workers: int = 1,
         divergence_limit: int = 5,
     ) -> None:
-        super().__init__(op_rates_config, max_workers)
+        super().__init__(op_rates_config, llm_workers)
 
         self.operator = operator
         self.differential_finder = differential_finder
@@ -246,7 +246,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         total_candidates = len(final_candidate_queue)
         candidate_idx = 0
 
-        if self.max_workers <= 1:
+        if self.llm_workers <= 1:
             while (
                 len(offspring_list) < num_offsprings
                 and candidate_idx < total_candidates
@@ -261,13 +261,13 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             return offspring_list[:num_offsprings]
 
         # Multi-threaded logic (same as before, just using final_candidate_queue)
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             while (
                 len(offspring_list) < num_offsprings
                 and candidate_idx < total_candidates
             ):
                 remaining_needed = num_offsprings - len(offspring_list)
-                batch_size = min(remaining_needed + 2, self.max_workers * 2)
+                batch_size = min(remaining_needed + 2, self.llm_workers * 2)
 
                 current_batch_futures = []
                 for _ in range(batch_size):
