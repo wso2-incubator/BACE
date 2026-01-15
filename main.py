@@ -7,19 +7,19 @@ Allows CLI overrides for common parameters.
 
 Usage:
     # Use full experiment config
-    uv run python main.py --config configs/experiments/default.yaml
+    uv run python main.py run --config configs/experiments/default.yaml
 
     # Override specific components
-    uv run python main.py --config configs/experiments/default.yaml \
+    uv run python main.py run --config configs/experiments/default.yaml \
         --llm configs/llm/gpt-4.yaml
 
     # Override dataset/subset parameters
-    uv run python main.py --config configs/experiments/default.yaml \
+    uv run python main.py run --config configs/experiments/default.yaml \
         --start-index 100 --end-index 200 \
         --difficulty easy
 
     # Quick test
-    uv run python main.py --config configs/experiments/quick-test.yaml \
+    uv run python main.py run --config configs/experiments/quick-test.yaml \
         --problem-ids HumanEval/1 HumanEval/2
 """
 
@@ -364,7 +364,7 @@ def _run_experiment(config: dict, run_id: str) -> None:
     execution_system = ExecutionSystem(
         sandbox_config=exec_sandbox_config,
         enable_multiprocessing=True,
-        num_workers=cpu_count,
+        cpu_workers=cpu_count,
     )
 
     # 4. Auxiliary Systems
