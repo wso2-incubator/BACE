@@ -12,7 +12,7 @@ unittest_profile: "profiles/unittest/standard.yaml"
 differential_profile: "profiles/differential/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
-schedule: "schedules/alternating-6gen.yaml"
+schedule: "schedules/alternating-10gen.yaml"
 
 # Dataset configuration
 dataset:
