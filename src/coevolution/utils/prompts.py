@@ -358,7 +358,6 @@ CROSSOVER_TEST = (
     "</test_case_2>\n\n"
     "<task>\n"
     "Create a new test case that covers the gaps in the existing tests.\n"
-    "Step by step verify that the expected output is accurate and reflects the function's intended behavior.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
@@ -375,7 +374,6 @@ MUTATE_TEST = (
     "1. Verify the correctness of the provided test case.\n"
     "2. If any issues are found, fix them.\n"
     "3. Else if no issues are found, generate a new test case that explores different input scenarios or edge cases.\n"
-    "4. Step-by-step verify that the expected output is accurate and reflects the function's intended behavior.\n"
     "</task>\n" + _TEST_METHOD_FORMAT_INSTRUCTION + "\n"
 )
 
