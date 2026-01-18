@@ -242,7 +242,7 @@ def run(
     # =================================================================
     # 6. SAVE RUN METADATA
     # =================================================================
-    metadata_path = Path(f"logs/{run_id}_metadata.json")
+    metadata_path = Path(f"logs/metadata/{run_id}_metadata.json")
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
 
     metadata = {
@@ -270,7 +270,8 @@ def run(
     logger.info(f"Metadata saved to: {metadata_path}")
 
     # Save full resolved config for reproducibility
-    config_path = Path(f"logs/{run_id}_config.yaml")
+    config_path = Path(f"logs/configs/{run_id}_config.yaml")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_path, "w") as f:
         yaml.dump(experiment_config, f, default_flow_style=False, sort_keys=False)
     logger.info(f"Full config saved to: {config_path}")
