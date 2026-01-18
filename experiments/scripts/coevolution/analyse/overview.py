@@ -227,12 +227,18 @@ def main(
     print("-" * 140)
     for row in summary_data:
         solved_str = "Yes" if row["solved"] else "No"
-        
+
         # Handle N/A values for metrics
-        init_p10 = row['initial_pass_at_10'] if row['initial_pass_at_10'] != "N/A" else "N/A"
-        final_p15 = row['final_pass_at_15'] if row['final_pass_at_15'] != "N/A" else "N/A"
-        final_p10 = row['final_pass_at_10'] if row['final_pass_at_10'] != "N/A" else "N/A"
-        
+        init_p10 = (
+            row["initial_pass_at_10"] if row["initial_pass_at_10"] != "N/A" else "N/A"
+        )
+        final_p15 = (
+            row["final_pass_at_15"] if row["final_pass_at_15"] != "N/A" else "N/A"
+        )
+        final_p10 = (
+            row["final_pass_at_10"] if row["final_pass_at_10"] != "N/A" else "N/A"
+        )
+
         print(
             f"{row['run_id']:<15} {row['problem_id']:<20} {solved_str:<8} {row['champion_code_ids']:<15} {row['champion_passing']:<14} {row['champion_probability']:<14.4f} {str(init_p10):<11} {str(final_p15):<12} {str(final_p10):<12}"
         )
