@@ -105,7 +105,7 @@ def setup_logging(
         # MAIN PROCESS: Writes to the master log file
         # We REMOVE compression to prevent locking issues.
         log_file_path = (
-            f"logs/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_MASTER.log"
+            f"logs/{log_file_base_name}_{run_id}_{{time:YYYYMMDD}}_MASTER.log"
         )
         logger.add(
             log_file_path,
@@ -121,7 +121,7 @@ def setup_logging(
         # WORKER PROCESS: Writes to its own dedicated file
         # This completely eliminates the "FileNotFound" race condition.
         # We include the PID in the filename.
-        log_file_path = f"logs/workers/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_WORKER_{pid}.log"
+        log_file_path = f"logs/workers/{log_file_base_name}_{run_id}_{{time:YYYYMMDD}}_WORKER_{pid}.log"
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
