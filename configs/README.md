@@ -22,18 +22,18 @@ configs/
 ### Run with default config
 
 ```bash
-uv run python main.py --config configs/experiments/default.yaml
+uv run python main.py run --config configs/experiments/default.yaml
 ```
 
 ### Override specific components
 
 ```bash
 # Use different LLM
-uv run python main.py --config configs/experiments/default.yaml \
+uv run python main.py run --config configs/experiments/default.yaml \
   --llm configs/llm/gpt-4.yaml
 
 # Override dataset parameters
-uv run python main.py --config configs/experiments/default.yaml \
+uv run python main.py run --config configs/experiments/default.yaml \
   --difficulty easy \
   --start-index 0 --end-index 10
 ```
@@ -41,7 +41,7 @@ uv run python main.py --config configs/experiments/default.yaml \
 ### Quick test
 
 ```bash
-uv run python main.py --config configs/experiments/quick-test.yaml
+uv run python main.py run --config configs/experiments/quick-test.yaml
 ```
 
 ### List available configs
@@ -55,7 +55,7 @@ uv run python main.py list-configs experiment
 ### Dry run (validate config without running)
 
 ```bash
-uv run python main.py --config configs/experiments/default.yaml --dry-run
+uv run python main.py run --config configs/experiments/default.yaml --dry-run
 ```
 
 ## Creating New Configs
