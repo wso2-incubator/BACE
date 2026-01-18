@@ -98,6 +98,20 @@ def main(
 
         if not matrices:
             logger.warning(f"No '{matrix_type}' matrices found for {pid}")
+            # Add N/A entry to summary
+            summary_data.append(
+                {
+                    "run_id": run_id,
+                    "problem_id": pid,
+                    "solved": False,
+                    "champion_code_ids": "N/A",
+                    "champion_passing": "N/A",
+                    "champion_probability": 0.0,
+                    "initial_pass_at_10": "N/A",
+                    "final_pass_at_15": "N/A",
+                    "final_pass_at_10": "N/A",
+                }
+            )
             continue
 
         # 3. Analyze First and Last Matrix
@@ -213,8 +227,14 @@ def main(
     print("-" * 140)
     for row in summary_data:
         solved_str = "Yes" if row["solved"] else "No"
+        
+        # Handle N/A values for metrics
+        init_p10 = row['initial_pass_at_10'] if row['initial_pass_at_10'] != "N/A" else "N/A"
+        final_p15 = row['final_pass_at_15'] if row['final_pass_at_15'] != "N/A" else "N/A"
+        final_p10 = row['final_pass_at_10'] if row['final_pass_at_10'] != "N/A" else "N/A"
+        
         print(
-            f"{row['run_id']:<15} {row['problem_id']:<20} {solved_str:<8} {row['champion_code_ids']:<15} {row['champion_passing']:<14} {row['champion_probability']:<14.4f} {row['initial_pass_at_10']:<11} {row['final_pass_at_15']:<12} {row['final_pass_at_10']:<12}"
+            f"{row['run_id']:<15} {row['problem_id']:<20} {solved_str:<8} {row['champion_code_ids']:<15} {row['champion_passing']:<14} {row['champion_probability']:<14.4f} {str(init_p10):<11} {str(final_p15):<12} {str(final_p10):<12}"
         )
 
     print("\n" + "=" * 140)
