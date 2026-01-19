@@ -82,6 +82,8 @@ def main(
 
     # 2. Iterate through each problem
     for pid in sorted(list(problem_ids)):
+        if pid == "SETUP":
+            continue  # Skip setup entriesx
         print(f"\nPROBLEM: {pid}")
         print("-" * 40)
 
@@ -99,6 +101,7 @@ def main(
         if not matrices:
             logger.warning(f"No '{matrix_type}' matrices found for {pid}")
             # Add N/A entry to summary
+
             summary_data.append(
                 {
                     "run_id": run_id,
