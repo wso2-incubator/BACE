@@ -1,0 +1,68 @@
+# Ablation Study: No Public Test Anchoring
+#
+# This configuration removes public tests entirely to measure the impact
+# of ground-truth anchoring on code evolution.
+#
+# Key Changes:
+# - NO public_profile (no public tests loaded)
+# - NO anchoring step in belief updates
+# - Code beliefs only updated by evolved tests (unittest/differential)
+#
+# Purpose: Measure the contribution of public test anchoring:
+# - Does anchoring with ground truth improve code quality?
+# - Can evolved tests alone guide code evolution effectively?
+# - How much do we rely on public test signal vs evolved test signal?
+#
+# Expected Results:
+# - If anchoring is critical: Performance should drop significantly
+# - If evolved tests sufficient: Performance should remain similar
+#
+# This tests whether the "reality check" from public tests is necessary
+# or if the system can self-correct through evolved test feedback alone.
+
+experiment:
+  name: "ablation-no-anchoring"
+  description: "Ablation study: no public test anchoring (evolved tests only)"
+
+# ============================================================================
+# COMPONENT REFERENCES
+# ============================================================================
+
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/standard.yaml"
+unittest_profile: "profiles/unittest/standard.yaml"
+differential_profile: "profiles/differential/standard.yaml"
+
+# NO public profile - removes public tests and anchoring
+# public_profile: INTENTIONALLY OMITTED
+
+sandbox: "sandbox/sandbox-default.yaml"
+schedule: "schedules/alternating-10gen.yaml"
+
+# ============================================================================
+# DATASET CONFIGURATION
+# ============================================================================
+
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+# ============================================================================
+# PROBLEM SELECTION
+# ============================================================================
+
+subset:
+  start_index: 0
+  end_index: null  # null = process all
+  problem_ids: null  # null = use index range
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  console_level: "DEBUG"
+  file_level: "DEBUG"
+  log_file_base_name: "ablation_no_anchoring"

@@ -441,13 +441,16 @@ def _run_experiment(config: dict, run_id: str) -> None:
         cpu_workers=differential_profile_config.get("cpu_workers", cpu_count),
     )
 
-    # 4. Public Profile
-    public_profile = create_public_test_profile(
-        alpha=public_profile_config.get("alpha", 0.001),
-        beta=public_profile_config.get("beta", 0.1),
-        gamma=public_profile_config.get("gamma", 0.1),
-        learning_rate=public_profile_config.get("learning_rate", 0.05),
-    )
+    # 4. Public Profile (optional)
+    if public_profile_config:
+        public_profile = create_public_test_profile(
+            alpha=public_profile_config.get("alpha", 0.001),
+            beta=public_profile_config.get("beta", 0.1),
+            gamma=public_profile_config.get("gamma", 0.1),
+            learning_rate=public_profile_config.get("learning_rate", 0.05),
+        )
+    else:
+        public_profile = None
 
     # 5. Schedule
     schedule = ScheduleBuilder.from_config(schedule_config)
@@ -466,9 +469,12 @@ def _run_experiment(config: dict, run_id: str) -> None:
     if differential_profile_config:
         builder = builder.add_test_profile("differential", differential_profile)
 
+    # Add public test profile only if specified in config
+    if public_profile:
+        builder = builder.with_public_test_profile(public_profile)
+
     orchestrator_config = (
-        builder.with_public_test_profile(public_profile)
-        .with_execution_system(execution_system)
+        builder.with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
         .with_test_block_rebuilder(test_block_rebuilder)
         .with_dataset_test_block_builder(dataset_test_block_builder)
