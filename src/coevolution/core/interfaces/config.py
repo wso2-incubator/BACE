@@ -32,8 +32,17 @@ class BayesianConfig:
             raise ValueError("beta must be in the range (0.0, 1.0)")
         if not (0.0 < self.gamma < 1.0):
             raise ValueError("gamma must be in the range (0.0, 1.0)")
-        if not (0.0 < self.learning_rate <= 1.0):
-            raise ValueError("learning_rate must be in the range (0.0, 1.0]")
+        if not (0.0 <= self.learning_rate <= 1.0):
+            raise ValueError(
+                "learning_rate must be in the range [0.0, 1.0] (0.0 disables updates)"
+            )
+
+        # Warn if learning rate is disabled
+        if self.learning_rate == 0.0:
+            logger.warning(
+                "BayesianConfig has learning_rate=0.0 - Bayesian updates will be disabled. "
+                "This is typically used for ablation studies to disable anchoring."
+            )
 
 
 @dataclass(frozen=True)
