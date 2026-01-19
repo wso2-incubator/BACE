@@ -1,11 +1,10 @@
 # Ablation Study: No Public Test Anchoring
 #
-# This configuration removes public tests entirely to measure the impact
-# of ground-truth anchoring on code evolution.
+# This configuration disables public test anchoring by setting learning_rate = 0.
+# Public tests are still executed but their results don't update code beliefs.
 #
 # Key Changes:
-# - NO public_profile (no public tests loaded)
-# - NO anchoring step in belief updates
+# - public_profile.learning_rate = 0 (disables Bayesian updates)
 # - Code beliefs only updated by evolved tests (unittest/differential)
 #
 # Purpose: Measure the contribution of public test anchoring:
@@ -22,7 +21,7 @@
 
 experiment:
   name: "ablation-no-anchoring"
-  description: "Ablation study: no public test anchoring (evolved tests only)"
+  description: "Ablation study: no public test anchoring (learning_rate = 0)"
 
 # ============================================================================
 # COMPONENT REFERENCES
@@ -33,8 +32,12 @@ code_profile: "profiles/code/standard.yaml"
 unittest_profile: "profiles/unittest/standard.yaml"
 differential_profile: "profiles/differential/standard.yaml"
 
-# NO public profile - removes public tests and anchoring
-# public_profile: INTENTIONALLY OMITTED
+# Public profile with learning_rate = 0 (disables anchoring)
+public_profile:
+  alpha: 0.001
+  beta: 0.1
+  gamma: 0.1
+  learning_rate: 0.0  # ABLATION: Disable anchoring updates
 
 sandbox: "sandbox/sandbox-default.yaml"
 schedule: "schedules/alternating-10gen.yaml"
