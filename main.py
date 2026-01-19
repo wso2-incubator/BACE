@@ -450,22 +450,7 @@ def _run_experiment(config: dict, run_id: str) -> None:
     )
 
     # 5. Schedule
-    schedule_builder = ScheduleBuilder()
-
-    # Check for warmup phase
-    if "warmup" in schedule_config:
-        warmup_config = schedule_config["warmup"]
-        schedule_builder = schedule_builder.warmup_code(
-            duration=warmup_config.get("duration", 5)
-        )
-
-    # Alternating phase
-    schedule = schedule_builder.alternating(
-        total_duration=schedule_config.get("total_duration", 6),
-        code_step=schedule_config.get("code_step", 1),
-        test_step=schedule_config.get("test_step", 1),
-        start_with=schedule_config.get("start_with", "test"),
-    ).build()
+    schedule = ScheduleBuilder.from_config(schedule_config)
 
     # 6. Orchestrator Configuration
     orchestrator_config = (

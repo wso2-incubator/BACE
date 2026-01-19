@@ -107,3 +107,70 @@ class ScheduleBuilder:
         if not self._phases:
             raise ValueError("Schedule must contain at least one phase.")
         return EvolutionSchedule(phases=list(self._phases))
+
+    @classmethod
+    def from_config(cls, config: dict) -> EvolutionSchedule:
+        """
+        Create an EvolutionSchedule from a configuration dictionary.
+
+        Args:
+            config: Schedule configuration with optional warmup and alternating sections.
+
+        Returns:
+            Configured EvolutionSchedule.
+
+        Example configs:
+            # Code-only warmup
+            {
+                "warmup": {"duration": 5, "target": "code"}
+            }
+
+            # Alternating only
+            {
+                "alternating": {
+                    "total_duration": 10,
+                    "code_step": 1,
+                    "test_step": 1,
+                    "start_with": "test"
+                }
+            }
+
+            # Warmup + Alternating
+            {
+                "warmup": {"duration": 5, "target": "code"},
+                "alternating": {
+                    "total_duration": 6,
+                    "code_step": 1,
+                    "test_step": 1,
+                    "start_with": "test"
+                }
+            }
+        """
+        builder = cls()
+
+        # Add warmup phase if specified
+        if "warmup" in config:
+            warmup_config = config["warmup"]
+            duration = warmup_config.get("duration", 5)
+            target = warmup_config.get("target", "code")  # Default to code warmup
+
+            if target == "code":
+                builder = builder.warmup_code(duration=duration)
+            elif target == "tests":
+                builder = builder.warmup_tests(duration=duration)
+            else:
+                raise ValueError(
+                    f"Invalid warmup target: {target}. Must be 'code' or 'tests'."
+                )
+
+        # Add alternating phase if specified
+        if "alternating" in config:
+            alternating_config = config["alternating"]
+            builder = builder.alternating(
+                total_duration=alternating_config["total_duration"],
+                code_step=alternating_config.get("code_step", 1),
+                test_step=alternating_config.get("test_step", 1),
+                start_with=alternating_config.get("start_with", "test"),
+            )
+
+        return builder.build()

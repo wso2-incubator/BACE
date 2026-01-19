@@ -1,7 +1,8 @@
 # Alternating Evolution Schedule - 6 Generations
-# Alternates between code and test evolution
+# Short alternating schedule for quick experiments
 
-total_duration: 6
-code_step: 1
-test_step: 1
-start_with: "test"
+alternating:
+  total_duration: 6
+  code_step: 1
+  test_step: 1
+  start_with: "test"
