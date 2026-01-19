@@ -85,6 +85,8 @@ class TestExecutionResult:
     # Simple summary message
     summary: str
 
+    tests_timeout: int = 0
+
     @property
     def total_tests(self) -> int:
         """Total number of tests that ran."""

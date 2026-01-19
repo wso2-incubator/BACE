@@ -128,6 +128,7 @@ class PytestXmlAnalyzer:
         total_tests = 0
         total_failures = 0
         total_errors = 0
+        total_timeouts = 0
         test_results = []
         script_error = False
 
@@ -171,6 +172,17 @@ class PytestXmlAnalyzer:
                     ):
                         script_error = True
 
+                # Check if this test timed out
+                if details:
+                    details_lower = details.lower()
+                    if "timeout" in details_lower or "timed out" in details_lower:
+                        total_timeouts += 1
+                        # Log warning for visibility
+                        logger.warning(
+                            f"Test '{test_name}' in class '{classname}' timed out. "
+                            f"Details: {details[:200]}"
+                        )
+
                 # Create description from classname and test name
                 description = f"{classname}.{test_name}" if classname else test_name
 
@@ -186,7 +198,14 @@ class PytestXmlAnalyzer:
         if script_error:
             summary = "Script execution failed: syntax error"
         elif total_failures > 0 or total_errors > 0:
-            summary = f"Tests completed: {total_tests - total_failures - total_errors} passed, {total_failures} failed, {total_errors} errors"
+            parts = [f"{total_tests - total_failures - total_errors} passed"]
+            if total_failures > 0:
+                parts.append(f"{total_failures} failed")
+            if total_errors > 0:
+                parts.append(f"{total_errors} errors")
+            if total_timeouts > 0:
+                parts.append(f"{total_timeouts} timed out")
+            summary = f"Tests completed: {', '.join(parts)}"
         elif total_tests > 0:
             summary = f"All tests passed: {total_tests} tests"
         else:
@@ -197,6 +216,7 @@ class PytestXmlAnalyzer:
             tests_passed=total_tests - total_failures - total_errors,
             tests_failed=total_failures,
             tests_errors=total_errors,
+            tests_timeout=total_timeouts,
             test_results=test_results,
             summary=summary,
         )
@@ -239,6 +259,7 @@ class PytestXmlAnalyzer:
             tests_passed=0,
             tests_failed=0,
             tests_errors=0,
+            tests_timeout=0,
             test_results=[],
             summary=summary,
         )
