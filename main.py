@@ -439,6 +439,7 @@ def _run_experiment(config: dict, run_id: str) -> None:
         learning_rate=differential_profile_config.get("learning_rate", 0.025),
         llm_workers=differential_profile_config.get("llm_workers", 4),
         cpu_workers=differential_profile_config.get("cpu_workers", cpu_count),
+        max_pairs_per_group=differential_profile_config.get("max_pairs_per_group", 5),
     )
 
     # 4. Public Profile (optional)

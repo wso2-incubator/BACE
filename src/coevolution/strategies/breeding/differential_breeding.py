@@ -114,6 +114,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         functionally_equivalent_code_selector: IFunctionallyEquivalentCodeSelector,
         llm_workers: int = 1,
         divergence_limit: int = 5,
+        max_pairs_per_group: int = 5,
     ) -> None:
         super().__init__(op_rates_config, llm_workers)
 
@@ -124,6 +125,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self.parent_selector = parent_selector
         self.func_eq_code_selector = functionally_equivalent_code_selector
         self.divergence_limit = divergence_limit  # Max divergences to find per pair
+        self.max_pairs_per_group = (
+            max_pairs_per_group  # Max pairs to try per functional group
+        )
 
         # Validate operations
         for op in self.op_rates_config.operation_rates.keys():
@@ -259,8 +263,9 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Stats for logging
         theoretical_max_pairs = 0
         total_unexplored = 0
+        total_sampled = 0
 
-        for group in groups:
+        for group_idx, group in enumerate(groups):
             n = len(group.code_individuals)
             if n < 2:
                 continue
@@ -289,15 +294,29 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                     key=lambda t: t.code_a.probability + t.code_b.probability,
                     reverse=True,
                 )
+
+                # Limit pairs per group to avoid excessive attempts on equivalent code
+                original_count = len(group_pairs)
+                group_pairs = group_pairs[: self.max_pairs_per_group]
+                sampled_count = len(group_pairs)
+
+                if original_count > sampled_count:
+                    logger.debug(
+                        f"Group {group_idx}: Limited pairs from {original_count} → {sampled_count} "
+                        f"(max_pairs_per_group={self.max_pairs_per_group})"
+                    )
+
                 candidates_by_group.append(group_pairs)
-                total_unexplored += len(group_pairs)
+                total_unexplored += original_count
+                total_sampled += sampled_count
 
         # Log capacity analysis
-        potential_offspring = total_unexplored * self.divergence_limit * 2
+        potential_offspring = total_sampled * self.divergence_limit * 2
         logger.info(
             f"Candidate Analysis: Groups={len(candidates_by_group)}, "
             f"Total Pairs (nCr)={theoretical_max_pairs}, "
             f"Unexplored={total_unexplored}, "
+            f"Sampled={total_sampled}, "
             f"Max Potential Offspring={potential_offspring}"
         )
 

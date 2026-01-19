@@ -315,6 +315,7 @@ def create_differential_test_profile(
     cpu_workers: int = 8,
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
+    max_pairs_per_group: int = 5,
 ) -> TestProfile:
     """
     Create a differential test population profile.
@@ -341,6 +342,7 @@ def create_differential_test_profile(
         learning_rate: Belief update learning rate (default: 0.05)
         llm_workers: Number of parallel LLM workers for script generation (default: 4)
         cpu_workers: Number of parallel CPU workers for sandbox execution (default: 8)
+        max_pairs_per_group: Maximum pairs to try per functional group (default: 5)
 
     Returns:
         TestProfile with configured components
@@ -395,6 +397,7 @@ def create_differential_test_profile(
         functionally_equivalent_code_selector=FunctionallyEqSelector(),
         differential_finder=differential_finder,
         llm_workers=llm_workers,
+        max_pairs_per_group=max_pairs_per_group,
     )
 
     # Create elite selector (diversity-aware for differential tests)
