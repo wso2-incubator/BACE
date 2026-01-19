@@ -1,0 +1,7 @@
+# Code-Only Schedule (No Test Coevolution)
+#
+# Pure code evolution against fixed unittest baseline.
+# No test evolution or alternating phases.
+
+warmup:
+  duration: 5  # 5 generations of code-only evolution

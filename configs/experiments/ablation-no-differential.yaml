@@ -1,0 +1,54 @@
+# Ablation Study: No Differential Tests
+#
+# This configuration disables differential testing to measure its impact
+# on code evolution quality. Uses standard coevolution with unittest and
+# public tests only.
+#
+# Purpose: Measure the contribution of differential testing to:
+# - Code solution quality
+# - Convergence speed
+# - Population diversity
+
+experiment:
+  name: "ablation-no-differential"
+  description: "Ablation study: coevolution without differential testing"
+
+# ============================================================================
+# COMPONENT REFERENCES
+# ============================================================================
+
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/standard.yaml"
+unittest_profile: "profiles/unittest/standard.yaml"
+# differential_profile: INTENTIONALLY OMITTED - This is the ablation variable
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+schedule: "schedules/alternating-10gen.yaml"
+
+# ============================================================================
+# DATASET CONFIGURATION
+# ============================================================================
+
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+# ============================================================================
+# PROBLEM SELECTION
+# ============================================================================
+
+subset:
+  start_index: 0
+  end_index: null  # null = process all
+  problem_ids: null  # null = use index range
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  console_level: "DEBUG"
+  file_level: "DEBUG"
+  log_file_base_name: "ablation_no_differential"
