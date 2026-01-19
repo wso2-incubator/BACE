@@ -453,13 +453,21 @@ def _run_experiment(config: dict, run_id: str) -> None:
     schedule = ScheduleBuilder.from_config(schedule_config)
 
     # 6. Orchestrator Configuration
-    orchestrator_config = (
+    builder = (
         OrchestratorBuilder()
         .with_evolution_config(schedule)
         .with_code_profile(code_profile)
-        .add_test_profile("unittest", unittest_profile)
-        .add_test_profile("differential", differential_profile)
-        .with_public_test_profile(public_profile)
+    )
+
+    # Add test profiles only if specified in config
+    if unittest_profile_config:
+        builder = builder.add_test_profile("unittest", unittest_profile)
+
+    if differential_profile_config:
+        builder = builder.add_test_profile("differential", differential_profile)
+
+    orchestrator_config = (
+        builder.with_public_test_profile(public_profile)
         .with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
         .with_test_block_rebuilder(test_block_rebuilder)
