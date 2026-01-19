@@ -5,6 +5,9 @@ provider: "openai"
 model: "gpt-5-mini"
 reasoning_effort: "minimal"
 
+# Token limit configuration
+max_output_tokens: 100_000_000  # 100 million tokens (100x default of 1M)
+
 # Optional: API configuration (uses environment variables by default)
 # api_key: "${OPENAI_API_KEY}"
 # base_url: "${OPENAI_BASE_URL}"

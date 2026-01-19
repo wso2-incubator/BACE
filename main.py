@@ -333,6 +333,8 @@ def _run_experiment(config: dict, run_id: str) -> None:
         provider=llm_config.get("provider", "openai"),
         model=llm_config.get("model", "gpt-5-mini"),
         reasoning_effort=llm_config.get("reasoning_effort", "minimal"),
+        max_output_tokens=llm_config.get("max_output_tokens", None),
+        enable_token_limit=llm_config.get("enable_token_limit", None),
     )
     logger.info(f"Using model: {llm_client.model}")
 
