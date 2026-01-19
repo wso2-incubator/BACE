@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # - Larger output buffer (50KB) for output comparisons
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     finder = DifferentialFinder(
-        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+        sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
     )
 
     # 4. Execute
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # 3. Execute
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     finder = DifferentialFinder(
-        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+        sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
     )
 
     results = finder.find_differential(
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     # 3. Execute
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     finder = DifferentialFinder(
-        sandbox_config=sandbox_config, enable_multiprocessing=True, num_workers=4
+        sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
     )
 
     results = finder.find_differential(
