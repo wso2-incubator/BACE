@@ -10,6 +10,81 @@ import pytest
 from infrastructure.code_preprocessing.transformation import build_test_method_from_io
 
 
+class TestLCBStdinStringOutputs:
+    """Test that LCB STDIN-style problems preserve string outputs."""
+
+    def test_lcb_stdin_preserves_string_outputs(self) -> None:
+        """Verify that when method returns str, outputs are kept as strings."""
+        # LCB STDIN problem signature: def sol(self, input_str: str) -> str
+        starter_code = """
+class Solution:
+    def sol(self, input_str: str) -> str:
+        pass
+"""
+        # Output from sandbox is string "70000000070" (numeric string)
+        # This should NOT be converted to int because return type is str
+        io_pairs = [
+            {
+                "inputdata": {"input_str": "71 70 1000000000\\n2 1\\n..."},
+                "output": "70000000070",
+            }
+        ]
+
+        result = build_test_method_from_io(starter_code, io_pairs, "STDIN_TEST")
+
+        # Should generate: self.assertEqual(result, "70000000070")
+        # NOT: self.assertEqual(result, 70000000070)
+        assert (
+            'self.assertEqual(result, "70000000070")' in result
+            or "self.assertEqual(result, '70000000070')" in result
+        )
+        assert "self.assertEqual(result, 70000000070)" not in result
+
+    def test_lcb_stdin_with_non_numeric_string(self) -> None:
+        """Verify string preservation with non-numeric strings."""
+        starter_code = """
+class Solution:
+    def sol(self, input_str: str) -> str:
+        pass
+"""
+        io_pairs = [{"inputdata": {"input_str": "hello\\nworld\\n"}, "output": "HELLO"}]
+
+        result = build_test_method_from_io(starter_code, io_pairs, "TEXT_TEST")
+
+        # Should preserve as string
+        assert (
+            'self.assertEqual(result, "HELLO")' in result
+            or "self.assertEqual(result, 'HELLO')" in result
+        )
+
+    def test_lcb_stdin_with_boolean_looking_string(self) -> None:
+        """Verify that 'True'/'False' strings are preserved when return type is str."""
+        starter_code = """
+class Solution:
+    def sol(self, input_str: str) -> str:
+        pass
+"""
+        io_pairs = [
+            {"inputdata": {"input_str": "1\\n"}, "output": "True"},
+            {"inputdata": {"input_str": "0\\n"}, "output": "False"},
+        ]
+
+        result = build_test_method_from_io(starter_code, io_pairs, "BOOL_STR_TEST")
+
+        # Should generate string comparisons, not boolean
+        assert (
+            'self.assertEqual(result, "True")' in result
+            or "self.assertEqual(result, 'True')" in result
+        )
+        assert (
+            'self.assertEqual(result, "False")' in result
+            or "self.assertEqual(result, 'False')" in result
+        )
+        # Should NOT generate boolean comparisons
+        assert "self.assertEqual(result, True)" not in result
+        assert "self.assertEqual(result, False)" not in result
+
+
 class TestTypeSafetyAdvantages:
     """Tests showing why ast.literal_eval is better than str() conversion."""
 
@@ -100,20 +175,24 @@ class Solution:
         assert "self.assertEqual(result, \"{'data': [1, 2, 3]}\")" not in result
 
     def test_actual_string_value_preserved(self) -> None:
-        """Verify that actual string values (not representations) work correctly."""
+        """Verify that actual string values work correctly when method returns str."""
         starter_code = """
 class Solution:
     def greet(self, name: str) -> str:
         pass
 """
-        # This is an ACTUAL string value, not a representation
-        # When sandbox prints a string, it outputs it WITH quotes: "'Hello'"
-        io_pairs = [{"inputdata": {"name": "World"}, "output": "'Hello World'"}]
+        # When the method returns str and sandbox uses print(result),
+        # the output is the string value WITHOUT quotes: "Hello World"
+        # Since the method return type is str, we should preserve it as a string
+        io_pairs = [{"inputdata": {"name": "World"}, "output": "Hello World"}]
 
         result = build_test_method_from_io(starter_code, io_pairs, "STRING_TEST")
 
         # Should preserve the string value
-        assert "self.assertEqual(result, 'Hello World')" in result
+        assert (
+            "self.assertEqual(result, 'Hello World')" in result
+            or 'self.assertEqual(result, "Hello World")' in result
+        )
 
     def test_mixed_types_in_single_method(self) -> None:
         """Verify that multiple IO pairs with different types work correctly."""

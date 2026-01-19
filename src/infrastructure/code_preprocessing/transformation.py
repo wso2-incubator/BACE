@@ -721,6 +721,19 @@ def build_test_method_from_io(
 
     method_name = method_match.group(1)
 
+    # 1b. Check if method return type is 'str' by checking the function signature
+    # This is needed for LCB STDIN problems where sol(input_str: str) -> str
+    # In such cases, we must NOT convert string outputs to other types
+    # We use regex since starter code might be incomplete (no function body)
+    method_returns_str = False
+
+    # Look for pattern: def method_name(...) -> str:
+    # This regex matches the return type annotation
+    return_type_pattern = rf"def\s+{re.escape(method_name)}\s*\([^)]*\)\s*->\s*str\s*:"
+    if re.search(return_type_pattern, starter_code):
+        method_returns_str = True
+        logger.trace(f"Method {method_name} returns str, preserving string outputs")
+
     # 2. Define the test method signature
     # e.g., test_case_C1_C2
     if not suffix:
@@ -741,13 +754,18 @@ def build_test_method_from_io(
 
         # Parse string outputs from sandbox back to Python objects for proper type checking
         # This handles outputs like "5" -> 5, "[1,2,3]" -> [1,2,3], "True" -> True
+        # EXCEPT when the method explicitly returns str (e.g., LCB STDIN problems)
         if isinstance(expected_output, str):
-            try:
-                expected_output_obj = ast.literal_eval(expected_output)
-            except (ValueError, SyntaxError):
-                # If parsing fails, it's likely an actual string value or complex format
-                # Keep the original string
+            # If method returns str, keep outputs as strings (don't convert)
+            if method_returns_str:
                 expected_output_obj = expected_output
+            else:
+                try:
+                    expected_output_obj = ast.literal_eval(expected_output)
+                except (ValueError, SyntaxError):
+                    # If parsing fails, it's likely an actual string value or complex format
+                    # Keep the original string
+                    expected_output_obj = expected_output
         else:
             expected_output_obj = expected_output
 
