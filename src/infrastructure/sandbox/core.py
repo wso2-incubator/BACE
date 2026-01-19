@@ -220,88 +220,85 @@ class SafeCodeSandbox:
                 return_code=-1,
             )
 
-        # Create temporary file for code execution
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as temp_file:
-            temp_file.write(code)
-            temp_file_path = temp_file.name
+        # Create temporary directory for code execution
+        # Using TemporaryDirectory ensures automatic cleanup even if process is killed
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = os.path.join(tmpdir, "script.py")
 
-        logger.trace(
-            f"Executing code in sandbox: temp_file={temp_file_path} capture_output={capture_output} code_len={len(code)}",
-        )
-
-        try:
-            # Execute code in subprocess with timeout
-            start_time = time.time()
-
-            result = subprocess.run(
-                [self.python_executable, temp_file_path],
-                capture_output=capture_output,
-                text=True,
-                timeout=self.timeout,
-                cwd=tempfile.gettempdir(),  # Run in temp directory
-            )
-
-            logger.trace(f"Execution finished: returncode={result.returncode}")
-
-            execution_time = time.time() - start_time
-
-            # Limit output size
-            if len(result.stdout) > self.max_output_size:
-                logger.warning(
-                    f"Truncating stdout from {len(result.stdout)} to {self.max_output_size} characters"
-                )
-
-            if len(result.stderr) > self.max_output_size:
-                logger.warning(
-                    f"Truncating stderr from {len(result.stderr)} to {self.max_output_size} characters"
-                )
-
-            stdout = result.stdout[: self.max_output_size] if result.stdout else ""
-            stderr = result.stderr[: self.max_output_size] if result.stderr else ""
+            # Write code to file
+            with open(script_path, "w") as f:
+                f.write(code)
 
             logger.trace(
-                f"Captured output sizes: stdout={len(stdout)} stderr={len(stderr)}"
+                f"Executing code in sandbox: script_path={script_path} capture_output={capture_output} code_len={len(code)}",
             )
 
-            return BasicExecutionResult(
-                success=result.returncode == 0,
-                output=stdout,
-                error=stderr,
-                execution_time=execution_time,
-                timeout=False,
-                return_code=result.returncode,
-            )
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Code execution timed out after {self.timeout} seconds")
-            return BasicExecutionResult(
-                success=False,
-                output="",
-                error=f"Code execution timed out after {self.timeout} seconds",
-                execution_time=self.timeout,
-                timeout=True,
-                return_code=-1,
-            )
-
-        except Exception as e:
-            logger.exception(f"Unhandled exception during code execution: {e}")
-            return BasicExecutionResult(
-                success=False,
-                output="",
-                error=f"Execution error: {str(e)}",
-                execution_time=0,
-                timeout=False,
-                return_code=-1,
-            )
-
-        finally:
-            # Clean up temporary file
             try:
-                os.unlink(temp_file_path)
-            except OSError:
-                pass
+                # Execute code in subprocess with timeout
+                start_time = time.time()
+
+                result = subprocess.run(
+                    [self.python_executable, script_path],
+                    capture_output=capture_output,
+                    text=True,
+                    timeout=self.timeout,
+                    cwd=tmpdir,  # Run in temp directory
+                )
+
+                logger.trace(f"Execution finished: returncode={result.returncode}")
+
+                execution_time = time.time() - start_time
+
+                # Limit output size
+                if len(result.stdout) > self.max_output_size:
+                    logger.warning(
+                        f"Truncating stdout from {len(result.stdout)} to {self.max_output_size} characters"
+                    )
+
+                if len(result.stderr) > self.max_output_size:
+                    logger.warning(
+                        f"Truncating stderr from {len(result.stderr)} to {self.max_output_size} characters"
+                    )
+
+                stdout = result.stdout[: self.max_output_size] if result.stdout else ""
+                stderr = result.stderr[: self.max_output_size] if result.stderr else ""
+
+                logger.trace(
+                    f"Captured output sizes: stdout={len(stdout)} stderr={len(stderr)}"
+                )
+
+                return BasicExecutionResult(
+                    success=result.returncode == 0,
+                    output=stdout,
+                    error=stderr,
+                    execution_time=execution_time,
+                    timeout=False,
+                    return_code=result.returncode,
+                )
+
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Code execution timed out after {self.timeout} seconds")
+                return BasicExecutionResult(
+                    success=False,
+                    output="",
+                    error=f"Code execution timed out after {self.timeout} seconds",
+                    execution_time=self.timeout,
+                    timeout=True,
+                    return_code=-1,
+                )
+
+            except Exception as e:
+                logger.exception(f"Unhandled exception during code execution: {e}")
+                return BasicExecutionResult(
+                    success=False,
+                    output="",
+                    error=f"Execution error: {str(e)}",
+                    execution_time=0,
+                    timeout=False,
+                    return_code=-1,
+                )
+
+        # Temporary directory automatically cleaned up here
 
     def _reorder_test_results_to_match_script(
         self, test_script: str, execution_result: TestExecutionResult
@@ -415,103 +412,96 @@ class SafeCodeSandbox:
         """
         logger.debug(f"SafeCodeSandbox: executing test script (len={len(test_script)})")
 
-        # Create temporary files for script and XML output
-        with (
-            tempfile.NamedTemporaryFile(
-                mode="w", suffix=".py", delete=False
-            ) as script_file,
-            tempfile.NamedTemporaryFile(
-                mode="w", suffix=".xml", delete=False
-            ) as xml_file,
-        ):
-            script_file_path = script_file.name
-            xml_file_path = xml_file.name
-            script_file.write(test_script)
+        # Create temporary directory for script and XML output
+        # Using TemporaryDirectory ensures automatic cleanup even if process is killed
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = os.path.join(tmpdir, "test_script.py")
+            xml_path = os.path.join(tmpdir, "results.xml")
 
-        try:
-            # Execute pytest with JUnit XML output
-            start_time = time.time()
+            # Write test script to file
+            with open(script_path, "w") as f:
+                f.write(test_script)
 
-            # Build pytest command
-            cmd = [
-                self.python_executable,
-                "-m",
-                "pytest",
-                script_file_path,
-                "--junitxml",
-                xml_file_path,
-                "--color=no",  # Force disable ANSI color codes
-                "-o",
-                "console_output_style=classic",  # Use simple output style (no progress bars etc)
-            ]
-
-            # Add per-test timeout if configured
-            if self.test_method_timeout is not None:
-                cmd.extend(["--timeout", str(self.test_method_timeout)])
-
-            proc_result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-                cwd=tempfile.gettempdir(),
-            )
-
-            execution_time = time.time() - start_time
-
-            # Read XML content if file exists
-            xml_content = None
-            if os.path.exists(xml_file_path):
-                try:
-                    with open(xml_file_path, "r", encoding="utf-8") as f:
-                        xml_content = f.read()
-                except Exception as e:
-                    logger.warning(f"Failed to read XML file: {e}")
-
-            # Create basic result for error analysis fallback
-            basic_result = BasicExecutionResult(
-                success=proc_result.returncode == 0,
-                output=proc_result.stdout,
-                error=proc_result.stderr,
-                execution_time=execution_time,
-                timeout=False,
-                return_code=proc_result.returncode,
-            )
-
-            # Create analyzer and analyze the test results
-            analyzer = PytestXmlAnalyzer()
-            execution_result = analyzer.analyze_pytest_xml(xml_content, basic_result)
-
-            # Reorder test results to match the script order (CRITICAL FIX)
-            execution_result = self._reorder_test_results_to_match_script(
-                test_script, execution_result
-            )
-
-            logger.debug(
-                f"SafeCodeSandbox: test script result summary: {execution_result.summary}"
-            )
-            return execution_result
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Test execution timed out after {self.timeout} seconds")
-            basic_result = BasicExecutionResult(
-                success=False,
-                output="",
-                error=f"Test execution timed out after {self.timeout} seconds",
-                execution_time=self.timeout,
-                timeout=True,
-                return_code=-1,
-            )
-            analyzer = PytestXmlAnalyzer()
-            return analyzer.analyze_pytest_xml(None, basic_result)
-
-        finally:
-            # Clean up temporary files
             try:
-                os.unlink(script_file_path)
-                os.unlink(xml_file_path)
-            except OSError:
-                pass
+                # Execute pytest with JUnit XML output
+                start_time = time.time()
+
+                # Build pytest command
+                cmd = [
+                    self.python_executable,
+                    "-m",
+                    "pytest",
+                    script_path,
+                    "--junitxml",
+                    xml_path,
+                    "--color=no",  # Force disable ANSI color codes
+                    "-o",
+                    "console_output_style=classic",  # Use simple output style (no progress bars etc)
+                ]
+
+                # Add per-test timeout if configured
+                if self.test_method_timeout is not None:
+                    cmd.extend(["--timeout", str(self.test_method_timeout)])
+
+                proc_result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                    cwd=tmpdir,
+                )
+
+                execution_time = time.time() - start_time
+
+                # Read XML content if file exists
+                xml_content = None
+                if os.path.exists(xml_path):
+                    try:
+                        with open(xml_path, "r", encoding="utf-8") as f:
+                            xml_content = f.read()
+                    except Exception as e:
+                        logger.warning(f"Failed to read XML file: {e}")
+
+                # Create basic result for error analysis fallback
+                basic_result = BasicExecutionResult(
+                    success=proc_result.returncode == 0,
+                    output=proc_result.stdout,
+                    error=proc_result.stderr,
+                    execution_time=execution_time,
+                    timeout=False,
+                    return_code=proc_result.returncode,
+                )
+
+                # Create analyzer and analyze the test results
+                analyzer = PytestXmlAnalyzer()
+                execution_result = analyzer.analyze_pytest_xml(
+                    xml_content, basic_result
+                )
+
+                # Reorder test results to match the script order (CRITICAL FIX)
+                execution_result = self._reorder_test_results_to_match_script(
+                    test_script, execution_result
+                )
+
+                logger.debug(
+                    f"SafeCodeSandbox: test script result summary: {execution_result.summary}"
+                )
+                return execution_result
+
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Test execution timed out after {self.timeout} seconds")
+                basic_result = BasicExecutionResult(
+                    success=False,
+                    output="",
+                    error=f"Test execution timed out after {self.timeout} seconds",
+                    execution_time=self.timeout,
+                    timeout=True,
+                    return_code=-1,
+                )
+                analyzer = PytestXmlAnalyzer()
+                return analyzer.analyze_pytest_xml(None, basic_result)
+
+        # Temporary directory automatically cleaned up here
 
     @classmethod
     def from_config(cls, config: SandboxConfig) -> "SafeCodeSandbox":
