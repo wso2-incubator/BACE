@@ -141,7 +141,9 @@ def main(
         # Run specific problems
         python run_coevolution.py --problem-ids Q123 Q456 Q789
     """
-    logging_utils.setup_logging(console_level="DEBUG", file_level="DEBUG")
+    logging_utils.setup_logging(
+        console_level="DEBUG", file_level="DEBUG", run_id=run_id
+    )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
 
