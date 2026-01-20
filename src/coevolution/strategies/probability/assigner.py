@@ -215,6 +215,12 @@ class ProbabilityAssigner(IProbabilityAssigner):
             initial_prior: Default prior (unused in this strategy)
 
         Returns:
-            Minimum of parent probabilities
+            Minimum of parent probabilities if >= initial_prior, else initial_prior
         """
+
+        if np.min(parent_probs) < initial_prior:
+            logger.debug(
+                f"Minimum parent probability {np.min(parent_probs):.4f} is less than initial prior {initial_prior:.4f}, assigning initial prior instead."
+            )
+            return initial_prior
         return float(np.min(parent_probs))
