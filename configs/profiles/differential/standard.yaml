@@ -10,11 +10,11 @@ elitism_rate: 0.3
 # Operation rate (discovery-only initially)
 discovery_rate: 1.0
 
-# Bayesian parameters (less reliable than unit tests)
-alpha: 0.2
-beta: 0.2
-gamma: 0.3
-learning_rate: 0.025
+# Bayesian reliability parameters
+alpha: 0.05  # P(pass | code correct, test incorrect)
+beta: 0.2    # P(pass | code incorrect, test correct)
+gamma: 0.3   # P(pass | both incorrect)
+learning_rate: 0.1
 
 # Performance - independent scaling
 llm_workers: 10   # Parallel LLM script generation
