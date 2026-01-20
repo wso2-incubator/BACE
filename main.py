@@ -413,10 +413,10 @@ def _run_experiment(config: dict, run_id: str) -> None:
         mutation_rate=unittest_profile_config.get("mutation_rate", 0.3),
         crossover_rate=unittest_profile_config.get("crossover_rate", 0.2),
         edit_rate=unittest_profile_config.get("edit_rate", 0.5),
-        alpha=unittest_profile_config.get("alpha", 0.2),
+        alpha=unittest_profile_config.get("alpha", 0.05),
         beta=unittest_profile_config.get("beta", 0.2),
-        gamma=unittest_profile_config.get("gamma", 0.1),
-        learning_rate=unittest_profile_config.get("learning_rate", 0.05),
+        gamma=unittest_profile_config.get("gamma", 0.3),
+        learning_rate=unittest_profile_config.get("learning_rate", 0.1),
         llm_workers=unittest_profile_config.get("llm_workers", cpu_count),
         diversity_enabled=unittest_profile_config.get("diversity_enabled", True),
     )
@@ -433,25 +433,22 @@ def _run_experiment(config: dict, run_id: str) -> None:
         offspring_rate=differential_profile_config.get("offspring_rate", 0.5),
         elitism_rate=differential_profile_config.get("elitism_rate", 0.3),
         discovery_rate=differential_profile_config.get("discovery_rate", 1.0),
-        alpha=differential_profile_config.get("alpha", 0.3),
-        beta=differential_profile_config.get("beta", 0.5),
-        gamma=differential_profile_config.get("gamma", 0.5),
-        learning_rate=differential_profile_config.get("learning_rate", 0.025),
+        alpha=differential_profile_config.get("alpha", 0.05),
+        beta=differential_profile_config.get("beta", 0.2),
+        gamma=differential_profile_config.get("gamma", 0.3),
+        learning_rate=differential_profile_config.get("learning_rate", 0.1),
         llm_workers=differential_profile_config.get("llm_workers", 4),
         cpu_workers=differential_profile_config.get("cpu_workers", cpu_count),
         max_pairs_per_group=differential_profile_config.get("max_pairs_per_group", 5),
     )
 
     # 4. Public Profile (optional)
-    if public_profile_config:
-        public_profile = create_public_test_profile(
-            alpha=public_profile_config.get("alpha", 0.001),
-            beta=public_profile_config.get("beta", 0.1),
-            gamma=public_profile_config.get("gamma", 0.1),
-            learning_rate=public_profile_config.get("learning_rate", 0.05),
-        )
-    else:
-        public_profile = None
+    public_profile = create_public_test_profile(
+        alpha=public_profile_config.get("alpha", 0.0),
+        beta=public_profile_config.get("beta", 0.2),
+        gamma=public_profile_config.get("gamma", 0.0),
+        learning_rate=public_profile_config.get("learning_rate", 0.1),
+    )
 
     # 5. Schedule
     schedule = ScheduleBuilder.from_config(schedule_config)
