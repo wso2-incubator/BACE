@@ -26,12 +26,12 @@ class BayesianConfig:
     learning_rate: float
 
     def __post_init__(self) -> None:
-        if not (0.0 < self.alpha < 1.0):
-            raise ValueError("alpha must be in the range (0.0, 1.0)")
-        if not (0.0 < self.beta < 1.0):
-            raise ValueError("beta must be in the range (0.0, 1.0)")
-        if not (0.0 < self.gamma < 1.0):
-            raise ValueError("gamma must be in the range (0.0, 1.0)")
+        if not (0.0 <= self.alpha <= 1.0):
+            raise ValueError("alpha must be in the range [0.0, 1.0]")
+        if not (0.0 <= self.beta <= 1.0):
+            raise ValueError("beta must be in the range [0.0, 1.0]")
+        if not (0.0 <= self.gamma <= 1.0):
+            raise ValueError("gamma must be in the range [0.0, 1.0]")
         if not (0.0 <= self.learning_rate <= 1.0):
             raise ValueError(
                 "learning_rate must be in the range [0.0, 1.0] (0.0 disables updates)"
