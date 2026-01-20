@@ -162,13 +162,11 @@ def run(
 
     # Component overrides
     if llm:
-        base_dir = Path(config).parent.parent
-        llm_config = config_utils._load_yaml_file(base_dir / llm)
+        llm_config = config_utils._load_yaml_file(llm)
         overrides["llm"] = llm_config
 
     if code_profile:
-        base_dir = Path(config).parent.parent
-        code_profile_config = config_utils._load_yaml_file(base_dir / code_profile)
+        code_profile_config = config_utils._load_yaml_file(code_profile)
         overrides["code_profile"] = code_profile_config
 
     # Dataset overrides
