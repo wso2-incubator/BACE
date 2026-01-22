@@ -410,6 +410,9 @@ def _run_experiment(config: dict, run_id: str) -> None:
         elitism_rate=unittest_profile_config.get("elitism_rate", 0.4),
         mutation_rate=unittest_profile_config.get("mutation_rate", 0.3),
         crossover_rate=unittest_profile_config.get("crossover_rate", 0.2),
+        prob_assigner_strategy=unittest_profile_config.get(
+            "prob_assigner_strategy", "min"
+        ),
         edit_rate=unittest_profile_config.get("edit_rate", 0.5),
         alpha=unittest_profile_config.get("alpha", 0.05),
         beta=unittest_profile_config.get("beta", 0.2),
@@ -438,6 +441,9 @@ def _run_experiment(config: dict, run_id: str) -> None:
         llm_workers=differential_profile_config.get("llm_workers", 4),
         cpu_workers=differential_profile_config.get("cpu_workers", cpu_count),
         max_pairs_per_group=differential_profile_config.get("max_pairs_per_group", 5),
+        prob_assigner_strategy=differential_profile_config.get(
+            "prob_assigner_strategy", "min"
+        ),
     )
 
     # 4. Public Profile (optional)
