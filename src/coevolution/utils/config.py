@@ -215,6 +215,26 @@ def load_experiment_config(
     # Resolve references to other config files
     config = _resolve_config_references(config, base_dir)
 
+    # Apply any section overrides specified as '<section>_overrides'
+    # Example: 'code_profile_overrides: { prob_assigner_strategy: "init" }'
+    # will deep-merge into config['code_profile']
+    overrides_keys = [k for k in list(config.keys()) if k.endswith("_overrides")]
+    for ok in overrides_keys:
+        target_key = ok[: -len("_overrides")]
+        override_value = config.get(ok)
+        if override_value and isinstance(override_value, dict):
+            base_value = config.get(target_key, {})
+            if not isinstance(base_value, dict):
+                # If the target isn't a dict (e.g., wasn't resolved), skip
+                logger.debug(
+                    f"Override target '{target_key}' is not a dict, skipping overrides"
+                )
+                continue
+            logger.debug(f"Applying overrides for '{target_key}' from '{ok}'")
+            config[target_key] = _deep_merge(base_value, override_value)
+            # Optionally remove the overrides key to avoid duplication
+            del config[ok]
+
     logger.info("Configuration loaded successfully")
     return config
 

@@ -53,7 +53,7 @@ class TestProbabilityAssignerInitialization:
     def test_initialization_default_parameters(self) -> None:
         """Test that default parameters are set correctly."""
         assigner = ProbabilityAssigner()
-        assert assigner.strategy == AssignmentStrategy.MEAN
+        assert assigner.strategy == AssignmentStrategy.MIN
 
 
 # --- Initial Population Tests ---
@@ -204,7 +204,8 @@ class TestMinStrategy:
             initial_prior=0.5,
         )
 
-        assert prob == 0.4
+        # Assigned probability is clipped to initial_prior if lower
+        assert prob == 0.5
 
     def test_min_two_parents(self) -> None:
         """Test min strategy selects lowest parent probability."""
@@ -216,7 +217,8 @@ class TestMinStrategy:
             initial_prior=0.5,
         )
 
-        assert prob == 0.3
+        # Clipped to initial_prior since min(parent_probs)=0.3 < 0.5
+        assert prob == 0.5
 
     def test_min_multiple_parents(self) -> None:
         """Test min strategy with multiple parents."""
@@ -259,7 +261,8 @@ class TestEdgeCases:
             parent_probs=[0.0],
             initial_prior=0.5,
         )
-        assert prob == 0.0
+        # Clipped to prior when assignment < prior
+        assert prob == 0.5
 
         # Test with 1.0
         prob = assigner.assign_probability(
@@ -327,7 +330,8 @@ class TestStrategyComparison:
         # All should be different
         assert mean_prob == 0.6  # (0.3 + 0.9) / 2
         assert max_prob == 0.9
-        assert min_prob == 0.3
+        # min is below prior so should be clipped to initial_prior
+        assert min_prob == 0.5
 
         # Ordering relationship
         assert min_prob < mean_prob < max_prob
@@ -351,3 +355,38 @@ class TestStrategyComparison:
 
         # All should be identical
         assert all(p == initial_prior for p in probs)
+
+
+class TestInitStrategyAndFactory:
+    """Tests for the newly-added 'init' strategy and factory wiring."""
+
+    def test_init_strategy_returns_initial_prior_for_genetic_ops(self) -> None:
+        """The 'init' strategy should always return the provided initial prior."""
+        assigner = ProbabilityAssigner("init")
+
+        prob = assigner.assign_probability(
+            operation=OPERATION_MUTATION,
+            parent_probs=[0.01, 0.99],
+            initial_prior=0.42,
+        )
+
+        assert prob == 0.42
+
+    def test_unittest_factory_forwards_prob_assigner_strategy(self) -> None:
+        """create_unittest_test_profile should construct an assigner with the configured strategy."""
+
+        class DummyLLM:
+            def generate(self, prompt: str) -> str:
+                return "def dummy(): pass"
+
+        from coevolution.factories.profiles import create_unittest_test_profile
+
+        profile = create_unittest_test_profile(
+            llm_client=DummyLLM(),
+            prob_assigner_strategy="init",
+        )
+
+        assert (
+            profile.breeding_strategy.probability_assigner.strategy
+            == AssignmentStrategy.INIT
+        )

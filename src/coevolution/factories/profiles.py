@@ -202,6 +202,7 @@ def create_unittest_test_profile(
     gamma: float = 0.3,
     learning_rate: float = 0.05,
     llm_workers: int = 1,
+    prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
 ) -> TestProfile:
     """
@@ -265,7 +266,7 @@ def create_unittest_test_profile(
     parent_selector: RouletteWheelParentSelection[TestIndividual] = (
         RouletteWheelParentSelection()
     )
-    prob_assigner = ProbabilityAssigner()
+    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
 
     # Create breeding strategy
     breeding_strategy = UnittestBreedingStrategy(

@@ -21,3 +21,6 @@ learning_rate: 0.1
 # Performance
 llm_workers: 10
 diversity_enabled: true
+
+# Probability assigner strategy: one of ["min", "mean", "max", "init"]
+prob_assigner_strategy: "min"

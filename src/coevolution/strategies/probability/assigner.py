@@ -35,6 +35,7 @@ class AssignmentStrategy(str, Enum):
     MEAN = "mean"  # Average of parent probabilities
     MAX = "max"  # Maximum of parent probabilities (optimistic)
     MIN = "min"  # Minimum of parent probabilities (pessimistic)
+    INIT = "init"  # Use initial prior (for completeness, not used here)
 
 
 class ProbabilityAssigner(IProbabilityAssigner):
@@ -50,7 +51,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
     - MEAN: Simple average (balanced, default)
     - MAX: Most optimistic parent (exploration-focused)
     - MIN: Most pessimistic parent (conservative)
-
+    - INIT: Use initial prior (for completeness, not used here)
     Args:
         strategy: Assignment strategy to use (enum or string)
 
@@ -64,7 +65,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
 
     def __init__(
         self,
-        strategy: Union[AssignmentStrategy, str] = AssignmentStrategy.MEAN,
+        strategy: Union[AssignmentStrategy, str] = AssignmentStrategy.MIN,
     ) -> None:
         """
         Initialize the probability assigner.
@@ -96,6 +97,7 @@ class ProbabilityAssigner(IProbabilityAssigner):
             AssignmentStrategy.MEAN: self._assign_mean,
             AssignmentStrategy.MAX: self._assign_max,
             AssignmentStrategy.MIN: self._assign_min,
+            AssignmentStrategy.INIT: self._assign_init,
         }
 
     def assign_probability(
@@ -138,12 +140,9 @@ class ProbabilityAssigner(IProbabilityAssigner):
         assigned_prob = strategy_func(operation, parent_probs, initial_prior)
 
         if assigned_prob < initial_prior:
-            # TODO: Change back to warning after debugging population degradation issue
-            # FIXME: Investigate why assigned probabilities fall below prior | Solution: clip offspring to prior?
             logger.debug(
                 f"Assigned probability {assigned_prob:.4f} is less than initial prior {initial_prior:.4f}, assigning initial prior instead."
             )
-
             return initial_prior
 
         logger.trace(
@@ -154,6 +153,18 @@ class ProbabilityAssigner(IProbabilityAssigner):
         return assigned_prob
 
     # --- Strategy Implementations ---
+    def _assign_init(
+        self,
+        operation: Operation,
+        parent_probs: ParentProbabilities,
+        initial_prior: float,
+    ) -> float:
+        """
+        Assign the initial prior probability.
+        This strategy simply returns the initial prior probability,
+        regardless of parent probabilities or operation type.
+        """
+        return initial_prior
 
     def _assign_mean(
         self,
@@ -219,10 +230,4 @@ class ProbabilityAssigner(IProbabilityAssigner):
         Returns:
             Minimum of parent probabilities if >= initial_prior, else initial_prior
         """
-
-        if np.min(parent_probs) < initial_prior:
-            logger.debug(
-                f"Minimum parent probability {np.min(parent_probs):.4f} is less than initial prior {initial_prior:.4f}, assigning initial prior instead."
-            )
-            return initial_prior
         return float(np.min(parent_probs))
