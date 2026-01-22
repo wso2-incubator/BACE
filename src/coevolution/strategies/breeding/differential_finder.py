@@ -130,7 +130,7 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning(
                 "Input generator script produced invalid Python code. No test inputs generated."
             )
-            logger.debug(f"Invalid generator script:\n{generator_script}")
+            logger.debug(f"Invalid generator script:\n{generator_script[:1000]}...")
             return []
 
         # Use the local sandbox instance
@@ -143,7 +143,7 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning(
                 f"Failed to parse input generator output: {e}. No test inputs generated."
             )
-            logger.debug(f"Generator output was:\n{output}")
+            logger.debug(f"Generator output was:\n{output[:1000]}...")
             return []
 
     def find_differential(
