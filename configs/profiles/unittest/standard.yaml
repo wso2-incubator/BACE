@@ -13,9 +13,9 @@ crossover_rate: 0.2
 edit_rate: 0.5
 
 # Bayesian reliability parameters
-alpha: 0.05  # P(pass | code correct, test incorrect)
+alpha: 0.1  # P(pass | code correct, test incorrect)
 beta: 0.2    # P(pass | code incorrect, test correct)
-gamma: 0.3   # P(pass | both incorrect)
+gamma: 0.25 # P(pass | both incorrect)
 learning_rate: 0.1
 
 # Performance
