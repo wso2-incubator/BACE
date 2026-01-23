@@ -1,5 +1,6 @@
 # src/coevolution/orchestrator.py
 
+import numpy as np
 from loguru import logger
 
 from coevolution.utils import logging as logging_utils
@@ -375,6 +376,9 @@ class Orchestrator:
             config=self.public_test_profile.bayesian_config,
         )
         code_pop.update_probabilities(code_post_public, test_type="public")
+        logger.debug(
+            f"Posterior code probabilities after public update: {np.round(code_post_public, 4)}"
+        )
         ledger.commit_interactions(code_ids, public_ids, "public", "CODE", mask_pub)
         # 3 & 4. For each evolved test population: Calculate and Apply updates
         # Iterate in the order profiles were provided (dict maintains insertion order in Python 3.7+)
@@ -410,6 +414,9 @@ class Orchestrator:
                 test_update_mask_matrix=test_mask,
                 config=test_profile.bayesian_config,
             )
+            logger.debug(
+                f"Posterior {test_type} test probabilities after update: {np.round(test_post, 4)}"
+            )
 
             logger.debug(
                 f"Calculating code updates based on {test_type} test priors..."
@@ -422,6 +429,9 @@ class Orchestrator:
                 config=test_profile.bayesian_config,
             )
 
+            logger.debug(
+                f"Posterior code probabilities after {test_type} test update: {np.round(code_evolved_post, 4)}"
+            )
             # Apply updates with test_type tracking
             test_pop.update_probabilities(test_post, test_type=test_type)
             code_pop.update_probabilities(code_evolved_post, test_type=test_type)
