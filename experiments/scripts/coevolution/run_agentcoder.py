@@ -121,6 +121,16 @@ def main(
         "-e",
         help="Index of the last problem to process (exclusive). If omitted, processes until the end.",
     ),
+    llm: str = typer.Option(
+        "gpt-5-mini",
+        "--llm",
+        help="LLM model to use for code generation and test generation.",
+    ),
+    llm_provider: str = typer.Option(
+        "openai",
+        "--llm-provider",
+        help="LLM service provider.",
+    ),
 ) -> None:
     """Run a coevolution experiment on LiveCodeBench problems.
 
@@ -142,7 +152,10 @@ def main(
         python run_coevolution.py --problem-ids Q123 Q456 Q789
     """
     logging_utils.setup_logging(
-        console_level="DEBUG", file_level="DEBUG", run_id=run_id
+        console_level="DEBUG",
+        file_level="DEBUG",
+        run_id=run_id,
+        log_file_base_name="agentcoder",
     )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
@@ -161,9 +174,9 @@ def main(
     logger.info("Initializing Global Infrastructure...")
 
     # 1. LLM Client
-    llm_model = "gpt-5-mini"
+    llm_model = llm
     llm_client = create_llm_client(
-        provider="openai", model=llm_model, reasoning_effort="minimal"
+        provider=llm_provider, model=llm_model, reasoning_effort="minimal"
     )
     logger.info(f"Using model: {llm_client.model}")
 
