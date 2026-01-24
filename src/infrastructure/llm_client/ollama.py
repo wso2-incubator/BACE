@@ -5,6 +5,7 @@ from typing import Any, Optional
 from loguru import logger
 
 from .base import LLMClient
+from .exceptions import LLMInputFormatError
 
 
 class OllamaClient(LLMClient):
@@ -23,15 +24,26 @@ class OllamaClient(LLMClient):
         self.ollama = ollama
         logger.debug(f"Initialized OllamaClient with model: {model}")
 
-    def generate(self, prompt: str, **kwargs: Any) -> str:
+    def generate(self, prompt: Any, **kwargs: Any) -> str:
         logger.debug(f"OllamaClient generating with model: {self.model}")
         logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
-        response = self.ollama.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        if isinstance(prompt, list):
+            response = self.ollama.chat(
+                model=self.model,
+                messages=prompt,
+                **kwargs,
+            )
+        elif isinstance(prompt, str):
+            response = self.ollama.chat(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+        else:
+            logger.error(f"Unsupported prompt type: {type(prompt)}")
+            raise LLMInputFormatError(f"Unsupported prompt type: {type(prompt)}")
+
         content = response["message"]["content"]
         if not isinstance(content, str):
             logger.error(f"Expected string content, got {type(content)}")
