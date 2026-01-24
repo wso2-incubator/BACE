@@ -545,6 +545,9 @@ def _run_experiment(config: dict, run_id: str) -> None:
     # =========================================================================
 
     logger.info(f"Processing {len(selected_problems)} problems...")
+    # Token accounting across problems
+    total_tokens_used = 0
+    successful_problems = 0
 
     for i, problem in enumerate(selected_problems):
         global_idx = (start_index if not problem_ids else 0) + i
@@ -556,6 +559,8 @@ def _run_experiment(config: dict, run_id: str) -> None:
                 f"(Global Index: {global_idx}): {problem.question_id}",
             )
             logging_utils.log_problem(problem)
+            # Capture token count before processing this problem
+            before_tokens = llm_client.total_output_tokens
 
             try:
                 code_population, evolved_test_populations = orchestrator.run(problem)
@@ -589,7 +594,31 @@ def _run_experiment(config: dict, run_id: str) -> None:
                     f"Failed to process problem {problem.question_id}: {error_msg}",
                     exc_info=True,
                 )
-                continue
+
+                # Log tokens consumed by the failed attempt, but do NOT include them in totals
+                after_tokens = llm_client.total_output_tokens
+                failed_used = max(0, after_tokens - before_tokens)
+                if failed_used > 0:
+                    logger.info(
+                        f"Tokens consumed during failed attempt (not counted): {failed_used}"
+                    )
+            else:
+                # Success path: account tokens and update running average
+                after_tokens = llm_client.total_output_tokens
+                used = max(0, after_tokens - before_tokens)
+                total_tokens_used += used
+                successful_problems += 1
+
+                avg_tokens = (
+                    total_tokens_used / successful_problems
+                    if successful_problems > 0
+                    else 0
+                )
+
+                logger.info(f"Tokens used for problem {problem.question_id}: {used}")
+                logger.info(
+                    f"Average tokens per successful problem (so far): {avg_tokens:.2f}"
+                )
 
     logging_utils.log_section_header("INFO", "BATCH EXPERIMENT COMPLETE")
 
