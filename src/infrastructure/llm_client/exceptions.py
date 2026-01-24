@@ -12,3 +12,9 @@ class TokenLimitExceededError(Exception):
         if message is None:
             message = f"Token limit exceeded: {current_tokens} tokens generated, limit is {limit}"
         super().__init__(message)
+
+
+class LLMInputFormatError(Exception):
+    """Raised when the input format to the LLM client is invalid."""
+
+    pass
