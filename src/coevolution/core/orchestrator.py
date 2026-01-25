@@ -194,7 +194,7 @@ class Orchestrator:
                 )
 
                 # B. Update Beliefs - mutates population probabilities in context
-                self._perform_fitness_based_updates(
+                self._perform_cooperative_updates(
                     context, ledger
                 )  # FIXME: ABLATION STUDY
 
