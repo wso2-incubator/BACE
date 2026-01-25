@@ -162,7 +162,7 @@ class Orchestrator:
 
         # Global counters
         global_gen = 0
-        total_gens = self.evo_config.num_generations
+        total_gens = self.evo_config.num_generations - 1
         schedule = self.evo_config.schedule
 
         # 2. Main Loop: Iterate over Phases -> Generations
