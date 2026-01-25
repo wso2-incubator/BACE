@@ -194,7 +194,9 @@ class Orchestrator:
                 )
 
                 # B. Update Beliefs - mutates population probabilities in context
-                self._perform_cooperative_updates(context, ledger)
+                self._perform_fitness_based_updates(
+                    context, ledger
+                )  # FIXME: ABLATION STUDY
 
                 # C. Evolve - mutates population individuals in context
                 if global_gen < total_gens:
@@ -316,7 +318,79 @@ class Orchestrator:
 
         return interactions
 
+    # ============================================
+    # ABLATION STUDY: NO COOPERATIVE UPDATES, JUST FITNESS SCORES
+    # +=========================================
+    def _perform_fitness_based_updates(
+        self,
+        context: CoevolutionContext,
+        ledger: IInteractionLedger,
+    ) -> None:
+        """
+        Performs fitness-based updates without cooperative Bayesian updates.
+
+        This method updates the probabilities of code and test individuals
+        based solely on their fitness scores derived from interactions.
+
+        MUTATES populations in the context:
+            - context.code_population.probabilities
+            - context.test_populations[*].probabilities (for evolved types)
+        Args:
+            context: Contains populations and interaction data. Populations
+                    are mutated in-place.
+            lsedger: Ledger to track interactions. # NOT USED IN THIS METHOD
+        """
+        logger.debug("Step 2: Updating beliefs based on fitness scores...")
+
+        # Extract populations and interactions
+        code_pop = context.code_population
+
+        # Update Code probabilities based on fitness scores
+        code_fitness_scores = np.array(
+            [
+                sum(
+                    1
+                    for test_type, interaction in context.interactions.items()
+                    for test_idx, test_ind in enumerate(
+                        context.test_populations[test_type].individuals
+                    )
+                    if interaction.observation_matrix[code_idx, test_idx] == 1
+                )
+                for code_idx, code_ind in enumerate(code_pop.individuals)
+            ]
+        )
+        code_pop.update_probabilities(
+            code_fitness_scores / np.sum(code_fitness_scores), test_type="fitness_based"
+        )
+        logger.debug(
+            f"Updated code probabilities based on fitness scores: {np.round(code_pop.probabilities, 4)}"
+        )
+
+        # Update Test probabilities for each evolved test population
+        for test_type in self.evolved_test_profiles.keys():
+            test_pop = context.test_populations[test_type]
+            test_fitness_scores = np.array(
+                [
+                    sum(
+                        1
+                        for code_idx, code_ind in enumerate(code_pop.individuals)
+                        if context.interactions[test_type].observation_matrix[
+                            code_idx, test_idx
+                        ]
+                        == 1
+                    )
+                    for test_idx, test_ind in enumerate(test_pop.individuals)
+                ]
+            )
+            test_pop.update_probabilities(
+                test_fitness_scores / np.sum(test_fitness_scores), test_type=test_type
+            )
+            logger.debug(
+                f"Updated {test_type} test probabilities based on fitness scores: {np.round(test_pop.probabilities, 4)}"
+            )
+
     # =========================================================================
+
     # Lifecycle Phase 2B: Belief Updates (The Core Logic)
     # =========================================================================
 
