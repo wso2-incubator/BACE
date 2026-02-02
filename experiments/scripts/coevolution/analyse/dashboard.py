@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+BROKEN MODULE - DO NOT USE
 Coevolution Dashboard for Alternating Evolution Analysis.
 
 This module visualizes the step-by-step evolution of code and test populations
