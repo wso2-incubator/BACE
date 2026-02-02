@@ -5,6 +5,7 @@ from loguru import logger
 
 from coevolution.utils import logging as logging_utils
 from infrastructure.code_preprocessing.extraction import extract_test_functions_code
+from infrastructure.code_preprocessing.test_generation import generate_pytest_test
 
 # Import concrete classes
 from .individual import CodeIndividual, TestIndividual
@@ -17,7 +18,6 @@ from .interfaces import (
     CoevolutionContext,
     EvolutionConfig,
     IBeliefUpdater,
-    IDatasetTestBlockBuilder,
     IExecutionSystem,
     IInteractionLedger,
     InteractionData,
@@ -61,7 +61,6 @@ class Orchestrator:
         # --- Global Infrastructure ---
         execution_system: IExecutionSystem,
         bayesian_system: IBeliefUpdater,
-        dataset_test_block_builder: IDatasetTestBlockBuilder,
         ledger_factory: LedgerFactory,
     ) -> None:
         """
@@ -95,7 +94,6 @@ class Orchestrator:
             public_test_profile: Profile for public/ground-truth tests
             execution_system: System for executing code against tests
             bayesian_system: System for belief updates
-            dataset_test_block_builder: Builds test blocks from dataset
         """
         logger.info("Initializing Orchestrator...")
 
@@ -130,8 +128,6 @@ class Orchestrator:
         self.execution_system = execution_system
         self.bayesian_system = bayesian_system
         self.ledger_factory = ledger_factory
-
-        self.dataset_test_block_builder = dataset_test_block_builder
 
     def run(self, problem: Problem) -> tuple[CodePopulation, dict[str, TestPopulation]]:
         """
@@ -682,13 +678,8 @@ class Orchestrator:
         """
         Create a fixed test population from dataset test cases.
 
-        This method handles the complete flow:
-        1. Build test class block from dataset test cases
-        2. Extract individual test methods
-        3. Create TestPopulation with fixed probability
-
-        Used for creating public and private test populations from the dataset.
-        These populations have fixed probability and are not evolved.
+        Uses generic test generation that infers format from starter_code signature.
+        No longer dependent on dataset-specific metadata.
 
         Args:
             test_cases: List of Test objects from the dataset (public or private)
@@ -697,11 +688,11 @@ class Orchestrator:
         Returns:
             TestPopulation with fixed test individuals
         """
-        # Build test code from dataset test cases and extract individual functions
-        test_class_block = self.dataset_test_block_builder.build_test_class_block(
-            test_cases, starter_code
-        )
-        test_functions = extract_test_functions_code(test_class_block)
+        # Generate test functions directly from test cases
+        test_functions = [
+            generate_pytest_test(tc.input, tc.output, starter_code, idx + 1)
+            for idx, tc in enumerate(test_cases)
+        ]
 
         # Create test individuals with fixed probability
         FIXED_TEST_PROBABILITY = 1.0

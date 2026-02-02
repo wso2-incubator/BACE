@@ -357,6 +357,4 @@ def build_orchestrator_from_config(config: OrchestratorConfig) -> Any:
         execution_system=config.execution_system,
         bayesian_system=config.bayesian_system,
         ledger_factory=config.ledger_factory,
-        test_block_rebuilder=config.test_block_rebuilder,
-        dataset_test_block_builder=config.dataset_test_block_builder,
     )
