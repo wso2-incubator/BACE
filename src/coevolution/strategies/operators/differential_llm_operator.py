@@ -5,7 +5,7 @@ test generation and manipulation.
 """
 
 from dataclasses import dataclass
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from loguru import logger
 
@@ -76,19 +76,57 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         code_parent_ids: list[str],
         io_index: int,
     ) -> str:
-        """Build a test method from differential input-output pairs.
-        Note: This is not a LLM operation. or a genetic operation.
         """
+        Build a test method from differential input-output pairs.
+
+        Uses the generic test generation system that supports both class methods
+        and standalone functions.
+
+        Note: This is not a LLM operation or a genetic operation.
+        """
+        from infrastructure.code_preprocessing.test_generation import (
+            generate_pytest_test,
+        )
 
         logger.debug(
             f"Building test method from {len(io_pairs)} IO pairs for parents {code_parent_ids}"
         )
-        suffix = f"{'_'.join(code_parent_ids)}_{io_index}"
-        method_code = transformation.build_test_method_from_io(
-            starter_code, cast(list[dict[str, Any]], io_pairs), suffix
+
+        # Handle empty IO pairs
+        if len(io_pairs) == 0:
+            logger.error("Cannot build test method from empty IO pairs list")
+            raise ValueError("IO pairs list cannot be empty")
+
+        # Combine all IO pairs into a single test
+        # For differential tests, we typically have one IO pair per test to isolate divergences
+        if len(io_pairs) != 1:
+            logger.warning(
+                f"Expected 1 IO pair for differential test, got {len(io_pairs)}. Using first pair only."
+            )
+
+        io_pair = io_pairs[0]
+        input_data = io_pair["inputdata"]
+        expected_output = io_pair["output"]
+
+        # Convert input dict to newline-separated string format
+        # e.g., {"x": 5, "y": 3} -> "5\n3"
+        input_lines = [str(v) for v in input_data.values()]
+        input_str = "\n".join(input_lines)
+
+        # Convert output to string
+        output_str = str(expected_output)
+
+        # Generate unique test number from parent IDs and index
+        # This ensures test names are unique and traceable
+        test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
+
+        # Use the generic test generation
+        test_function = generate_pytest_test(
+            input_str, output_str, starter_code, test_number
         )
-        logger.debug(f"Built test method with length {len(method_code)}")
-        return method_code
+
+        logger.debug(f"Built test method with length {len(test_function)}")
+        return test_function
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_generation_script(
