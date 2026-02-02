@@ -4,7 +4,6 @@ import numpy as np
 from loguru import logger
 
 from coevolution.utils import logging as logging_utils
-from infrastructure.code_preprocessing.extraction import extract_test_functions_code
 from infrastructure.code_preprocessing.test_generation import generate_pytest_test
 
 # Import concrete classes
