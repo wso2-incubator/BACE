@@ -77,26 +77,24 @@ def test_generate_initial_snippets(
     assert len(result.results) == 0  # Should be empty initially
 
 
-@patch("coevolution.strategies.operators.differential_llm_operator.transformation")
 def test_get_test_method_from_io(
-    mock_transform_module: MagicMock,
     operator: DifferentialLLMOperator,
     sample_io_pairs: list[DifferentialInputOutput],
 ) -> None:
-    """Verify deterministic generation of test methods from IO pairs."""
-    mock_transform = mock_transform_module
+    """Verify generation of test methods from IO pairs using generic test generation."""
 
     starter_code = "class Solution:\n    def f(self, x):\n        return x"
     parent_ids = ["P1", "P2"]
 
-    operator.get_test_method_from_io(
+    result = operator.get_test_method_from_io(
         starter_code, sample_io_pairs, parent_ids, io_index=0
     )
 
-    # Implementation passes suffix string (P1_P2_0) not parent_ids list
-    mock_transform.build_test_method_from_io.assert_called_once_with(
-        starter_code, sample_io_pairs, "P1_P2_0"
-    )
+    # Should generate a valid pytest test function
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert "def test_" in result
+    assert "assert" in result
 
 
 @patch("coevolution.strategies.operators.differential_llm_operator.transformation")
@@ -150,6 +148,77 @@ def test_handle_generation_script_success(
     assert "def generate_test_inputs" in script
 
 
+def test_get_test_method_from_io_standalone_function(
+    operator: DifferentialLLMOperator,
+    sample_io_pairs: list[DifferentialInputOutput],
+) -> None:
+    """Verify generation of test methods from IO pairs for standalone functions."""
+
+    # Standalone function (not a class method)
+    starter_code = "def f(x: int) -> int:\n    return x"
+    parent_ids = ["S1", "S2"]
+
+    result = operator.get_test_method_from_io(
+        starter_code, sample_io_pairs, parent_ids, io_index=0
+    )
+
+    # Should generate a valid pytest test function
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert "def test_" in result
+    assert "assert" in result
+    # For standalone functions, should call the function directly (not through self.solution)
+    assert "f(" in result
+
+
+def test_get_test_method_from_io_standalone_multiple_params(
+    operator: DifferentialLLMOperator,
+) -> None:
+    """Verify test generation for standalone functions with multiple parameters."""
+
+    # Standalone function with multiple parameters
+    starter_code = "def add(x: int, y: int) -> int:\n    return x + y"
+    io_pairs = [{"inputdata": {"x": 5, "y": 3}, "output": 8}]
+    parent_ids = ["A1", "A2"]
+
+    result = operator.get_test_method_from_io(
+        starter_code, io_pairs, parent_ids, io_index=0
+    )
+
+    # Should generate a valid pytest test function
+    assert isinstance(result, str)
+    assert "def test_" in result
+    assert "assert" in result
+    assert "add(" in result
+    # Should have the inputs converted correctly
+    assert "5" in result
+    assert "3" in result
+    assert "8" in result
+
+
+def test_get_test_method_from_io_standalone_list_params(
+    operator: DifferentialLLMOperator,
+) -> None:
+    """Verify test generation for standalone functions with list parameters."""
+
+    # Standalone function with list parameter
+    starter_code = (
+        "def sort_list(nums: list[int]) -> list[int]:\n    return sorted(nums)"
+    )
+    io_pairs = [{"inputdata": {"nums": [3, 1, 2]}, "output": [1, 2, 3]}]
+    parent_ids = ["L1", "L2"]
+
+    result = operator.get_test_method_from_io(
+        starter_code, io_pairs, parent_ids, io_index=0
+    )
+
+    # Should generate a valid pytest test function
+    assert isinstance(result, str)
+    assert "def test_" in result
+    assert "assert" in result
+    assert "sort_list(" in result
+
+
 def test_apply_invalid_input(operator: DifferentialLLMOperator) -> None:
     """Verify that passing an unknown DTO raises UnsupportedOperatorInput."""
 
@@ -157,10 +226,6 @@ def test_apply_invalid_input(operator: DifferentialLLMOperator) -> None:
     class RandomInput(BaseOperatorInput):
         pass
 
-    bad_input = RandomInput(operation="random", question_content="?")
-
-    with pytest.raises(UnsupportedOperatorInput):
-        operator.apply(bad_input)
     bad_input = RandomInput(operation="random", question_content="?")
 
     with pytest.raises(UnsupportedOperatorInput):
