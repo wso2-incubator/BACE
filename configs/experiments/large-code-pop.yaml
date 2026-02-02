@@ -1,0 +1,37 @@
+# Default Experiment Configuration
+# Standard coevolution setup with GPT-5 Mini
+
+experiment:
+  name: "default-coevolution"
+  description: "Standard coevolution experiment with balanced settings"
+
+# Component references
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/standard.yaml"
+code_profile_overrides:
+  initial_population_size: 20
+  max_population_size: 20
+unittest_profile: "profiles/unittest/standard.yaml"
+differential_profile: "profiles/differential/standard.yaml"
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+schedule: "schedules/alternating-10gen.yaml"
+
+# Dataset configuration
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+# Problem selection
+subset:
+  start_index: 0
+  end_index: null  # null = process all
+  problem_ids: null  # null = use index range
+
+# Logging configuration
+logging:
+  console_level: "DEBUG"
+  file_level: "DEBUG"
+  log_file_base_name: "coevolution_run"

@@ -27,7 +27,6 @@ from coevolution.factories import (
     OrchestratorBuilder,
     ScheduleBuilder,
     build_orchestrator_from_config,
-    create_agent_coder_code_profile,
     create_default_code_profile,
     create_differential_test_profile,
     create_public_test_profile,
@@ -110,12 +109,12 @@ def main(
         "-p",
         help="Specific problem IDs to run (overrides index slicing).",
     ),
-    # --- Sharding Controls ---
+    # --- Subset Controls ---
     start_index: int = typer.Option(
         0,
         "--start-index",
         "-s",
-        help="Index of the first problem to process (for sharding).",
+        help="Index of the first problem to process.",
     ),
     end_index: Optional[int] = typer.Option(
         None,
@@ -126,15 +125,15 @@ def main(
 ) -> None:
     """Run a coevolution experiment on LiveCodeBench problems.
 
-    Supports horizontal scaling via sharding:
-    - Use --start-index and --end-index to process a slice of the dataset
-    - Use --problem-ids to run specific problems (overrides slicing)
+    Supports running subsets of the dataset:
+    - Use --start-index and --end-index to process a range of problems
+    - Use --problem-ids to run specific problems (overrides index range)
 
     Examples:
         # Process first 100 problems
         python run_coevolution.py --start-index 0 --end-index 100
 
-        # Process problems 100-200 (for parallel execution)
+        # Process problems 100-200
         python run_coevolution.py --start-index 100 --end-index 200
 
         # Process from index 500 to end
@@ -143,7 +142,9 @@ def main(
         # Run specific problems
         python run_coevolution.py --problem-ids Q123 Q456 Q789
     """
-    logging_utils.setup_logging(console_level="DEBUG", file_level="DEBUG")
+    logging_utils.setup_logging(
+        console_level="DEBUG", file_level="DEBUG", run_id=run_id
+    )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
 
@@ -220,11 +221,6 @@ def main(
         diversity_enabled=True,
     )
 
-    agent_coder_code_profile = create_agent_coder_code_profile(
-        llm_client=llm_client,
-        initial_prior=0.2,
-    )
-
     unittest_profile = create_unittest_test_profile(
         llm_client=llm_client,
         initial_prior=0.2,
@@ -268,8 +264,8 @@ def main(
     # 2. Schedule
     schedule = (
         ScheduleBuilder()
-        .warmup_code(duration=5)
-        # .alternating(total_duration=10, code_step=1, test_step=1, start_with="test")
+        # .warmup_code(duration=5)
+        .alternating(total_duration=6, code_step=1, test_step=1, start_with="test")
         .build()
     )
 
@@ -277,9 +273,9 @@ def main(
     config = (
         OrchestratorBuilder()
         .with_evolution_config(schedule)
-        .with_code_profile(agent_coder_code_profile)
+        .with_code_profile(code_profile)
         .add_test_profile("unittest", unittest_profile)
-        # .add_test_profile("differential", differential_profile)
+        .add_test_profile("differential", differential_profile)
         .with_public_test_profile(public_profile)
         .with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
@@ -318,7 +314,7 @@ def main(
             logger.warning("None of the requested problem IDs found in dataset.")
             return
 
-    # 3. Slice for Sharding (Priority 2)
+    # 3. Select Subset by Index Range (Priority 2)
     else:
         # Validate indices
         total_available = len(all_problems)
@@ -333,7 +329,7 @@ def main(
         if actual_start >= actual_end:
             logger.warning(
                 f"Start index ({actual_start}) >= End index ({actual_end}). "
-                "No problems to process in this shard."
+                "No problems to process in this range."
             )
             return
 
@@ -341,10 +337,10 @@ def main(
         selected_problems = all_problems[actual_start:actual_end]
 
         logger.info(
-            f"Shard Configuration:\n"
+            f"Subset Configuration:\n"
             f"  - Total Problems Available: {total_available}\n"
-            f"  - Shard Range: [{actual_start}:{actual_end}]\n"
-            f"  - Shard Size: {len(selected_problems)}"
+            f"  - Selected Range: [{actual_start}:{actual_end}]\n"
+            f"  - Subset Size: {len(selected_problems)}"
         )
 
     # =========================================================================
