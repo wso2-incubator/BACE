@@ -29,7 +29,7 @@ Usage Patterns:
 """
 
 # Import submodules to make them available as attributes
-from . import analysis, composition, extraction, transformation
+from . import analysis, composition, extraction, test_generation, transformation
 
 # Export exceptions for convenience - they're used across many modules
 from .exceptions import CodeParsingError, CodeProcessingError, CodeTransformationError
@@ -39,6 +39,7 @@ __all__ = [
     "analysis",
     "composition",
     "extraction",
+    "test_generation",
     "transformation",
     # Exceptions
     "CodeProcessingError",
