@@ -5,6 +5,7 @@ import pytest
 from infrastructure.code_preprocessing.composition import (
     compose_lcb_output_script,
     compose_lcb_test_script,
+    compose_pytest_script,
     rebuild_unittest_with_methods,
 )
 from infrastructure.code_preprocessing.exceptions import (
@@ -692,3 +693,154 @@ class Solution:
 
         # Should output 4 (four lines: "21", line of 1s and 0s, line of 0s and 1s, line of 100 and 1s)
         assert "4" in captured_output.getvalue()
+
+
+class TestComposePytestScript:
+    """Test compose_pytest_script function for individual test execution."""
+
+    def test_combines_solution_class_and_test_function(self) -> None:
+        """Test that Solution class and test function are combined correctly."""
+        prog = """
+class Solution:
+    def add(self, a, b):
+        return a + b
+"""
+        test = """
+def test_add():
+    s = Solution()
+    assert s.add(2, 3) == 5
+"""
+        script = compose_pytest_script(prog, test)
+        assert "class Solution" in script
+        assert "def test_add():" in script
+        assert "def add(self, a, b):" in script
+
+    def test_loose_functions_not_wrapped(self) -> None:
+        """Test that standalone functions are left as-is (no wrapping)."""
+        prog = """
+def multiply(x, y):
+    return x * y
+"""
+        test = """
+def test_multiply():
+    assert multiply(3, 4) == 12
+"""
+        script = compose_pytest_script(prog, test)
+        # Functions should remain standalone
+        assert "def multiply(x, y):" in script
+        # No automatic Solution class creation
+        assert "class Solution" not in script
+
+    def test_adds_pytest_import(self) -> None:
+        """Test that pytest import is added if missing."""
+        prog = "def func(): pass"
+        test = "def test_something(): pass"
+        script = compose_pytest_script(prog, test)
+        assert "import pytest" in script
+
+    def test_preserves_pytest_import_if_present(self) -> None:
+        """Test that existing pytest import is preserved without duplication."""
+        prog = """
+import pytest
+
+def func():
+    pass
+"""
+        test = "def test_something(): pass"
+        script = compose_pytest_script(prog, test)
+        # Should only have one pytest import
+        assert script.count("import pytest") == 1
+
+    def test_preserves_helper_classes(self) -> None:
+        """Test that helper classes are preserved."""
+        prog = """
+class Helper:
+    def helper_method(self):
+        return 'helper'
+
+class Solution:
+    def use_helper(self):
+        h = Helper()
+        return h.helper_method()
+"""
+        test = """
+def test_use_helper():
+    s = Solution()
+    assert s.use_helper() == 'helper'
+"""
+        script = compose_pytest_script(prog, test)
+        assert "class Helper" in script
+        assert "class Solution" in script
+        assert "def helper_method(self):" in script
+
+    def test_handles_multiple_test_functions(self) -> None:
+        """Test that multiple test functions are included."""
+        prog = "class Solution:\n    pass"
+        test = """
+def test_one():
+    pass
+
+def test_two():
+    pass
+"""
+        script = compose_pytest_script(prog, test)
+        assert "def test_one():" in script
+        assert "def test_two():" in script
+
+    def test_includes_pytest_main_block(self) -> None:
+        """Test that pytest.main() execution block is added."""
+        prog = "class Solution:\n    pass"
+        test = "def test_something():\n    pass"
+        script = compose_pytest_script(prog, test)
+        assert 'if __name__ == "__main__":' in script
+        assert 'pytest.main([__file__, "-v"])' in script
+
+    def test_handles_test_with_imports(self) -> None:
+        """Test that test-specific imports are preserved."""
+        prog = "def func(): pass"
+        test = """
+import math
+
+def test_with_math():
+    assert math.sqrt(4) == 2
+"""
+        script = compose_pytest_script(prog, test)
+        assert "import math" in script
+        assert "def test_with_math():" in script
+
+    def test_preserves_all_imports(self) -> None:
+        """Test that all imports from both code and test are preserved."""
+        prog = """
+import math
+
+def calculate(x):
+    return math.sqrt(x)
+"""
+        test = """
+import os
+
+def test_calculate():
+    assert calculate(4) == 2
+"""
+        script = compose_pytest_script(prog, test)
+        # Both imports should be present
+        assert "import math" in script
+        assert "import os" in script
+
+    def test_preserves_programmer_imports(self) -> None:
+        """Test that programmer code imports are preserved."""
+        prog = """
+from typing import List
+import collections
+
+def process(items: List[int]):
+    return collections.Counter(items)
+"""
+        test = """
+def test_process():
+    result = process([1, 2, 2, 3])
+    assert result[2] == 2
+"""
+        script = compose_pytest_script(prog, test)
+        assert "from typing import List" in script
+        assert "import collections" in script

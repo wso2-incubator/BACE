@@ -8,6 +8,52 @@ from loguru import logger
 from .exceptions import CodeParsingError, CodeTransformationError
 
 
+def compose_pytest_script(programmer_code: str, test_function: str) -> str:
+    """
+    Compose a pytest script by combining programmer code and test function.
+
+    Simple composition that concatenates code without transformation.
+    Assumes test_function is already written to work with the programmer_code structure.
+
+    Args:
+        programmer_code: Python code (functions, classes, any structure)
+        test_function: A standalone pytest test function
+
+    Returns:
+        Complete pytest script as string
+
+    Example:
+        >>> prog = "def add(a, b):\\n    return a + b"
+        >>> test = "def test_add():\\n    assert add(2, 3) == 5"
+        >>> script = compose_pytest_script(prog, test)
+        >>> "def add" in script and "def test_add" in script
+        True
+    """
+    parts = []
+
+    # Ensure pytest is available
+    has_pytest = "import pytest" in programmer_code or "import pytest" in test_function
+    if not has_pytest:
+        parts.append("import pytest")
+        parts.append("")
+
+    # Add programmer code
+    parts.append(programmer_code.strip())
+    parts.append("")
+
+    # Add test function
+    parts.append(test_function.strip())
+    parts.append("")
+
+    # Add pytest main execution
+    parts.append('if __name__ == "__main__":')
+    parts.append('    pytest.main([__file__, "-v"])')
+
+    test_script = "\n".join(parts)
+    logger.trace(f"Composed pytest script:\n{test_script}")
+    return test_script
+
+
 def compose_lcb_test_script(programmer_code: str, tester_code: str) -> str:
     """
     Combine programmer and tester code into a single test script for LCB Style Problems.
