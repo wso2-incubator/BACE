@@ -368,8 +368,6 @@ def test_orchestrator_full_run(
         execution_system=mock_components["execution_system"],
         bayesian_system=mock_components["bayesian_system"],
         ledger_factory=mock_ledger_factory,
-        test_block_rebuilder=mock_components["test_block_rebuilder"],
-        dataset_test_block_builder=mock_components["dataset_test_block_builder"],
     )
 
     # Run coevolution - orchestrator is stateless, problem passed at runtime
@@ -480,8 +478,6 @@ def main() -> None:
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
         ledger_factory=mock_ledger_factory,
-        test_block_rebuilder=components["test_block_rebuilder"],
-        dataset_test_block_builder=components["dataset_test_block_builder"],
     )
 
     # Step 6: Run coevolution
