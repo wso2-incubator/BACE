@@ -28,6 +28,22 @@ class Solution:
         assert len(sig.params) == 1
         assert sig.params[0] == ("input_str", "str")
         assert sig.return_type == "str"
+        assert sig.is_standalone is False
+
+    def test_standalone_function(self):
+        """Test parsing standalone function."""
+        starter_code = """def add(x: int, y: int) -> int:
+    pass
+"""
+        sig = parse_method_signature(starter_code)
+
+        assert sig.class_name is None
+        assert sig.method_name == "add"
+        assert len(sig.params) == 2
+        assert sig.params[0] == ("x", "int")
+        assert sig.params[1] == ("y", "int")
+        assert sig.return_type == "int"
+        assert sig.is_standalone is True
 
     def test_functional_signature(self):
         """Test parsing FUNCTIONAL-style signature with multiple typed params."""
@@ -76,12 +92,14 @@ class Solution:
         assert sig.return_type is None
 
     def test_no_class_raises_error(self):
-        """Test that missing class raises CodeParsingError."""
+        """Test that code without class or function raises CodeParsingError."""
         starter_code = """
-def standalone_function():
-    pass
+# Just a comment
+x = 5
 """
-        with pytest.raises(CodeParsingError, match="No class definition found"):
+        with pytest.raises(
+            CodeParsingError, match="No class or function definition found"
+        ):
             parse_method_signature(starter_code)
 
     def test_no_instance_method_raises_error(self):
@@ -192,6 +210,25 @@ class Solution:
         assert repr(input_data.rstrip("\n")) in test_code
         assert repr(output_data.rstrip("\n")) in test_code
 
+    def test_standalone_functional_test_generation(self):
+        """Test generating pytest test for standalone function."""
+        starter_code = """def add(x: int, y: int) -> int:
+    pass
+"""
+        input_data = "5\n3"
+        output_data = "8"
+
+        test_code = generate_pytest_test(input_data, output_data, starter_code, 1)
+
+        # Verify structure - should NOT have "solution = "
+        assert "def test_case_1():" in test_code
+        assert "solution = " not in test_code
+        assert "import ast" in test_code
+        assert "input_lines = " in test_code
+        assert "args = [ast.literal_eval(line) for line in input_lines]" in test_code
+        assert "expected_output = ast.literal_eval(" in test_code
+        assert "assert add(*args) == expected_output" in test_code
+
     def test_functional_test_generation(self):
         """Test generating pytest test for FUNCTIONAL-style problem."""
         starter_code = """
@@ -294,6 +331,21 @@ class Solution:
 """
 
         test_code = generate_pytest_test("5\n3", "8", starter_code, 1)
+
+        # Execute the generated test
+        exec_globals = {}
+        exec(starter_code + "\n" + test_code, exec_globals)
+
+        # Call the test function
+        exec_globals["test_case_1"]()  # Should not raise
+
+    def test_standalone_function_round_trip(self):
+        """Test that generated test for standalone function can be executed."""
+        starter_code = """def sort_array(arr):
+    return sorted(arr)
+"""
+
+        test_code = generate_pytest_test("[3, 1, 2]", "[1, 2, 3]", starter_code, 1)
 
         # Execute the generated test
         exec_globals = {}
