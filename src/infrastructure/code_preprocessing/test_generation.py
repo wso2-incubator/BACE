@@ -5,7 +5,6 @@ from the starter code signature, not from dataset-specific metadata.
 """
 
 import ast
-import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,24 +17,27 @@ from .exceptions import CodeParsingError
 class MethodSignature:
     """Parsed method signature information."""
 
-    class_name: str
+    class_name: Optional[str]  # None for standalone functions
     method_name: str
     params: list[tuple[str, Optional[str]]]  # [(name, type_annotation), ...]
     return_type: Optional[str]
+    is_standalone: bool = False  # True if function, False if class method
 
 
 def parse_method_signature(starter_code: str) -> MethodSignature:
     """
-    Parse starter code to extract class and method signature using AST.
+    Parse starter code to extract function/method signature using AST.
+
+    Supports both class methods and standalone functions.
 
     Args:
-        starter_code: Python code containing a class with a method
+        starter_code: Python code containing a class with a method OR a standalone function
 
     Returns:
         MethodSignature with parsed information
 
     Raises:
-        CodeParsingError: If parsing fails or no valid class/method found
+        CodeParsingError: If parsing fails or no valid function found
 
     Example:
         >>> code = "class Solution:\\n    def add(self, x: int, y: int) -> int:\\n        pass"
@@ -44,16 +46,57 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
         'add'
         >>> sig.params
         [('x', 'int'), ('y', 'int')]
+        >>> sig.is_standalone
+        False
+
+        >>> code = "def add(x: int, y: int) -> int:\\n    pass"
+        >>> sig = parse_method_signature(code)
+        >>> sig.is_standalone
+        True
     """
     try:
         tree = ast.parse(starter_code)
     except SyntaxError:
         # Try to complete incomplete starter code
         try:
-            completed = starter_code.rstrip() + "\n        pass"
+            # Check if we're in a class context by looking for class definition
+            if "class " in starter_code:
+                # For class methods, add proper indentation
+                completed = starter_code.rstrip() + "\n        pass"
+            else:
+                # For standalone functions
+                completed = starter_code.rstrip() + "\n    pass"
             tree = ast.parse(completed)
         except SyntaxError as e:
             raise CodeParsingError(f"Failed to parse starter code: {e}") from e
+
+    # Check for standalone function first
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            # Found a standalone function
+            method_name = node.name
+
+            # Extract parameters (all of them, no 'self' to skip)
+            params: list[tuple[str, Optional[str]]] = []
+            for arg in node.args.args:
+                param_name = arg.arg
+                param_type = None
+                if arg.annotation:
+                    param_type = ast.unparse(arg.annotation)
+                params.append((param_name, param_type))
+
+            # Extract return type
+            return_type = None
+            if node.returns:
+                return_type = ast.unparse(node.returns)
+
+            return MethodSignature(
+                class_name=None,
+                method_name=method_name,
+                params=params,
+                return_type=return_type,
+                is_standalone=True,
+            )
 
     # Find first class definition
     class_node: Optional[ast.ClassDef] = None
@@ -63,7 +106,7 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
             break
 
     if not class_node:
-        raise CodeParsingError("No class definition found in starter code")
+        raise CodeParsingError("No class or function definition found in starter code")
 
     # Find first method with 'self' parameter (instance method)
     method_node: Optional[ast.FunctionDef] = None
@@ -101,6 +144,7 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
         method_name=method_name,
         params=params,
         return_type=return_type,
+        is_standalone=False,
     )
 
 
@@ -143,22 +187,24 @@ def generate_pytest_test(
     Automatically infers test format (STDIN vs FUNCTIONAL) from the starter code
     signature. No dataset-specific metadata required.
 
+    Supports both class methods and standalone functions.
+
     STDIN format (single string I/O):
-        - Signature: def method(self, input_str: str) -> str:
+        - Signature: def method(input_str: str) -> str: OR def method(self, input_str: str) -> str:
         - Input: Raw string (can be multi-line)
         - Output: String result
-        - Generated: assert solution.method(input_str) == expected
+        - Generated: assert function(input_str) == expected OR assert solution.method(input_str) == expected
 
     FUNCTIONAL format (multiple typed arguments):
-        - Signature: def method(self, arg1: Type1, arg2: Type2) -> Result:
+        - Signature: def method(arg1: Type1, arg2: Type2) -> Result:
         - Input: Newline-separated Python literals
         - Output: Python literal
-        - Generated: assert solution.method(*args) == expected
+        - Generated: assert function(*args) == expected OR assert solution.method(*args) == expected
 
     Args:
         input: Test input as string
         output: Expected output as string
-        starter_code: Starter code containing method signature
+        starter_code: Starter code containing function/method signature
         test_number: Test case number for naming (default: 1)
 
     Returns:
@@ -172,6 +218,11 @@ def generate_pytest_test(
         >>> test = generate_pytest_test("1\\n2", "3", starter, 1)
         >>> "def test_case_1():" in test
         True
+
+        >>> starter = "def add(x: int, y: int) -> int:\\n    pass"
+        >>> test = generate_pytest_test("1\\n2", "3", starter, 1)
+        >>> "def test_case_1():" in test
+        True
     """
     # Parse signature to determine format
     try:
@@ -182,18 +233,26 @@ def generate_pytest_test(
 
     class_name = signature.class_name
     method_name = signature.method_name
+    is_standalone = signature.is_standalone
 
     # Determine format based on signature
     if is_stdin_signature(signature):
-        return _generate_stdin_test(input, output, class_name, method_name, test_number)
+        return _generate_stdin_test(
+            input, output, class_name, method_name, test_number, is_standalone
+        )
     else:
         return _generate_functional_test(
-            input, output, class_name, method_name, test_number
+            input, output, class_name, method_name, test_number, is_standalone
         )
 
 
 def _generate_stdin_test(
-    input: str, output: str, class_name: str, method_name: str, test_number: int
+    input: str,
+    output: str,
+    class_name: Optional[str],
+    method_name: str,
+    test_number: int,
+    is_standalone: bool,
 ) -> str:
     """
     Generate pytest test for STDIN-style problem.
@@ -201,9 +260,10 @@ def _generate_stdin_test(
     Args:
         input: Input string (may contain newlines)
         output: Expected output string
-        class_name: Name of solution class
-        method_name: Name of method to test
+        class_name: Name of solution class (None for standalone)
+        method_name: Name of method/function to test
         test_number: Test case number
+        is_standalone: True if standalone function, False if class method
 
     Returns:
         Pytest test function as string
@@ -212,7 +272,14 @@ def _generate_stdin_test(
     input_literal = repr(input.rstrip("\n"))
     output_literal = repr(output.rstrip("\n"))
 
-    return f"""def test_case_{test_number}():
+    if is_standalone:
+        return f"""def test_case_{test_number}():
+    input_str = {input_literal}
+    expected_output = {output_literal}
+    assert {method_name}(input_str) == expected_output
+"""
+    else:
+        return f"""def test_case_{test_number}():
     solution = {class_name}()
     input_str = {input_literal}
     expected_output = {output_literal}
@@ -221,7 +288,12 @@ def _generate_stdin_test(
 
 
 def _generate_functional_test(
-    input: str, output: str, class_name: str, method_name: str, test_number: int
+    input: str,
+    output: str,
+    class_name: Optional[str],
+    method_name: str,
+    test_number: int,
+    is_standalone: bool,
 ) -> str:
     """
     Generate pytest test for FUNCTIONAL-style problem.
@@ -229,15 +301,14 @@ def _generate_functional_test(
     Args:
         input: Newline-separated Python literals
         output: Expected output as Python literal
-        class_name: Name of solution class
-        method_name: Name of method to test
+        class_name: Name of solution class (None for standalone)
+        method_name: Name of method/function to test
         test_number: Test case number
+        is_standalone: True if standalone function, False if class method
 
     Returns:
         Pytest test function as string
     """
-    import ast as ast_module
-
     # Split input by newlines and filter empty lines
     input_lines = [line.strip() for line in input.split("\n") if line.strip()]
 
@@ -245,7 +316,17 @@ def _generate_functional_test(
     input_lines_repr = repr(input_lines)
     output_repr = repr(output)
 
-    return f"""def test_case_{test_number}():
+    if is_standalone:
+        return f"""def test_case_{test_number}():
+    # Parse input arguments
+    import ast
+    input_lines = {input_lines_repr}
+    args = [ast.literal_eval(line) for line in input_lines]
+    expected_output = ast.literal_eval({output_repr})
+    assert {method_name}(*args) == expected_output
+"""
+    else:
+        return f"""def test_case_{test_number}():
     # Parse input arguments
     import ast
     solution = {class_name}()
