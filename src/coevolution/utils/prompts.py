@@ -276,27 +276,6 @@ You must structure your response in exactly the following order:
 # Test Generation Prompts
 # ==========================================
 
-INITIAL_TEST = (
-    _TESTER_ROLE + "\n\n"
-    "<task>\n"
-    "Write {population_size} distinct pytest test functions in a Python code block for the problem below.\n"
-    "</task>\n\n"
-    "<problem>\n"
-    "{question_content}\n"
-    "</problem>\n\n"
-    "<context>\n"
-    "The solution is imported in the format:\n"
-    "```python\n{starter_code}```\n"
-    "Note that if the output of the solution is a string, it will not contain a newline at the end.\n"
-    "</context>\n\n"
-    "<constraints>\n"
-    "1. Write tests as standalone pytest functions (not unittest classes).\n"
-    "2. Use plain assert statements (not self.assertEqual).\n"
-    "3. Each test function should create its own Solution instance.\n"
-    "4. Do NOT use the examples given in the problem description.\n"
-    "</constraints>"
-)
-
 
 INITIAL_TEST_AGENT_CODER_STYLE = """
 <system_role>
@@ -334,14 +313,13 @@ Note that if the output of the solution is a string, it will not contain a newli
     - Ensure each test case is well-documented with comments explaining the scenario it covers.
     - Pay special attention to edge cases as they often reveal hidden bugs.
     - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
-    - Write tests as standalone pytest functions in a python code block (not unittest classes).
+    - Write tests as standalone pytest functions in separate python code blocks.
+    - Each test function should work independently and create its own Solution instance if needed.
     - Use plain assert statements (e.g., assert x == y, not self.assertEqual).
-    - Each test function should create its own Solution instance.
-    - Step by step verify that each expected output is accurate and reflects the function's intended behavior.
     - Do not use the examples given in the problem.
     - Do not write any other top-level functions or classes.
     - The solution code will be appended to the test cases for execution, do not include it in your response.
-    - You should write {population_size} distinct test cases.
+    - You should write {population_size} distinct test cases separately in separate code blocks.
 
 </instructions>
 """
@@ -608,7 +586,6 @@ __all__ = [
     "MUTATE_CODE",
     "EDIT_CODE",
     "EDIT_CODE_AGENTIC",
-    "INITIAL_TEST",
     "CROSSOVER_TEST",
     "MUTATE_TEST",
     "EDIT_TEST_AGENTIC",

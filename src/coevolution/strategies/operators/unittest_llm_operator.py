@@ -85,6 +85,9 @@ class PytestLLMOperator(BaseLLMOperator, IOperator):
         """
         Generate initial pytest test functions and return them as snippets.
 
+        The prompt now asks for {population_size} test cases in separate code blocks,
+        so we extract all code blocks and then extract test functions from each.
+
         Returns:
             OperatorOutput with test function snippets. TestPopulation will build
             the complete test block by concatenating imports + test functions.
@@ -100,12 +103,21 @@ class PytestLLMOperator(BaseLLMOperator, IOperator):
         )
 
         response: str = self._generate(prompt)
-        extracted_code_block: str = self._extract_code_block(response)
-        # No need to extract "unittest block" - we already have standalone functions
-        test_functions: list[str] = self._extract_test_functions(extracted_code_block)
+
+        # Extract all code blocks since prompt asks for separate blocks per test
+        all_code_blocks: list[str] = extraction.extract_all_code_blocks_from_response(
+            response
+        )
+        logger.debug(f"Extracted {len(all_code_blocks)} code blocks from response")
+
+        # Extract test functions from all code blocks
+        test_functions: list[str] = []
+        for code_block in all_code_blocks:
+            functions = self._extract_test_functions(code_block)
+            test_functions.extend(functions)
 
         logger.debug(
-            f"Extracted {len(test_functions)} test functions from initial response"
+            f"Extracted {len(test_functions)} test functions from {len(all_code_blocks)} code blocks"
         )
 
         if len(test_functions) != population_size:
@@ -128,11 +140,20 @@ class PytestLLMOperator(BaseLLMOperator, IOperator):
                 starter_code=input_dto.starter_code,
             )
             response_additional = self._generate(prompt_additional)
-            extracted_additional = self._extract_code_block(response_additional)
-            additional_functions = self._extract_test_functions(extracted_additional)
-            test_functions.extend(additional_functions[:additional_needed])
+            all_blocks_additional = extraction.extract_all_code_blocks_from_response(
+                response_additional
+            )
+            for code_block in all_blocks_additional:
+                additional_functions = self._extract_test_functions(code_block)
+                test_functions.extend(
+                    additional_functions[
+                        : additional_needed - len(test_functions) + population_size
+                    ]
+                )
+                if len(test_functions) >= population_size:
+                    break
             logger.debug(
-                f"Added {len(additional_functions[:additional_needed])} additional test functions"
+                f"Total test functions after generating additional: {len(test_functions)}"
             )
 
         results = [OperatorResult(snippet=func, metadata={}) for func in test_functions]
