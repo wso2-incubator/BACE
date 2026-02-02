@@ -12,8 +12,9 @@ _TESTER_ROLE = "<system_role>You are an expert software tester.</system_role>"
 
 _TEST_METHOD_FORMAT_INSTRUCTION = (
     "<output_formatting>\n"
-    "Return only the code for a single unittest test method in a python code block.\n"
-    "Test method name should be unique and descriptive of the test case.\n"
+    "Return only the code for a single pytest test function in a python code block.\n"
+    "Test function name should start with 'test_' and be unique and descriptive of the test case.\n"
+    "Use plain assert statements (e.g., assert x == y).\n"
     "</output_formatting>"
 )
 
@@ -278,7 +279,7 @@ You must structure your response in exactly the following order:
 INITIAL_TEST = (
     _TESTER_ROLE + "\n\n"
     "<task>\n"
-    "Write {population_size} distinct unit tests in a Python code block for the problem below.\n"
+    "Write {population_size} distinct pytest test functions in a Python code block for the problem below.\n"
     "</task>\n\n"
     "<problem>\n"
     "{question_content}\n"
@@ -289,8 +290,10 @@ INITIAL_TEST = (
     "Note that if the output of the solution is a string, it will not contain a newline at the end.\n"
     "</context>\n\n"
     "<constraints>\n"
-    "1. Write tests using the unittest framework.\n"
-    "2. Do NOT use the examples given in the problem description.\n"
+    "1. Write tests as standalone pytest functions (not unittest classes).\n"
+    "2. Use plain assert statements (not self.assertEqual).\n"
+    "3. Each test function should create its own Solution instance.\n"
+    "4. Do NOT use the examples given in the problem description.\n"
     "</constraints>"
 )
 
@@ -331,7 +334,9 @@ Note that if the output of the solution is a string, it will not contain a newli
     - Ensure each test case is well-documented with comments explaining the scenario it covers.
     - Pay special attention to edge cases as they often reveal hidden bugs.
     - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
-    - The format of test cases should be in Python unittest framework in a python code block.
+    - Write tests as standalone pytest functions in a python code block (not unittest classes).
+    - Use plain assert statements (e.g., assert x == y, not self.assertEqual).
+    - Each test function should create its own Solution instance.
     - Step by step verify that each expected output is accurate and reflects the function's intended behavior.
     - Do not use the examples given in the problem.
     - Do not write any other top-level functions or classes.
@@ -455,7 +460,7 @@ You are an expert AI QA engineer and software tester.
 You do not have access to a file system or execution environments.
 Your input will consist of:
 1. A problem description in <problem> tag
-2. A current test case (unit test) in <current_test> tag
+2. A current test case (pytest test function) in <current_test> tag
 3. Feedback logs in <feedback_from_solutions> tag showing how various solution candidates (some correct, some incorrect) performed against this test.
 
 Your goal is to analyze the feedback to identify weaknesses or errors in the test case and provide a refined, robust version.
@@ -474,10 +479,11 @@ Your default personality is concise, direct, and critical (in a constructive way
 When providing the fixed test case, adhere to these standards:
 - **Validity:** The test MUST pass for a correct solution. If valid code failed, the test logic is flawed—fix it.
 - **Discrimination:** The test MUST fail for incorrect solutions. If buggy code passed, the test is too weak—add specific assertions to catch those bugs.
-- **Standard Library:** This test is a unit test method using Python's unittest framework.
+- **Standard Library:** This test is a standalone pytest function using plain assert statements.
 - **Isolation:** Ensure tests are independent and do not rely on external state unless provided.
 - **Complexity:** Avoid unneeded complexity. Simple is better.
-- **Naming:** Use descriptive names for test methods reflecting the scenario being tested.
+- **Naming:** Use descriptive names for test functions reflecting the scenario being tested.
+- **Solution Instance:** Each test function should create its own Solution instance.
 </testing_guidelines>
 
 <analysis_strategy>
@@ -493,9 +499,9 @@ Before generating the test code, perform the following internal analysis:
 
 <output_formatting>
 1. **Brief Explanation:** Start with a concise sentence explaining why the test is being changed (e.g., "Added an assertion for empty list input to catch the breakdown in Solution B" or "Fixed incorrect expected value for input 'xyz'.").
-2. **Code Blocks:** Provide the fixed test method in a Python code block (e.g., ```python ... ```). This should be a single unittest test method.
-3. **Test Name**: The test method name should be changed to reflect the specific scenario being tested.
-4. **Helper Functions**: Use helper functions only if absolutely necessary to keep the test clear and focused. Helper functions if used should be within the test method.
+2. **Code Blocks:** Provide the fixed test function in a Python code block (e.g., ```python ... ```). This should be a single pytest test function.
+3. **Test Name**: The test function name should be changed to reflect the specific scenario being tested.
+4. **Helper Functions**: Use helper functions only if absolutely necessary to keep the test clear and focused. Helper functions if used should be within the test function.
 </output_formatting>"""
     + "\n\n"
     """

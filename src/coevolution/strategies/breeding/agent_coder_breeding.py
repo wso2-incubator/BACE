@@ -98,9 +98,7 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
 
         logger.info("Initialized AgentCoderBreedingStrategy.")
 
-    def initialize_individuals(
-        self, problem: Problem
-    ) -> tuple[list[CodeIndividual], str | None]:
+    def initialize_individuals(self, problem: Problem) -> list[CodeIndividual]:
         """Create initial individuals using parallel execution.
 
         Submits multiple batch generation tasks to a ThreadPoolExecutor.
@@ -115,7 +113,7 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
 
         output = self.operator.generate_initial_snippets(input_dto)
         individual = CodeIndividual(
-            snippet=output[0].results[0].snippet,
+            snippet=output.results[0].snippet,
             probability=self.pop_config.initial_prior,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
@@ -123,7 +121,7 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         )
 
         logger.info("Initialized 1 individual using AgentCoderBreedingStrategy.")
-        return [individual], None
+        return [individual]
 
     @override
     def breed(

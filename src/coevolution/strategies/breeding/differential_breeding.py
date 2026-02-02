@@ -147,13 +147,14 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self._explored_pairs_cache: set[tuple[str, str]] = set()
         logger.info("DifferentialBreedingStrategy initialized.")
 
-    def initialize_individuals(
-        self, problem: Problem
-    ) -> tuple[list[TestIndividual], str | None]:
+    def initialize_individuals(self, problem: Problem) -> list[TestIndividual]:
         """
-        Sets up the test suite scaffold.
+        Initialize differential testing with empty population.
+
+        Differential tests start empty and are generated dynamically during evolution.
         """
-        _, test_class_block = self.operator.generate_initial_snippets(
+        # Generate empty initial output to ensure operator is ready
+        self.operator.generate_initial_snippets(
             InitialInput(
                 operation=OPERATION_INITIAL,
                 question_content=problem.question_content,
@@ -162,10 +163,8 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             )
         )
 
-        if test_class_block is None:
-            logger.error("Failed to setup initial differential test class block.")
-            return [], None
-        return [], test_class_block
+        logger.debug("Differential test population starts empty (Gen 0)")
+        return []
 
     @override
     def breed(

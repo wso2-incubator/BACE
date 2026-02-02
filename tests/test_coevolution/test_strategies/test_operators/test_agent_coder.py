@@ -49,7 +49,7 @@ class TestAgentCoderLifecycle:
         """Turn 0: Verify initialization seeds history correctly."""
 
         # Act
-        output, _ = operator.generate_initial_snippets(valid_initial_input)
+        output = operator.generate_initial_snippets(valid_initial_input)
 
         # Assert 1: Result is returned
         assert len(output.results) == 1
@@ -212,7 +212,7 @@ class TestAgentCoderConstraints:
         ```
         """
 
-        output, _ = operator.generate_initial_snippets(valid_initial_input)
+        output = operator.generate_initial_snippets(valid_initial_input)
 
         # Should pick the python block, not the text block
         assert "return 42" in output.results[0].snippet

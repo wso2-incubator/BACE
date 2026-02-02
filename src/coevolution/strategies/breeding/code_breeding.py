@@ -151,9 +151,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             OPERATION_EDIT: self._breed_via_edit,
         }
 
-    def initialize_individuals(
-        self, problem: Problem
-    ) -> tuple[list[CodeIndividual], str | None]:
+    def initialize_individuals(self, problem: Problem) -> list[CodeIndividual]:
         """Create initial individuals using parallel execution.
 
         Submits multiple batch generation tasks to a ThreadPoolExecutor.
@@ -187,7 +185,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
 
             for future in as_completed(future_to_batch):
                 try:
-                    initial_outputs, _ = future.result()
+                    initial_outputs = future.result()
 
                     if not initial_outputs or not initial_outputs.results:
                         logger.warning("A batch task returned no results.")
@@ -220,7 +218,8 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         if len(individuals) > initial_pop_size:
             individuals = individuals[:initial_pop_size]
 
-        return individuals, None
+        logger.debug(f"Created {len(individuals)} code individuals (Gen 0)")
+        return individuals
 
     def _breed_via_mutation(self, context: CoevolutionContext) -> list[CodeIndividual]:
         """Breed new individuals via mutation."""

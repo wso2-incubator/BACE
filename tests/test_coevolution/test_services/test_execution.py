@@ -87,13 +87,9 @@ class TestAdd:
             parents={"code": [], "test": []},
         ),
     ]
-    # Create mock dependencies for TestPopulation
-    mock_rebuilder = Mock()
 
     return TestPopulation(
         individuals=individuals,
-        test_block_rebuilder=mock_rebuilder,
-        test_class_block=test_class,
     )
 
 
@@ -508,7 +504,7 @@ class TestWorkerFunction:
         code_idx, result = _execute_single_code(
             code_idx=0,
             code_snippet="def add(a, b): return a + b",
-            test_class_block="class TestAdd: pass",
+            test_class_block="class TestSuite:\n    def test_example(self): pass",
             sandbox_config=default_sandbox_config,
         )
 
@@ -531,7 +527,7 @@ class TestWorkerFunction:
         code_idx, result = _execute_single_code(
             code_idx=1,
             code_snippet="def bad(): raise Exception()",
-            test_class_block="class TestBad: pass",
+            test_class_block="class TestSuite:\n    def test_example(self): pass",
             sandbox_config=default_sandbox_config,
         )
 
@@ -724,13 +720,8 @@ if __name__ == '__main__':
             ),
         ]
 
-        # Mock the required dependencies for TestPopulation
-        mock_rebuilder = Mock()
-
         return TestPopulation(
             individuals=individuals,
-            test_block_rebuilder=mock_rebuilder,
-            test_class_block=test_class,
         )
 
     @patch("coevolution.services.execution.SafeCodeSandbox")
@@ -838,8 +829,6 @@ class TestAdditionalEdgeCases:
                     parents={"code": [], "test": []},
                 )
             ],
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestFoo: pass",
         )
 
         # Mock sandbox
@@ -902,8 +891,6 @@ class TestAdditionalEdgeCases:
                 )
                 for i in range(2)
             ],
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
         # Mock all to pass
@@ -1112,7 +1099,7 @@ class TestAdditionalEdgeCases:
             code_idx, result = _execute_single_code(
                 code_idx=7,
                 code_snippet="def foo(): pass",
-                test_class_block="class TestFoo: pass",
+                test_class_block="class TestSuite:\n    def test_example(self): pass",
                 sandbox_config=default_sandbox_config,
             )
 
@@ -1274,8 +1261,6 @@ class TestAdditionalEdgeCases:
                 )
                 for i in range(15)
             ],
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
         # Mock sandbox to alternate pass/fail based on index
@@ -1870,8 +1855,6 @@ class TestArchitecturalWeaknesses:
         ]
         return TestPopulation(
             individuals=individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
     @patch("coevolution.services.execution.SafeCodeSandbox")
@@ -1908,8 +1891,6 @@ class TestArchitecturalWeaknesses:
 
         test_pop = TestPopulation(
             individuals=[test_b, test_a],
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
         code_pop = CodePopulation(
@@ -2018,8 +1999,6 @@ class TestArchitecturalWeaknesses:
                     parents={"code": [], "test": []},
                 )
             ],
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
         mock_sandbox_instance.execute_test_script.return_value = SandboxResult(
@@ -2165,8 +2144,6 @@ class TestArchitecturalWeaknesses:
         # Empty test population
         test_pop = TestPopulation(
             individuals=[],
-            test_block_rebuilder=Mock(),
-            test_class_block="class Test: pass",
         )
 
         mock_sandbox_instance.execute_test_script.return_value = SandboxResult(

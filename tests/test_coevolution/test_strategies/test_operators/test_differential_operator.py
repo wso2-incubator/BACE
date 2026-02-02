@@ -60,10 +60,7 @@ def test_supported_operations(operator: DifferentialLLMOperator) -> None:
 def test_generate_initial_snippets(
     mock_transform_module: MagicMock, operator: DifferentialLLMOperator
 ) -> None:
-    """Verify initialization creates a scaffold class block."""
-    # Cast module mock for typing
-    mock_transform = mock_transform_module
-
+    """Verify initialization returns empty OperatorOutput for differential tests."""
     # Setup
     input_dto = InitialInput(
         operation=OPERATION_INITIAL,
@@ -71,20 +68,13 @@ def test_generate_initial_snippets(
         starter_code="def sort(x): pass",
         population_size=10,
     )
-    mock_transform.setup_unittest_class_from_starter_code.return_value = (
-        "class TestSolution: ..."
-    )
 
     # Execute
-    result, block = operator.generate_initial_snippets(input_dto)
+    result = operator.generate_initial_snippets(input_dto)
 
     # Assert
     assert isinstance(result, OperatorOutput)
     assert len(result.results) == 0  # Should be empty initially
-    assert block == "class TestSolution: ..."
-    mock_transform.setup_unittest_class_from_starter_code.assert_called_with(
-        "def sort(x): pass"
-    )
 
 
 @patch("coevolution.strategies.operators.differential_llm_operator.transformation")

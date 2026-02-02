@@ -206,10 +206,10 @@ class TestLCBDatasetTestBlockBuilder:
         assert isinstance(result, str)
         assert len(result) > 0
 
-        # Check for unittest structure
-        assert "import unittest" in result
-        assert "class" in result
+        # Check for pytest structure
+        assert "import pytest" in result or "def test_" in result
         assert "def test_" in result
+        assert "assert" in result
 
     def test_build_test_class_block_functional(
         self, builder: LCBDatasetTestBlockBuilder
@@ -227,10 +227,10 @@ class TestLCBDatasetTestBlockBuilder:
         assert isinstance(result, str)
         assert len(result) > 0
 
-        # Check for unittest structure
-        assert "import unittest" in result
-        assert "class" in result
+        # Check for pytest structure
+        assert "import pytest" in result or "def test_" in result
         assert "def test_" in result
+        assert "assert" in result
 
     def test_build_test_class_block_empty_test_cases(
         self, builder: LCBDatasetTestBlockBuilder

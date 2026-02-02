@@ -4,7 +4,7 @@ import numpy as np
 from loguru import logger
 
 from coevolution.utils import logging as logging_utils
-from infrastructure.code_preprocessing.transformation import extract_test_methods_code
+from infrastructure.code_preprocessing.extraction import extract_test_functions_code
 
 # Import concrete classes
 from .individual import CodeIndividual, TestIndividual
@@ -21,7 +21,6 @@ from .interfaces import (
     IExecutionSystem,
     IInteractionLedger,
     InteractionData,
-    ITestBlockRebuilder,
     LedgerFactory,
     Problem,
     PublicTestProfile,
@@ -62,7 +61,6 @@ class Orchestrator:
         # --- Global Infrastructure ---
         execution_system: IExecutionSystem,
         bayesian_system: IBeliefUpdater,
-        test_block_rebuilder: ITestBlockRebuilder,
         dataset_test_block_builder: IDatasetTestBlockBuilder,
         ledger_factory: LedgerFactory,
     ) -> None:
@@ -97,7 +95,6 @@ class Orchestrator:
             public_test_profile: Profile for public/ground-truth tests
             execution_system: System for executing code against tests
             bayesian_system: System for belief updates
-            test_block_rebuilder: Rebuilds test class blocks
             dataset_test_block_builder: Builds test blocks from dataset
         """
         logger.info("Initializing Orchestrator...")
@@ -134,7 +131,6 @@ class Orchestrator:
         self.bayesian_system = bayesian_system
         self.ledger_factory = ledger_factory
 
-        self.test_block_rebuilder = test_block_rebuilder
         self.dataset_test_block_builder = dataset_test_block_builder
 
     def run(self, problem: Problem) -> tuple[CodePopulation, dict[str, TestPopulation]]:
@@ -649,12 +645,9 @@ class Orchestrator:
         logger.info("Creating all initial populations...")
 
         # --- 1. Code Population ---
-        code_individuals, context_code = (
-            self.code_profile.breeding_strategy.initialize_individuals(
-                problem,
-            )
+        code_individuals = self.code_profile.breeding_strategy.initialize_individuals(
+            problem,
         )
-        # context_code is None for code populations - can be ignored
 
         code_population = CodePopulation(code_individuals, generation=0)
         logger.info(f"Created {code_population!r}")
@@ -672,25 +665,12 @@ class Orchestrator:
         """
         test_profile = self.evolved_test_profiles[test_type]
 
-        test_individuals, context_code = (
-            test_profile.breeding_strategy.initialize_individuals(
-                problem,
-            )
+        test_individuals = test_profile.breeding_strategy.initialize_individuals(
+            problem,
         )
-
-        # For test populations, context_code should contain the test class block
-        # (imports, setUp, helpers). Breeding strategy/operator is responsible for
-        # providing this, even for empty populations (e.g., with a template).
-        if context_code is None:
-            raise ValueError(
-                f"Test breeding strategy for '{test_type}' returned None context_code - "
-                f"expected test class block (even for empty populations)"
-            )
 
         test_population = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=self.test_block_rebuilder,
-            test_class_block=context_code,
             generation=0,
         )
         logger.info(f"Created {test_type} {test_population!r}")
@@ -717,32 +697,28 @@ class Orchestrator:
         Returns:
             TestPopulation with fixed test individuals
         """
-        # Build the test class block from dataset test cases
+        # Build test code from dataset test cases and extract individual functions
         test_class_block = self.dataset_test_block_builder.build_test_class_block(
             test_cases, starter_code
         )
-
-        # Extract individual test methods
-        test_methods = extract_test_methods_code(test_class_block)
+        test_functions = extract_test_functions_code(test_class_block)
 
         # Create test individuals with fixed probability
         FIXED_TEST_PROBABILITY = 1.0
         test_individuals = [
             TestIndividual(
-                snippet=method,
+                snippet=function,
                 probability=FIXED_TEST_PROBABILITY,
                 creation_op=OPERATION_INITIAL,
                 generation_born=0,
                 parents={},
             )
-            for method in test_methods
+            for function in test_functions
         ]
 
         # Create and return the test population
         test_population = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=self.test_block_rebuilder,
-            test_class_block=test_class_block,
             generation=0,
         )
         logger.debug(

@@ -142,8 +142,11 @@ class OrchestratorConfig:
         execution_system: System for running code against tests
         bayesian_system: System for belief updates
         ledger_factory: Factory for creating fresh interaction ledgers
-        test_block_rebuilder: Rebuilds test class blocks from method snippets
         dataset_test_block_builder: Builds test blocks from dataset test cases
+
+    Note: test_block_rebuilder has been removed with the migration to pytest standalone
+    functions. Test rebuilding is now simple string concatenation handled internally
+    by TestPopulation.
 
     Example:
         config = OrchestratorConfig(
@@ -157,7 +160,6 @@ class OrchestratorConfig:
             execution_system=execution_system,
             bayesian_system=bayesian_system,
             ledger_factory=my_ledger_factory,
-            test_block_rebuilder=test_rebuilder,
             dataset_test_block_builder=dataset_builder,
         )
 
@@ -169,7 +171,6 @@ class OrchestratorConfig:
             execution_system=config.execution_system,
             bayesian_system=config.bayesian_system,
             ledger_factory=config.ledger_factory,
-            test_block_rebuilder=config.test_block_rebuilder,
             dataset_test_block_builder=config.dataset_test_block_builder,
         )
     """
@@ -186,5 +187,4 @@ class OrchestratorConfig:
     execution_system: "IExecutionSystem"
     bayesian_system: "IBeliefUpdater"
     ledger_factory: "LedgerFactory"
-    test_block_rebuilder: "ITestBlockRebuilder"
     dataset_test_block_builder: "IDatasetTestBlockBuilder"

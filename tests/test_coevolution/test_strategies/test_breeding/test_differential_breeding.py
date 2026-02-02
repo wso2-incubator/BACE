@@ -141,20 +141,18 @@ def make_test_ind(
 def test_initialization_scaffold(
     strategy: DifferentialBreedingStrategy, mock_operator: MagicMock
 ) -> None:
-    """Test that initialize_individuals returns no individuals but sets up the class block."""
-    mock_operator.generate_initial_snippets.return_value = (
-        MagicMock(spec=OperatorOutput),
-        "class TestScaffold: ...",
+    """Test that initialize_individuals returns empty list for differential tests."""
+    mock_operator.generate_initial_snippets.return_value = MagicMock(
+        spec=OperatorOutput
     )
 
     problem_mock = MagicMock(spec=Problem)
     problem_mock.question_content = "Q"
     problem_mock.starter_code = "S"
 
-    inds, block = strategy.initialize_individuals(problem_mock)
+    inds = strategy.initialize_individuals(problem_mock)
 
     assert inds == []
-    assert block == "class TestScaffold: ..."
     mock_operator.generate_initial_snippets.assert_called_once()
 
 

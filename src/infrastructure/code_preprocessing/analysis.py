@@ -120,6 +120,48 @@ def analyze_test_methods(test_code: str) -> List[str]:
     return test_cases
 
 
+def analyze_test_functions(test_code: str) -> List[str]:
+    """
+    Analyze pytest test code and return the names of all test functions.
+
+    Unlike analyze_test_methods which looks for test methods inside unittest classes,
+    this function looks for standalone test functions (pytest style).
+
+    Args:
+        test_code: String containing pytest test functions
+
+    Returns:
+        List of test function names (functions starting with 'test_')
+
+    Raises:
+        CodeParsingError: If test code has syntax errors
+
+    Example:
+        >>> code = \"\"\"
+        ... def test_addition():
+        ...     assert 1 + 1 == 2
+        ...
+        ... def test_subtraction():
+        ...     assert 5 - 3 == 2
+        ... \"\"\"
+        >>> analyze_test_functions(code)
+        ['test_addition', 'test_subtraction']
+    """
+    test_functions = []
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        logger.debug(f"Syntax error parsing test code: {test_code}")
+        raise CodeParsingError(f"Failed to parse test code: {e}") from e
+
+    # Find top-level test functions
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+            test_functions.append(node.name)
+
+    return test_functions
+
+
 def analyze_code_imports(code_string: str) -> List[str]:
     """
     Analyze code and return all import statements.

@@ -55,14 +55,6 @@ def sample_test_individuals() -> list[TestIndividual]:
 
 
 @pytest.fixture
-def mock_test_block_builder() -> MagicMock:
-    """Mock ITestBlockBuilder that returns a formatted test class."""
-    mock = MagicMock()
-    mock.return_value = "class TestClass:\n    pass"
-    return mock
-
-
-@pytest.fixture
 def sample_code_population(
     sample_code_individuals: list[CodeIndividual],
 ) -> CodePopulation:
@@ -73,13 +65,10 @@ def sample_code_population(
 @pytest.fixture
 def sample_test_population(
     sample_test_individuals: list[TestIndividual],
-    mock_test_block_builder: MagicMock,
 ) -> TestPopulation:
-    """Create a sample TestPopulation with mocked dependencies."""
+    """Create a sample TestPopulation."""
     return TestPopulation(
         individuals=sample_test_individuals,
-        test_block_rebuilder=mock_test_block_builder,
-        test_class_block="class TestOriginal:\n    pass",
         generation=0,
     )
 
@@ -105,13 +94,10 @@ class TestBasePopulationSharedBehavior:
     def test_test_population_initialization(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_test_block_builder: MagicMock,
     ) -> None:
         """Test TestPopulation initialization with valid individuals."""
         pop = TestPopulation(
             individuals=sample_test_individuals,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
             generation=3,
         )
 
@@ -447,60 +433,18 @@ class TestCodePopulation:
 class TestTestPopulation:
     """Test TestPopulation-specific functionality."""
 
-    def test_initialization_with_test_class_block(
+    def test_initialization_basic(
         self,
         sample_test_individuals: list[TestIndividual],
-        mock_test_block_builder: MagicMock,
     ) -> None:
-        """Test TestPopulation initialization requires test_class_block."""
-        test_block = "class TestExample:\n    def test_one(self): pass"
-
+        """Test TestPopulation initialization with basic parameters."""
         pop = TestPopulation(
             individuals=sample_test_individuals,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block=test_block,
             generation=2,
         )
 
         assert pop.size == 5
         assert pop.generation == 2
-        assert pop.test_class_block == test_block
-
-    def test_initialization_without_test_class_block(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test initialization without test_class_block raises ValueError."""
-        with pytest.raises(ValueError, match="test_class_block is required"):
-            TestPopulation(
-                individuals=sample_test_individuals,
-                test_block_rebuilder=mock_test_block_builder,
-                test_class_block="",
-                generation=0,
-            )
-
-    def test_initialization_with_whitespace_test_class_block(
-        self,
-        sample_test_individuals: list[TestIndividual],
-        mock_test_block_builder: MagicMock,
-    ) -> None:
-        """Test initialization with whitespace-only test_class_block raises ValueError."""
-        with pytest.raises(ValueError, match="test_class_block is required"):
-            TestPopulation(
-                individuals=sample_test_individuals,
-                test_block_rebuilder=mock_test_block_builder,
-                test_class_block="   \n\t  ",
-                generation=0,
-            )
-
-    def test_test_class_block_property(
-        self, sample_test_population: TestPopulation
-    ) -> None:
-        """Test test_class_block property returns current block."""
-        assert (
-            sample_test_population.test_class_block == "class TestOriginal:\n    pass"
-        )
 
     def test_repr_format(self, sample_test_population: TestPopulation) -> None:
         """Test __repr__ string representation."""
@@ -695,14 +639,11 @@ class TestPopulationIntegration:
         self,
         sample_code_individuals: list[CodeIndividual],
         sample_test_individuals: list[TestIndividual],
-        mock_test_block_builder: MagicMock,
     ) -> None:
         """Test CodePopulation and TestPopulation working together."""
         code_pop = CodePopulation(sample_code_individuals, generation=0)
         test_pop = TestPopulation(
             individuals=sample_test_individuals,
-            test_block_rebuilder=mock_test_block_builder,
-            test_class_block="class Test:\n    pass",
             generation=0,
         )
 

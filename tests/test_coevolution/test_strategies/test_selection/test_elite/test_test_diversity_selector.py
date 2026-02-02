@@ -37,8 +37,6 @@ def sample_test_population() -> TestPopulation:
     ]
     return TestPopulation(
         individuals=individuals,
-        test_block_rebuilder=Mock(),
-        test_class_block="class TestSuite: pass",
     )
 
 
@@ -72,8 +70,6 @@ class TestTestDiversityEliteSelector:
         # Create empty test population (now supported)
         empty_pop = TestPopulation(
             individuals=[],
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         context = Mock(spec=CoevolutionContext)
@@ -103,8 +99,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # Create observation matrix with unique columns (3 code x 4 tests)
@@ -149,8 +143,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # Create observation matrix with duplicate columns
@@ -201,8 +193,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # All columns identical
@@ -299,8 +289,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # All zeros - all tests fail all code
@@ -344,8 +332,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # All ones - all tests pass all code
@@ -389,8 +375,6 @@ class TestTestDiversityEliteSelector:
         ]
         test_pop = TestPopulation(
             individuals=test_individuals,
-            test_block_rebuilder=Mock(),
-            test_class_block="class TestSuite: pass",
         )
 
         # Each test has a completely unique discrimination pattern

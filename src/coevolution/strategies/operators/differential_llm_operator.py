@@ -9,13 +9,6 @@ from typing import Any, TypedDict, cast
 
 from loguru import logger
 
-from infrastructure.code_preprocessing import (
-    CodeParsingError,
-    CodeTransformationError,
-    composition,
-    transformation,
-)
-
 from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     BaseOperatorInput,
@@ -25,6 +18,13 @@ from coevolution.core.interfaces import (
     OperatorResult,
 )
 from coevolution.utils.prompts import DIFFERENTIAL_INPUT_GENERATOR_PROMPT
+from infrastructure.code_preprocessing import (
+    CodeParsingError,
+    CodeTransformationError,
+    composition,
+    transformation,
+)
+
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
 
@@ -57,20 +57,17 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         return composition.rebuild_unittest_with_methods(test_block, test_methods)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def generate_initial_snippets(
-        self, input_dto: InitialInput
-    ) -> tuple[OperatorOutput, str | None]:
-        """Initially there are no differential tests to generate. The test block will be set with the setup code."""
+    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
+        """
+        Initially there are no differential tests to generate.
 
-        logger.debug("Generating initial test class block for differential tests")
-        test_class_block = transformation.setup_unittest_class_from_starter_code(
-            input_dto.starter_code
-        )
+        Note: Previously returned test class block, but with pytest standalone
+        functions, TestPopulation builds its own test block.
+        """
+
+        logger.debug("Generating empty initial output for differential tests")
         result = OperatorOutput(results=[])
-        logger.debug(
-            f"Generated initial test class block with length {len(test_class_block)}"
-        )
-        return result, test_class_block
+        return result
 
     def get_test_method_from_io(
         self,

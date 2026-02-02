@@ -59,7 +59,7 @@ class IOperator(Protocol):
     def generate_initial_snippets(
         self,
         input_dto: InitialInput,
-    ) -> tuple[OperatorOutput, str | None]:
+    ) -> OperatorOutput:
         """
         Generate the initial batch of code or test snippets.
 
@@ -67,14 +67,14 @@ class IOperator(Protocol):
             input_dto: DTO containing generation parameters (`InitialInput`).
 
         Returns:
-            Tuple of:
-            - OperatorOutput: A container with the generated snippets and metadata.
-            - context_code: Optional auxiliary code (e.g., test class scaffold
-              with imports/setUp) needed to run these snippets. None for code ops.
+            OperatorOutput: A container with the generated snippets and metadata.
+
+        Note: Previously returned a tuple with context_code (test class scaffold),
+        but with pytest standalone functions, TestPopulation now builds its own
+        test block through simple concatenation of imports + test functions.
 
         Empty State Behavior (size=0):
-            If population_size is 0, should return an empty OperatorOutput
-            (results=[]) and potentially a context string (e.g. empty test suite scaffold).
+            If population_size is 0, should return an empty OperatorOutput (results=[]).
         """
         ...
 

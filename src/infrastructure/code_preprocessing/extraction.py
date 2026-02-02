@@ -168,3 +168,71 @@ def extract_code_structure(code_string: str) -> CodeStructure:
         "function_definitions": function_definitions,
         "class_definitions": class_definitions,
     }
+
+
+def extract_test_functions_code(test_code: str) -> List[str]:
+    """
+    Extract standalone pytest test functions from code.
+
+    Unlike extract_test_methods_code which extracts test methods from unittest classes,
+    this function extracts top-level test functions (pytest style).
+
+    Args:
+        test_code: Python source code containing pytest test functions
+
+    Returns:
+        List of test function code strings (each starting with 'def test_')
+
+    Raises:
+        CodeParsingError: If code has syntax errors
+
+    Example:
+        >>> code = \"\"\"
+        ... import pytest
+        ...
+        ... def test_addition():
+        ...     assert 1 + 1 == 2
+        ...
+        ... def test_subtraction():
+        ...     assert 5 - 3 == 2
+        ... \"\"\"
+        >>> functions = extract_test_functions_code(code)
+        >>> len(functions)
+        2
+    """
+    test_functions: List[str] = []
+
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError as e:
+        logger.debug(f"Failed to parse test code: {test_code}")
+        raise CodeParsingError(f"Failed to parse test code: {e}") from e
+
+    for node in tree.body:
+        # Look for top-level functions starting with 'test_'
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+            # Get the source code for this function
+            try:
+                function_code = ast.get_source_segment(test_code, node)
+                if function_code is None:
+                    # Fallback to unparsing if get_source_segment fails
+                    function_code = ast.unparse(node)
+                test_functions.append(function_code)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract source for test function '{node.name}': {e}"
+                )
+                # Try unparsing as fallback
+                try:
+                    function_code = ast.unparse(node)
+                    test_functions.append(function_code)
+                except Exception as unparse_error:
+                    logger.error(
+                        f"Failed to unparse test function '{node.name}': {unparse_error}"
+                    )
+                    continue
+
+    if not test_functions:
+        logger.debug(f"No test functions found in code: {test_code[:200]}...")
+
+    return test_functions

@@ -72,12 +72,12 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             OPERATION_EDIT: self._breed_via_edit,
         }
 
-    def initialize_individuals(
-        self, problem: Problem
-    ) -> tuple[list[TestIndividual], str | None]:
-        """Create initial individuals via LLM."""
+    def initialize_individuals(self, problem: Problem) -> list[TestIndividual]:
+        """
+        Create initial individuals via LLM.
+        """
 
-        initial_outputs, context_code = self.operator.generate_initial_snippets(
+        initial_outputs = self.operator.generate_initial_snippets(
             InitialInput(
                 operation=OPERATION_INITIAL,
                 question_content=problem.question_content,
@@ -90,7 +90,7 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         # Robustness check for initial generation
         if not initial_outputs or not initial_outputs.results:
             logger.error("No initial unittest snippets generated.")
-            return [], None
+            return []
 
         for operator_result in initial_outputs.results:
             individual = TestIndividual(
@@ -101,7 +101,8 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             )
             individuals.append(individual)
 
-        return individuals, context_code
+        logger.debug(f"Created {len(individuals)} test individuals (Gen 0)")
+        return individuals
 
     # --- Handlers (Selection -> Execution -> Construction) ---
 

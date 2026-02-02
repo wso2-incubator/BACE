@@ -97,10 +97,8 @@ class MockCodeOperator(IOperator):
         """Return the set of operations this operator supports."""
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
-    def generate_initial_snippets(
-        self, input_dto: InitialInput
-    ) -> tuple[OperatorOutput, str | None]:
-        """Generate initial code snippets (generation 0). Returns (OperatorOutput, None) for code."""
+    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
+        """Generate initial code snippets (generation 0)."""
         population_size = input_dto.population_size
         starter_code = input_dto.starter_code or ""
         logger.debug(f"MockCodeOperator: Generating {population_size} code snippets...")
@@ -114,7 +112,7 @@ class MockCodeOperator(IOperator):
             )
             results.append(result)
 
-        return OperatorOutput(results=results), None
+        return OperatorOutput(results=results)
 
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
         """Apply a genetic operation to code snippets."""
@@ -153,34 +151,22 @@ class MockTestOperator(IOperator):
         """Return the set of operations this operator supports."""
         return {OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT}
 
-    def generate_initial_snippets(
-        self, input_dto: InitialInput
-    ) -> tuple[OperatorOutput, str | None]:
-        """Generate initial test snippets (generation 0) with test class block (context_code)."""
+    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
+        """Generate initial test snippets (generation 0) as pytest functions."""
         population_size = input_dto.population_size
         logger.debug(f"MockTestOperator: Generating {population_size} test snippets...")
 
         results = []
         for i in range(population_size):
             test_name = f"test_mock_case_{i}"
-            snippet = f"def {test_name}(self):\n        assert sort_array([{i}, {i - 1}]) == [{i - 1}, {i}]"
+            snippet = f"def {test_name}():\n    assert sort_array([{i}, {i - 1}]) == [{i - 1}, {i}]"
             result = OperatorResult(
                 snippet=snippet,
                 metadata={"mock_index": i, "test_name": test_name},
             )
             results.append(result)
 
-        # Create a mock test class block (context_code for tests)
-        # Always include the class header even for empty populations
-        class_header = "import unittest\nfrom a_mock_solution import sort_array\n\nclass GeneratedTests(unittest.TestCase):\n"
-        if results:
-            indented_snippets = "\n\n".join([f"    {r.snippet}" for r in results])
-            context_code = class_header + indented_snippets
-        else:
-            # Empty population: return template with pass statement
-            context_code = class_header + "    pass\n"
-
-        return OperatorOutput(results=results), context_code
+        return OperatorOutput(results=results)
 
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
         """Apply a genetic operation to test snippets."""
@@ -342,7 +328,7 @@ class MockBreedingStrategy:
     def initialize_individuals(
         self,
         problem: Problem,
-    ) -> tuple[list[Any], str | None]:
+    ) -> list[Any]:
         """
         Create initial population by delegating to operator.
 
@@ -350,8 +336,7 @@ class MockBreedingStrategy:
             problem: The problem context to pass through to operator
 
         Returns:
-            Tuple of (individuals, context_code) from operator.
-            Breeder passes this through; orchestrator interprets context_code.
+            List of individuals.
         """
         from .individual import CodeIndividual, TestIndividual
 
@@ -365,7 +350,7 @@ class MockBreedingStrategy:
         # Call operator's new generate_initial_snippets method
         from .interfaces import InitialInput
 
-        operator_output, context_code = self.operator.generate_initial_snippets(
+        operator_output = self.operator.generate_initial_snippets(
             InitialInput(
                 operation=OPERATION_INITIAL,
                 question_content=problem.question_content,
@@ -397,7 +382,7 @@ class MockBreedingStrategy:
                 )
             individuals.append(individual)
 
-        return individuals, context_code
+        return individuals
 
     def breed(
         self, coevolution_context: CoevolutionContext, num_offsprings: int

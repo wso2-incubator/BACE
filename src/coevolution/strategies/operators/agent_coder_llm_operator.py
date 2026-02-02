@@ -64,9 +64,7 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
     # TURN 0: INITIALIZATION
     # -------------------------------------------------------------------------
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def generate_initial_snippets(
-        self, input_dto: InitialInput
-    ) -> tuple[OperatorOutput, str | None]:
+    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         """
         Generates the first solution AND seeds the conversation history.
         """
@@ -103,7 +101,7 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
             raise ValueError("Generated code missing starter code.")
 
         results = [OperatorResult(snippet=code, metadata={"operation": "initial"})]
-        return OperatorOutput(results=results), None
+        return OperatorOutput(results=results)
 
     # -------------------------------------------------------------------------
     # TURN N: ITERATIVE REPAIR (EDIT)

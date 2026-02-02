@@ -42,7 +42,7 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
     def initialize_individuals(
         self,
         problem: Problem,
-    ) -> tuple[list[T_self], str | None]:
+    ) -> list[T_self]:
         """
         Create initial population by delegating to operator.
 
@@ -52,18 +52,13 @@ class IBreedingStrategy[T_self: BaseIndividual](Protocol):
         3. Wraps the resulting snippets into Individual objects using the factory.
 
         Args:
-            population_size: Number of individuals to create.
-            initial_prior: Initial probability value for individuals.
             problem: The problem context (used to extract question/starter code strings).
 
         Returns:
-            Tuple of (individuals, context_code):
-            - individuals: List of newly generated individuals (Gen 0).
-            - context_code: Optional auxiliary code returned by the operator
-              (e.g., test class scaffold).
+            List of newly generated individuals (Gen 0).
 
-        Empty State Behavior (size=0):
-            - If population_size is 0, returns ([], context_code).
+        Empty State Behavior:
+            - If population size is 0, returns [].
             - This supports bootstrapping scenarios where a population (like differential tests)
               starts empty and is populated later via breeding.
         """

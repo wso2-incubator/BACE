@@ -162,59 +162,49 @@ class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
     """
 
     @staticmethod
-    def _convert_to_unittest_from_stdin_tests(test_cases: list[LCBTest]) -> str:
+    def _convert_to_pytest_from_stdin_tests(test_cases: list[LCBTest]) -> str:
         """
-        Converts a list of STDIN LCBTest objects into a Python unittest class string.
-        This is for the actual test cases defined in LCB Problems.
+        Converts a list of STDIN LCBTest objects into pytest standalone test functions.
+        Each test is a standalone function that creates its own Solution instance.
         """
         if not test_cases:
             return "# No test cases provided."
 
         # Start building the output file string
         output_lines = [
-            "import unittest",
-            "",
-            "class TestSolution(unittest.TestCase):",
-            "    def setUp(self):",
-            "        self.solution = Solution()",
+            "import pytest",
             "",
         ]
 
-        # Loop through each test object and create a method
+        # Loop through each test object and create a standalone function
         for i, test_obj in enumerate(test_cases, 1):
-            method_name = f"test_case_{i}"
+            function_name = f"test_case_{i}"
 
             # Get input/output directly from the object attributes
             # Use repr() to create a valid, escaped Python string literal
             input_literal = repr(test_obj.input.rstrip("\n"))
             output_literal = repr(test_obj.output.rstrip("\n"))
 
-            test_method = [
-                f"    def {method_name}(self):",
-                f"        input_str = {input_literal}",
-                f"        expected_output = {output_literal}",
-                "        self.assertEqual(self.solution.sol(input_str), expected_output)",
+            test_function = [
+                f"def {function_name}():",
+                "    solution = Solution()",
+                f"    input_str = {input_literal}",
+                f"    expected_output = {output_literal}",
+                "    assert solution.sol(input_str) == expected_output",
                 "",
             ]
-            output_lines.extend(test_method)
-
-        # Add the main block to run the tests
-        output_lines.extend(
-            [
-                "if __name__ == '__main__':",
-                "    unittest.main(verbosity=2)",
-            ]
-        )
+            output_lines.extend(test_function)
 
         # Join all lines into a single string
         return "\n".join(output_lines)
 
     @staticmethod
-    def _convert_to_unittest_functional_tests(
+    def _convert_to_pytest_functional_tests(
         test_cases: list[LCBTest], starter_code: str
     ) -> str:
         """
-        Converts a list of FUNCTIONAL LCBTest objects into a Python unittest class string.
+        Converts a list of FUNCTIONAL LCBTest objects into pytest standalone test functions.
+        Each test is a standalone function that creates its own Solution instance.
         """
         # 1. Parse the starter code to find class and method names
         class_match = re.search(r"class\s+(\w+):", starter_code)
@@ -229,18 +219,14 @@ class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
 
         # 2. Build the output file string
         output_lines = [
-            "import unittest",
-            "from typing import * # Import common types for function signatures",
-            "",
-            f"class Test{class_name}(unittest.TestCase):",
-            "    def setUp(self):",
-            f"        self.solution = {class_name}()",
+            "import pytest",
+            "from typing import *  # Import common types for function signatures",
             "",
         ]
 
-        # 3. Loop through each test object and create a method
+        # 3. Loop through each test object and create a standalone function
         for i, test_obj in enumerate(test_cases, 1):
-            method_name_test = f"test_case_{i}"
+            function_name = f"test_case_{i}"
 
             # Get the list of string-based arguments
             input_args_list = test_obj.input.split("\n")
@@ -249,38 +235,35 @@ class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
             input_lines_repr = repr(input_args_list)
             expected_output_repr = repr(test_obj.output)
 
-            test_method = [
-                f"    def {method_name_test}(self):",
-                f"        # Original Input: {repr(test_obj.input)}",
-                f"        input_lines = {input_lines_repr}",
-                "        args = [eval(line) for line in input_lines]",
-                f"        expected_output = eval({expected_output_repr})",
-                f"        self.assertEqual(self.solution.{method_name}(*args), expected_output)",
+            test_function = [
+                f"def {function_name}():",
+                f"    # Original Input: {repr(test_obj.input)}",
+                f"    solution = {class_name}()",
+                f"    input_lines = {input_lines_repr}",
+                "    args = [eval(line) for line in input_lines]",
+                f"    expected_output = eval({expected_output_repr})",
+                f"    assert solution.{method_name}(*args) == expected_output",
                 "",
             ]
-            output_lines.extend(test_method)
-
-        # Add the main block
-        output_lines.extend(
-            [
-                "if __name__ == '__main__':",
-                "    unittest.main(verbosity=2)",
-            ]
-        )
+            output_lines.extend(test_function)
 
         return "\n".join(output_lines)
 
     @staticmethod
     def build_test_class_block(test_cases: list[Test], starter_code: str) -> str:
         """
-        Generate a unittest test script from LCB problem test case objects.
+        Generate a pytest test script from LCB problem test case objects.
+
+        Note: Despite the name 'test_class_block', this now generates pytest
+        standalone test functions, not unittest classes. The name is kept for
+        backward compatibility with existing interfaces.
 
         Args:
             test_cases: List of Test objects from LCB problem (will be cast to LCBTest)
             starter_code: Starter code for FUNCTIONAL tests
 
         Returns:
-            Complete unittest test script as string
+            Complete pytest test script as string with standalone test functions
         """
         # Cast Test objects to LCBTest for type checking
         lcb_test_cases = [LCBTest(**t.__dict__) for t in test_cases]
@@ -295,13 +278,13 @@ class LCBDatasetTestBlockBuilder(IDatasetTestBlockBuilder):
             if not starter_code:
                 return "# Error: Functional test cases require starter_code."
             # Call the functional test generator
-            return LCBDatasetTestBlockBuilder._convert_to_unittest_functional_tests(
+            return LCBDatasetTestBlockBuilder._convert_to_pytest_functional_tests(
                 lcb_test_cases, starter_code
             )
 
         elif first_test_type == TestType.STDIN:
             # Call the STDIN test generator (starter_code is ignored)
-            return LCBDatasetTestBlockBuilder._convert_to_unittest_from_stdin_tests(
+            return LCBDatasetTestBlockBuilder._convert_to_pytest_from_stdin_tests(
                 lcb_test_cases
             )
 

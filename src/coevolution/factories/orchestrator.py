@@ -51,7 +51,6 @@ from ..core.interfaces import (
     IBeliefUpdater,
     IDatasetTestBlockBuilder,
     IExecutionSystem,
-    ITestBlockRebuilder,
     LedgerFactory,
     OrchestratorConfig,
     PublicTestProfile,
@@ -106,7 +105,6 @@ class OrchestratorBuilder:
         self._execution_system: IExecutionSystem | None = None
         self._bayesian_system: IBeliefUpdater | None = None
         self._ledger_factory: LedgerFactory = InteractionLedger  # Default factory
-        self._test_block_rebuilder: ITestBlockRebuilder | None = None
         self._dataset_test_block_builder: IDatasetTestBlockBuilder | None = None
 
     def with_evolution_config(
@@ -235,21 +233,6 @@ class OrchestratorBuilder:
         self._ledger_factory = ledger_factory
         return self
 
-    def with_test_block_rebuilder(
-        self, test_block_rebuilder: ITestBlockRebuilder
-    ) -> "OrchestratorBuilder":
-        """
-        Set test block rebuilder for reconstructing test class blocks.
-
-        Args:
-            test_block_rebuilder: Rebuilder for test class blocks
-
-        Returns:
-            Self for method chaining
-        """
-        self._test_block_rebuilder = test_block_rebuilder
-        return self
-
     def with_dataset_test_block_builder(
         self, dataset_test_block_builder: IDatasetTestBlockBuilder
     ) -> "OrchestratorBuilder":
@@ -301,11 +284,6 @@ class OrchestratorBuilder:
         if self._bayesian_system is None:
             errors.append("Bayesian system not set (use with_bayesian_system())")
 
-        if self._test_block_rebuilder is None:
-            errors.append(
-                "Test block rebuilder not set (use with_test_block_rebuilder())"
-            )
-
         if self._dataset_test_block_builder is None:
             errors.append(
                 "Dataset test block builder not set (use with_dataset_test_block_builder())"
@@ -333,7 +311,6 @@ class OrchestratorBuilder:
         assert self._execution_system is not None
         assert self._bayesian_system is not None
         assert self._ledger_factory is not None
-        assert self._test_block_rebuilder is not None
         assert self._dataset_test_block_builder is not None
 
         config = OrchestratorConfig(
@@ -344,7 +321,6 @@ class OrchestratorBuilder:
             execution_system=self._execution_system,
             bayesian_system=self._bayesian_system,
             ledger_factory=self._ledger_factory,
-            test_block_rebuilder=self._test_block_rebuilder,
             dataset_test_block_builder=self._dataset_test_block_builder,
         )
 

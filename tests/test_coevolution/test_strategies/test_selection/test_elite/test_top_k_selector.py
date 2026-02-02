@@ -51,8 +51,6 @@ def sample_test_population() -> TestPopulation:
     ]
     return TestPopulation(
         individuals=individuals,
-        test_block_rebuilder=Mock(),
-        test_class_block="class TestSuite: pass",
     )
 
 

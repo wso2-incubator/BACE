@@ -61,9 +61,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         return analysis.contains_starter_code(code, starter_code)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
-    def generate_initial_snippets(
-        self, input_dto: InitialInput
-    ) -> tuple[OperatorOutput, str | None]:
+    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         population_size = input_dto.population_size
         problem_description = input_dto.question_content
         starter_code = input_dto.starter_code
@@ -106,7 +104,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             )
 
         results = [OperatorResult(snippet=code, metadata={}) for code in code_blocks]
-        return OperatorOutput(results=results), None
+        return OperatorOutput(results=results)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_crossover(self, input_dto: CodeCrossoverInput) -> OperatorOutput:
