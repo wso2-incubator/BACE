@@ -319,6 +319,7 @@ Note that if the output of the solution is a string, it will not contain a newli
     - Do not use the examples given in the problem.
     - Do not write any other top-level functions or classes.
     - The solution code will be appended to the test cases for execution, do not include it in your response.
+    - You should NOT import the solution code; assume it is already present in the execution environment.
     - You should write {population_size} distinct test cases separately in separate code blocks.
 
 </instructions>
