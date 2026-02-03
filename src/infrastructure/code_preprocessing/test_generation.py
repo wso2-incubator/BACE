@@ -126,7 +126,7 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
     method_name = method_node.name
 
     # Extract parameters (skip 'self')
-    params: list[tuple[str, Optional[str]]] = []
+    params = []
     for arg in method_node.args.args[1:]:  # Skip self
         param_name = arg.arg
         param_type = None
