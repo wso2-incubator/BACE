@@ -26,7 +26,7 @@ Usage:
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 import yaml
@@ -156,15 +156,15 @@ def run(
     # =================================================================
     # 2. APPLY CLI OVERRIDES
     # =================================================================
-    overrides = {}
+    overrides: dict[str, Any] = {}
 
     # Component overrides
     if llm:
-        llm_config = config_utils._load_yaml_file(llm)
+        llm_config = config_utils._load_yaml_file(Path(llm))
         overrides["llm"] = llm_config
 
     if code_profile:
-        code_profile_config = config_utils._load_yaml_file(code_profile)
+        code_profile_config = config_utils._load_yaml_file(Path(code_profile))
         overrides["code_profile"] = code_profile_config
 
     # Dataset overrides
@@ -298,7 +298,7 @@ def run(
         raise typer.Exit(code=1)
 
 
-def _run_experiment(config: dict, run_id: str) -> None:
+def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     """
     Execute the coevolution experiment using the provided configuration.
 
