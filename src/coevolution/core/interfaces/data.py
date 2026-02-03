@@ -19,16 +19,24 @@ class TestResult:
 
     details: str | None
     status: Literal["passed", "failed", "error"]
+    execution_time: float = 0.0
+    script_error: bool = False
 
 
 @dataclass(frozen=True)
 class ExecutionResult:
     """
-    Represents the result of executing a unit test suite against a code individual.
+    Represents the collected results of executing a code individual against multiple tests.
     """
 
-    script_error: bool
     test_results: dict[str, TestResult] = field(default_factory=dict)
+
+    @property
+    def script_error(self) -> bool:
+        """
+        Check if any test failed due to a script-level error (e.g., SyntaxError in code).
+        """
+        return any(res.script_error for res in self.test_results.values())
 
 
 @dataclass(frozen=True)

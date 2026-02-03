@@ -76,50 +76,6 @@ def extract_method_name(method_snippet: str) -> str:
         raise CodeParsingError(f"Failed to parse method snippet: {e}") from e
 
 
-def analyze_test_methods(test_code: str) -> List[str]:
-    """
-    Analyze a unittest test class and return the names of all test methods.
-
-    Args:
-        test_code: String containing a unittest test class definition
-
-    Returns:
-        List of test method names (methods starting with 'test_')
-
-    Raises:
-        CodeParsingError: If test code has syntax errors
-
-    Example:
-        >>> code = "class TestFoo(unittest.TestCase):\\n    def test_bar(self): pass"
-        >>> analyze_test_methods(code)
-        ['test_bar']
-    """
-    test_cases = []
-    try:
-        tree = ast.parse(test_code)
-    except SyntaxError as e:
-        logger.debug(f"Syntax error parsing test code: {test_code}")
-        raise CodeParsingError(f"Failed to parse test code: {e}") from e
-
-    # Find the test class definition (skip Solution class if present)
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            # Skip non-test classes (e.g., Solution class)
-            if node.name == "Solution":
-                continue
-            # Iterate through class methods
-            for method in node.body:
-                if isinstance(method, ast.FunctionDef) and method.name.startswith(
-                    "test_"
-                ):
-                    test_cases.append(method.name)
-            # Stop after first test class found
-            if test_cases:
-                break
-
-    return test_cases
-
-
 def analyze_test_functions(test_code: str) -> List[str]:
     """
     Analyze pytest test code and return the names of all test functions.

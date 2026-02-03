@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from .analyzer import PytestXmlAnalyzer
-from .types import BasicExecutionResult, SandboxConfig, TestExecutionResult, TestResult
+from .types import BasicExecutionResult, SandboxConfig, TestResult
 
 
 class SafeCodeSandbox:
@@ -300,120 +300,19 @@ class SafeCodeSandbox:
 
         # Temporary directory automatically cleaned up here
 
-    def _reorder_test_results_to_match_script(
-        self, test_script: str, execution_result: TestExecutionResult
-    ) -> TestExecutionResult:
+    def execute_test_script(self, test_script: str) -> TestResult:
         """
-        Reorder test results to match the order of test methods in the script.
-
-        This is critical for ensuring that test_results[i] corresponds to the i-th
-        test method in the script, regardless of unittest's execution order.
-
-        Args:
-            test_script: The original test script
-            execution_result: The result from test execution with potentially reordered tests
-
-        Returns:
-            TestExecutionResult with test_results reordered to match script order
-        """
-        # Import here to avoid circular dependency
-        try:
-            from infrastructure.code_preprocessing.analysis import analyze_test_methods
-        except ImportError:
-            logger.warning(
-                "Could not import analyze_test_methods, skipping test result reordering"
-            )
-            return execution_result
-
-        try:
-            # Extract test method names in script order
-            test_method_names_in_order = analyze_test_methods(test_script)
-
-            if not test_method_names_in_order:
-                logger.warning(
-                    "No test methods found in script, returning results as-is"
-                )
-                return execution_result
-
-            # Build lookup dict from execution results
-            results_by_name = {
-                result.name: result for result in execution_result.test_results
-            }
-
-            # Reorder to match script order
-            ordered_test_results = []
-            for expected_name in test_method_names_in_order:
-                if expected_name in results_by_name:
-                    ordered_test_results.append(results_by_name[expected_name])
-                else:
-                    # Test was in script but not in execution results
-                    # This shouldn't happen normally, but handle gracefully
-                    logger.warning(
-                        f"Test '{expected_name}' found in script but not in execution results"
-                    )
-                    # Create a placeholder error result
-                    ordered_test_results.append(
-                        TestResult(
-                            name=expected_name,
-                            description=f"Test {expected_name}",
-                            status="error",
-                            details="Test was not executed (collection error or skipped)",
-                        )
-                    )
-
-            # Check if there are any executed tests not in the script
-            # (This would indicate a problem with our analysis)
-            executed_names = set(results_by_name.keys())
-            expected_names = set(test_method_names_in_order)
-            unexpected_tests = executed_names - expected_names
-
-            if unexpected_tests:
-                logger.warning(
-                    f"Found {len(unexpected_tests)} tests in execution results "
-                    f"that were not found in script: {unexpected_tests}"
-                )
-
-            # Create new TestExecutionResult with reordered test_results
-            return TestExecutionResult(
-                script_error=execution_result.script_error,
-                tests_passed=execution_result.tests_passed,
-                tests_failed=execution_result.tests_failed,
-                tests_errors=execution_result.tests_errors,
-                test_results=ordered_test_results,
-                summary=execution_result.summary,
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error reordering test results: {e}. Returning original order.",
-                exc_info=True,
-            )
-            return execution_result
-
-    def execute_test_script(self, test_script: str) -> TestExecutionResult:
-        """
-        Execute a test script and return detailed results with test categorization.
-
-        This method is a convenience wrapper that combines safe code execution
-        with pytest XML analysis. For more control over the process, use
-        execute_code() and PytestXmlAnalyzer separately.
-
-        IMPORTANT: The returned TestExecutionResult.test_results list is guaranteed
-        to be in the same order as the test methods appear in the test_script,
-        regardless of the order pytest executes them. This ensures consistent
-        indexing when building observation matrices and generating feedback.
+        Execute a test script containing a single test function and return the result.
 
         Args:
             test_script: The test script to execute
 
         Returns:
-            TestExecutionResult containing comprehensive execution results,
-            with test_results ordered to match the script's test method order
+            TestResult containing the execution outcome
         """
         logger.debug(f"SafeCodeSandbox: executing test script (len={len(test_script)})")
 
         # Create temporary directory for script and XML output
-        # Using TemporaryDirectory ensures automatic cleanup even if process is killed
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = os.path.join(tmpdir, "test_script.py")
             xml_path = os.path.join(tmpdir, "results.xml")
@@ -436,7 +335,7 @@ class SafeCodeSandbox:
                     xml_path,
                     "--color=no",  # Force disable ANSI color codes
                     "-o",
-                    "console_output_style=classic",  # Use simple output style (no progress bars etc)
+                    "console_output_style=classic",  # Use simple output style
                 ]
 
                 # Add per-test timeout if configured
@@ -474,19 +373,12 @@ class SafeCodeSandbox:
 
                 # Create analyzer and analyze the test results
                 analyzer = PytestXmlAnalyzer()
-                execution_result = analyzer.analyze_pytest_xml(
-                    xml_content, basic_result
-                )
-
-                # Reorder test results to match the script order (CRITICAL FIX)
-                execution_result = self._reorder_test_results_to_match_script(
-                    test_script, execution_result
-                )
+                result = analyzer.analyze_pytest_xml(xml_content, basic_result)
 
                 logger.debug(
-                    f"SafeCodeSandbox: test script result summary: {execution_result.summary}"
+                    f"SafeCodeSandbox: test script result: {result.status} (script_error={result.script_error})"
                 )
-                return execution_result
+                return result
 
             except subprocess.TimeoutExpired:
                 logger.warning(f"Test execution timed out after {self.timeout} seconds")

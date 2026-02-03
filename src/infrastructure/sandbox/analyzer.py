@@ -6,12 +6,12 @@ from typing import Literal, Optional
 
 from loguru import logger
 
-from .types import BasicExecutionResult, TestExecutionResult, TestResult
+from .types import BasicExecutionResult, TestResult
 
 
 class PytestXmlAnalyzer:
     """
-    Analyzes pytest JUnit XML output to extract detailed test results.
+    Analyzes pytest JUnit XML output to extract a single test result.
 
     This class parses the structured XML output from pytest --junitxml
     to provide robust and reliable test result analysis.
@@ -89,16 +89,16 @@ class PytestXmlAnalyzer:
 
     def analyze_pytest_xml(
         self, xml_content: Optional[str], basic_result: BasicExecutionResult
-    ) -> TestExecutionResult:
+    ) -> TestResult:
         """
-        Analyze pytest XML output and return detailed test information.
+        Analyze pytest XML output and return a single test result.
 
         Args:
             xml_content: The XML content from pytest --junitxml output, or None if XML wasn't generated
             basic_result: Basic execution result from code execution
 
         Returns:
-            TestExecutionResult with detailed test analysis
+            TestResult with detailed test analysis
         """
         logger.debug(
             f"Analyzing pytest XML output: xml_available={xml_content is not None}, success={basic_result.success}, return_code={basic_result.return_code}"
@@ -107,7 +107,7 @@ class PytestXmlAnalyzer:
         # If XML content is available, parse it
         if xml_content:
             try:
-                return self._parse_xml_content(xml_content)
+                return self._parse_xml_content(xml_content, basic_result)
             except Exception as e:
                 logger.warning(
                     f"Failed to parse XML content: {e}. Falling back to error analysis."
@@ -117,121 +117,96 @@ class PytestXmlAnalyzer:
         # No XML or parsing failed - analyze based on basic result
         return self._analyze_execution_error(basic_result)
 
-    def _parse_xml_content(self, xml_content: str) -> TestExecutionResult:
-        """Parse JUnit XML content and extract test results."""
+    def _parse_xml_content(
+        self, xml_content: str, basic_result: BasicExecutionResult
+    ) -> TestResult:
+        """Parse JUnit XML content and extract the test result."""
         try:
             root = ET.fromstring(xml_content)
         except ET.ParseError as e:
             logger.error(f"XML parsing error: {e}")
             raise
 
-        total_tests = 0
-        total_failures = 0
-        total_errors = 0
-        total_timeouts = 0
-        test_results = []
+        # We assume there's exactly one test case as we run one test function
+        testcase = root.find(".//testcase")
+
+        if testcase is None:
+            # No test case found in XML, check if there's a suite-level error
+            testsuite = root.find(".//testsuite")
+            if testsuite is not None and int(testsuite.get("errors", 0)) > 0:
+                # Look for error tag in testsuite or testcases
+                error_node = testsuite.find(".//error")
+                if error_node is not None:
+                    raw_details = error_node.text or error_node.get("message", "")
+                    details = self._sanitize_details(raw_details)
+                    return TestResult(
+                        name="collection_error",
+                        status="error",
+                        details=details,
+                        execution_time=basic_result.execution_time,
+                        script_error=True,
+                    )
+
+            return self._analyze_execution_error(basic_result)
+
+        test_name = testcase.get("name", "unknown")
+
+        # Determine status and details
+        status: Literal["passed", "failed", "error"] = "passed"
+        details = None
         script_error = False
 
-        # Parse each testsuite
-        for testsuite in root.findall(".//testsuite"):
-            suite_tests = int(testsuite.get("tests", 0))
-            suite_failures = int(testsuite.get("failures", 0))
-            suite_errors = int(testsuite.get("errors", 0))
+        # Check for failure
+        failure = testcase.find("failure")
+        if failure is not None:
+            status = "failed"
+            raw_details = failure.text or failure.get("message", "")
+            details = self._sanitize_details(raw_details)
 
-            total_tests += suite_tests
-            total_failures += suite_failures
-            total_errors += suite_errors
+        # Check for error
+        error = testcase.find("error")
+        if error is not None:
+            status = "error"
+            raw_details = error.text or error.get("message", "")
+            details = self._sanitize_details(raw_details)
+            # Check if this is a syntax error (script-level error)
+            if details and (
+                "SyntaxError" in details
+                or "was never closed" in details
+                or "invalid syntax" in details
+            ):
+                script_error = True
 
-            # Parse individual test cases
-            for testcase in testsuite.findall("testcase"):
-                test_name = testcase.get("name", "unknown")
-                classname = testcase.get("classname", "")
+        # Check if this test timed out (already handled by status="error" usually, but can check details)
+        if details:
+            details_lower = details.lower()
+            if "timeout" in details_lower or "timed out" in details_lower:
+                logger.warning(f"Test '{test_name}' timed out.")
 
-                # Determine status and details
-                status: Literal["passed", "failed", "error"] = "passed"
-                details = None
+        try:
+            execution_time = float(testcase.get("time", 0.0))
+        except (ValueError, TypeError):
+            execution_time = basic_result.execution_time
 
-                # Check for failure
-                failure = testcase.find("failure")
-                if failure is not None:
-                    status = "failed"
-                    raw_details = failure.text or failure.get("message", "")
-                    details = self._sanitize_details(raw_details)
-
-                # Check for error
-                error = testcase.find("error")
-                if error is not None:
-                    status = "error"
-                    raw_details = error.text or error.get("message", "")
-                    details = self._sanitize_details(raw_details)
-                    # Check if this is a syntax error (script-level error)
-                    if details and (
-                        "SyntaxError" in details
-                        or "was never closed" in details
-                        or "invalid syntax" in details
-                    ):
-                        script_error = True
-
-                # Check if this test timed out
-                if details:
-                    details_lower = details.lower()
-                    if "timeout" in details_lower or "timed out" in details_lower:
-                        total_timeouts += 1
-                        # Log warning for visibility
-                        logger.warning(
-                            f"Test '{test_name}' in class '{classname}' timed out. "
-                            f"Details: {details[:200]}"
-                        )
-
-                # Create description from classname and test name
-                description = f"{classname}.{test_name}" if classname else test_name
-
-                test_result = TestResult(
-                    name=test_name,
-                    description=description,
-                    status=status,
-                    details=details,
-                )
-                test_results.append(test_result)
-
-        # Create summary
-        if script_error:
-            summary = "Script execution failed: syntax error"
-        elif total_failures > 0 or total_errors > 0:
-            parts = [f"{total_tests - total_failures - total_errors} passed"]
-            if total_failures > 0:
-                parts.append(f"{total_failures} failed")
-            if total_errors > 0:
-                parts.append(f"{total_errors} errors")
-            if total_timeouts > 0:
-                parts.append(f"{total_timeouts} timed out")
-            summary = f"Tests completed: {', '.join(parts)}"
-        elif total_tests > 0:
-            summary = f"All tests passed: {total_tests} tests"
-        else:
-            summary = "No tests were found or executed"
-
-        return TestExecutionResult(
+        return TestResult(
+            name=test_name,
+            status=status,
+            details=details,
+            execution_time=execution_time,
             script_error=script_error,
-            tests_passed=total_tests - total_failures - total_errors,
-            tests_failed=total_failures,
-            tests_errors=total_errors,
-            tests_timeout=total_timeouts,
-            test_results=test_results,
-            summary=summary,
         )
 
     def _analyze_execution_error(
         self, basic_result: BasicExecutionResult
-    ) -> TestExecutionResult:
+    ) -> TestResult:
         """Analyze execution results when XML parsing failed or wasn't available."""
         script_error = False
-        summary = ""
+        details = basic_result.error or basic_result.output or "No output available"
 
         # Check if this was a script-level error (syntax, import, etc.)
         if not basic_result.success:
-            # Look for common error patterns in stderr
-            error_output = (basic_result.error or "").lower()
+            # Look for common error patterns in stderr/details
+            error_output = details.lower()
             if any(
                 error_type in error_output
                 for error_type in [
@@ -239,27 +214,20 @@ class PytestXmlAnalyzer:
                     "indentationerror",
                     "importerror",
                     "modulenotfounderror",
-                    "attributeerror",
-                    "nameerror",
-                    "typeerror",
                 ]
             ):
                 script_error = True
-                summary = f"Script execution failed: {basic_result.error}"
-            else:
-                # Other execution failure
-                script_error = True
-                summary = f"Test execution failed: {basic_result.error}"
-        else:
-            # Execution succeeded but no XML was generated
-            summary = "Test execution completed but no XML output was generated"
 
-        return TestExecutionResult(
+        status: Literal["error"] = "error"
+        if basic_result.timeout:
+            details = (
+                f"Execution timed out after {basic_result.execution_time}s. {details}"
+            )
+
+        return TestResult(
+            name="execution_error",
+            status=status,
+            details=self._sanitize_details(details),
+            execution_time=basic_result.execution_time,
             script_error=script_error,
-            tests_passed=0,
-            tests_failed=0,
-            tests_errors=0,
-            tests_timeout=0,
-            test_results=[],
-            summary=summary,
         )
