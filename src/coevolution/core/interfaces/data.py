@@ -4,7 +4,7 @@ Domain data structures and DTOs for the coevolution framework.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, ItemsView, Iterator, KeysView, Literal, ValuesView
 
 import numpy as np
 
@@ -35,19 +35,19 @@ class ExecutionResults:
     def __getitem__(self, code_id: str) -> dict[str, EvaluationResult]:
         return self.results[code_id]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.results)
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         return self.results.keys()
 
-    def values(self):
+    def values(self) -> ValuesView[dict[str, EvaluationResult]]:
         return self.results.values()
 
-    def items(self):
+    def items(self) -> ItemsView[str, dict[str, EvaluationResult]]:
         return self.results.items()
 
-    def get(self, code_id: str, default=None):
+    def get(self, code_id: str, default: Any = None) -> Any:
         return self.results.get(code_id, default)
 
 

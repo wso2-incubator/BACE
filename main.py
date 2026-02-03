@@ -35,8 +35,6 @@ from loguru import logger
 from coevolution.adapters.lcb import (
     Difficulty,
     LCBCodeGenerationProblem,
-    LCBDatasetTestBlockBuilder,
-    LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
 from coevolution.factories import (
@@ -370,8 +368,6 @@ def _run_experiment(config: dict, run_id: str) -> None:
 
     # 4. Auxiliary Systems
     bayesian_system = BayesianSystem()
-    test_block_rebuilder = LCBTestBlockRebuilder()
-    dataset_test_block_builder = LCBDatasetTestBlockBuilder()
 
     logger.info("Infrastructure components ready.")
 
@@ -478,8 +474,6 @@ def _run_experiment(config: dict, run_id: str) -> None:
     orchestrator_config = (
         builder.with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
-        .with_test_block_rebuilder(test_block_rebuilder)
-        .with_dataset_test_block_builder(dataset_test_block_builder)
         .build()
     )
 

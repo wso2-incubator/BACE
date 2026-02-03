@@ -346,9 +346,8 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         for failing_test_ind, test_population_type in failing_test_selections:
             error_trace = (
                 coevolution_context.interactions[test_population_type]
-                .execution_results[parent.id]
-                .test_results[failing_test_ind.id]
-                .details
+                .execution_results[parent.id][failing_test_ind.id]
+                .error_log
             )
 
             if not error_trace:

@@ -243,11 +243,9 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         error_traces: list[str] = []
         for failing_code_ind in failing_code_inds:
-            error_trace = (
-                interactions.execution_results[failing_code_ind.id]
-                .test_results[parent.id]
-                .details
-            )
+            error_trace = interactions.execution_results[failing_code_ind.id][
+                parent.id
+            ].error_log
             if not error_trace:
                 error_trace = "No error trace available."
             error_traces.append(error_trace)

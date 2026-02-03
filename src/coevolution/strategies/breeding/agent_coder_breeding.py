@@ -148,7 +148,7 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             raise ValueError(
                 f"No execution results found for code individual ID {code_parent.id} in unittest interaction."
             )
-        test_results = unittest_exec_results[code_parent.id].test_results
+        test_results = unittest_exec_results[code_parent.id]
 
         unittest_pop = coevolution_context.test_populations["unittest"]
 
@@ -160,7 +160,7 @@ class AgentCoderBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
                     FailingTest(
                         test_id=test_ind.id,
                         test_case=test_ind.snippet,
-                        error_trace=test_results[test_ind.id].details or "",
+                        error_trace=test_results[test_ind.id].error_log or "",
                     )
                 )
 

@@ -55,10 +55,8 @@ from .data import (
 # 6. Operators (depends on data, types)
 from .operators import (
     BaseOperatorInput,
-    IDatasetTestBlockBuilder,
     InitialInput,
     IOperator,
-    ITestBlockRebuilder,
     OperatorOutput,
     OperatorResult,
 )
@@ -120,10 +118,8 @@ __all__ = [
     "CoevolutionContext",
     # Operators
     "BaseOperatorInput",
-    "IDatasetTestBlockBuilder",
     "IOperator",
     "InitialInput",
-    "ITestBlockRebuilder",
     "OperatorOutput",
     "OperatorResult",
     # Breeding

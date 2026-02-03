@@ -72,9 +72,7 @@ class FailingTestSelector:
                 )
                 continue
 
-            test_results = interaction.execution_results[
-                code_individual.id
-            ].test_results
+            test_results = interaction.execution_results[code_individual.id]
 
             # Get tests that failed against this code individual using the execution results
             for test_ind in test_pop:

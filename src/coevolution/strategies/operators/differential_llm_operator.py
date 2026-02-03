@@ -51,11 +51,6 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
     def supported_operations(self) -> set[str]:
         return {OPERATION_DISCOVERY, OPERATION_CROSSOVER}
 
-    def _rebuild_unittest_with_methods(
-        self, test_block: str, test_methods: list[str]
-    ) -> str:
-        return composition.rebuild_unittest_with_methods(test_block, test_methods)
-
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         """

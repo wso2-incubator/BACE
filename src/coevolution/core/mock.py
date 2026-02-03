@@ -28,7 +28,6 @@ from .interfaces import (
     IOperator,
     IParentSelectionStrategy,
     IProbabilityAssigner,
-    ITestBlockRebuilder,
     Operation,
     OperatorOutput,
     OperatorResult,
@@ -466,20 +465,6 @@ class MockBreedingStrategy:
 # See: IEliteSelectionStrategy in interfaces.py for the new selection architecture
 
 
-class MockTestBlockRebuilder(ITestBlockRebuilder):
-    """Mocks rebuilding the test class from snippets."""
-
-    def rebuild_test_block(
-        self, original_class_str: str, new_method_snippets: list[str]
-    ) -> str:
-        logger.trace("MockTestBlockRebuilder: Rebuilding test class...")
-        # Find the class header from the original
-        header = original_class_str.split("def ")[0]
-
-        indented_snippets = "\n\n".join([f"    {s}" for s in new_method_snippets])
-        return header + indented_snippets
-
-
 # --- Mock Execution & Belief Updaters ---
 
 
@@ -762,47 +747,3 @@ class MockInteractionLedger(IInteractionLedger):
 # Factory for injection
 def mock_ledger_factory() -> IInteractionLedger:
     return MockInteractionLedger()
-
-
-class MockDatasetTestBlockBuilder:
-    """
-    Mock builder for creating test class blocks from dataset test cases.
-
-    Builds simple unittest test class blocks for testing purposes.
-    Does NOT create TestPopulation - just returns the test class block string.
-    """
-
-    def build_test_class_block(self, test_cases: list[Test], starter_code: str) -> str:
-        """
-        Build a simple unittest test class block from dataset test cases.
-
-        Args:
-            test_cases: List of Test objects from the dataset
-            starter_code: The starter code for the problem (ignored in mock)
-
-        Returns:
-            A complete unittest test class block as a string
-        """
-        snippets: list[str] = []
-
-        for i, test_case in enumerate(test_cases):
-            # Create a simple mock test snippet
-            snippet = f"def test_fixed_{i}(self):\n        assert mock_solution({test_case.input!r}) == {test_case.output!r}"
-            snippets.append(snippet)
-
-        # Create a simple test class block
-        test_class_block = (
-            "import unittest\n"
-            "from mock_solution import mock_solution\n\n"
-            "class FixedTests(unittest.TestCase):\n"
-        )
-        test_class_block += "\n\n".join([f"    {s}" for s in snippets])
-
-        logger.info(
-            f"MockDatasetTestBlockBuilder: Built test class block with {len(snippets)} test methods"
-        )
-
-        return test_class_block
-        return test_class_block
-        return test_class_block
-        return test_class_block
