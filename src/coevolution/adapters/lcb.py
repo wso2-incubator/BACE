@@ -1,7 +1,6 @@
 import base64
 import json
 import pickle
-import re
 import zlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,8 +9,6 @@ from typing import Any
 
 from datasets import load_dataset  # type: ignore[import-untyped]
 from loguru import logger
-
-import infrastructure.code_preprocessing as cpp
 
 from ..core.interfaces import Problem, Test
 
