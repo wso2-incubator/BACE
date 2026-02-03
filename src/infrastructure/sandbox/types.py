@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 
 @dataclass(frozen=True)
