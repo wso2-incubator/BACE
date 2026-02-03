@@ -36,7 +36,7 @@ class DifferentialInputOutput(TypedDict):
 class DifferentialGenScriptInput(BaseOperatorInput):
     equivalent_code_snippet_1: str
     equivalent_code_snippet_2: str
-    passing_differential_test_io_pairs: list[DifferentialInputOutput]
+    passing_test_cases: list[str]
     num_inputs_to_generate: int
 
 
@@ -129,13 +129,13 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         """Generate a script to generate inputs to differentiate between two equivalent code snippets."""
 
         logger.info(
-            f"Generating differential input script for {len(input_dto.passing_differential_test_io_pairs)} existing tests"
+            f"Generating differential input script for {len(input_dto.passing_test_cases)} existing tests"
         )
         prompt = DIFFERENTIAL_INPUT_GENERATOR_PROMPT.format(
             question_content=input_dto.question_content,
             code_snippet_P=input_dto.equivalent_code_snippet_1,
             code_snippet_Q=input_dto.equivalent_code_snippet_2,
-            current_tests=input_dto.passing_differential_test_io_pairs,
+            current_tests="\n".join(input_dto.passing_test_cases),
         )
 
         logger.trace(f"PROMPT:\n{prompt}")

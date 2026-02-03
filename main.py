@@ -440,6 +440,9 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
         prob_assigner_strategy=differential_profile_config.get(
             "prob_assigner_strategy", "min"
         ),
+        num_passing_tests_to_sample=differential_profile_config.get(
+            "num_passing_tests_to_sample", 5
+        ),
     )
 
     # 4. Public Profile (optional)

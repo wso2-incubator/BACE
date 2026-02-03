@@ -107,6 +107,7 @@ def strategy(
             IFunctionallyEquivalentCodeSelector, mock_func_eq_selector
         ),
         llm_workers=1,
+        num_passing_tests_to_sample=5,
     )
 
 

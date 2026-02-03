@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from random import sample
 from typing import Any, Optional, Protocol, cast, override
 
 from loguru import logger
@@ -115,6 +116,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         llm_workers: int = 1,
         divergence_limit: int = 5,
         max_pairs_per_group: int = 5,
+        num_passing_tests_to_sample: int = 5,
     ) -> None:
         super().__init__(op_rates_config, llm_workers)
 
@@ -128,6 +130,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self.max_pairs_per_group = (
             max_pairs_per_group  # Max pairs to try per functional group
         )
+        self.num_passing_tests_to_sample = num_passing_tests_to_sample
 
         # Validate operations
         for op in self.op_rates_config.operation_rates.keys():
@@ -352,12 +355,15 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         """
         try:
             # Prepare passing test context
-            diff_tests = task.group.passing_test_individuals.get("differential", [])
-            passing_io_pairs: list[DifferentialInputOutput] = []
-            for t in diff_tests:
-                pairs = t.metadata.get("io_pairs", [])
-                if pairs:
-                    passing_io_pairs.append(pairs[0])
+            all_test_snippets = [
+                t.snippet
+                for tests in task.group.passing_test_individuals.values()
+                for t in tests
+            ]
+            passing_test_cases = sample(
+                all_test_snippets,
+                min(len(all_test_snippets), self.num_passing_tests_to_sample),
+            )
 
             # Create LLM input
             dto = DifferentialGenScriptInput(
@@ -365,7 +371,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
                 question_content=context.problem.question_content,
                 equivalent_code_snippet_1=task.code_a.snippet,
                 equivalent_code_snippet_2=task.code_b.snippet,
-                passing_differential_test_io_pairs=passing_io_pairs,
+                passing_test_cases=passing_test_cases,
                 num_inputs_to_generate=100,
             )
 

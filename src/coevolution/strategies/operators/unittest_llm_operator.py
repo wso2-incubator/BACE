@@ -116,9 +116,10 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             functions = self._extract_test_functions(code_block)
             test_functions.extend(functions)
 
-        logger.debug(
-            f"Extracted {len(test_functions)} test functions from {len(all_code_blocks)} code blocks"
-        )
+        if len(test_functions) != len(all_code_blocks):
+            logger.warning(
+                f"Extracted {len(test_functions)} test functions from {len(all_code_blocks)} code blocks."
+            )
 
         if len(test_functions) != population_size:
             logger.warning(
@@ -160,6 +161,10 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         logger.info(
             f"Successfully generated {len(results)} initial test function snippets"
         )
+
+        for result in results:
+            logger.trace(f"Generated test function snippet:\n{result.snippet}\n---")
+
         return OperatorOutput(results=results)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))

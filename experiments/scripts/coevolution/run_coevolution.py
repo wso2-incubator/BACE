@@ -255,6 +255,7 @@ def main(
         # Resource Partitioning: Independent scaling of LLM and CPU workers
         llm_workers=4,  # Parallel LLM script generation
         cpu_workers=cpu_count,  # Parallel sandbox execution
+        num_passing_tests_to_sample=5,
     )
 
     public_profile = create_public_test_profile(

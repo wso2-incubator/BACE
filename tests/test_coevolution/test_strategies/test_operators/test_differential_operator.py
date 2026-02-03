@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -125,7 +126,7 @@ def test_handle_generation_script_success(
         question_content="Question",
         equivalent_code_snippet_1="def f1(): pass",
         equivalent_code_snippet_2="def f2(): pass",
-        passing_differential_test_io_pairs=[],
+        passing_test_cases=[],
         num_inputs_to_generate=50,
     )
 
@@ -178,7 +179,9 @@ def test_get_test_method_from_io_standalone_multiple_params(
 
     # Standalone function with multiple parameters
     starter_code = "def add(x: int, y: int) -> int:\n    return x + y"
-    io_pairs = [{"inputdata": {"x": 5, "y": 3}, "output": 8}]
+    io_pairs = cast(
+        list[DifferentialInputOutput], [{"inputdata": {"x": 5, "y": 3}, "output": 8}]
+    )
     parent_ids = ["A1", "A2"]
 
     result = operator.get_test_method_from_io(
@@ -205,7 +208,10 @@ def test_get_test_method_from_io_standalone_list_params(
     starter_code = (
         "def sort_list(nums: list[int]) -> list[int]:\n    return sorted(nums)"
     )
-    io_pairs = [{"inputdata": {"nums": [3, 1, 2]}, "output": [1, 2, 3]}]
+    io_pairs = cast(
+        list[DifferentialInputOutput],
+        [{"inputdata": {"nums": [3, 1, 2]}, "output": [1, 2, 3]}],
+    )
     parent_ids = ["L1", "L2"]
 
     result = operator.get_test_method_from_io(

@@ -22,6 +22,7 @@ cpu_workers: 4   # Parallel sandbox execution (from env COEVOLUTION_WORKERS)
 
 # Differential breeding strategy parameters
 max_pairs_per_group: 5  # Max pairs to try per functional group (prevents excessive attempts on equivalent code)
+num_passing_tests_to_sample: 5  # Number of passing test cases to randomly sample for differential input generation
 
 # Probability assigner strategy: one of ["min", "mean", "max", "init"]
 prob_assigner_strategy: "min"
