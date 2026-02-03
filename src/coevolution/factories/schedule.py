@@ -27,7 +27,7 @@ Example Usage:
     ... )
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from ..core.interfaces import EvolutionPhase, EvolutionSchedule
 
@@ -109,7 +109,7 @@ class ScheduleBuilder:
         return EvolutionSchedule(phases=list(self._phases))
 
     @classmethod
-    def from_config(cls, config: dict) -> EvolutionSchedule:
+    def from_config(cls, config: dict[str, Any]) -> EvolutionSchedule:
         """
         Create an EvolutionSchedule from a configuration dictionary.
 

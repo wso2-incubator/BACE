@@ -432,7 +432,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         Stops early when offspring limit is reached.
         """
-        offspring = []
+        offspring: list[TestIndividual] = []
 
         for ctx in discovery_contexts:
             if len(offspring) >= limit:

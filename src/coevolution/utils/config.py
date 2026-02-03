@@ -17,7 +17,7 @@ Example:
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from loguru import logger
@@ -45,7 +45,7 @@ def _resolve_env_vars(value: Any) -> Any:
         # Pattern: ${VAR_NAME} or ${VAR_NAME:-default_value}
         pattern = r"\$\{([^}:]+)(?::-(.[^}]*))?\}"
 
-        def replacer(match: re.Match) -> str:
+        def replacer(match: re.Match[str]) -> str:
             var_name = match.group(1)
             default_value = match.group(2) if match.group(2) else ""
             return os.environ.get(var_name, default_value)
@@ -82,7 +82,10 @@ def _load_yaml_file(file_path: Path) -> dict[str, Any]:
             return {}
 
         # Resolve environment variables
-        return _resolve_env_vars(content)
+        result = _resolve_env_vars(content)
+        if not isinstance(result, dict):
+            raise ConfigError(f"Config file {file_path} must be a dictionary")
+        return cast(dict[str, Any], result)
 
     except FileNotFoundError:
         raise ConfigError(f"Config file not found: {file_path}")
@@ -132,7 +135,7 @@ def _resolve_config_references(
     Returns:
         Configuration with references resolved
     """
-    result = {}
+    result: dict[str, Any] = {}
 
     for key, value in config.items():
         if isinstance(value, str) and value.endswith(".yaml"):
