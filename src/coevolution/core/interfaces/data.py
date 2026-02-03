@@ -32,11 +32,6 @@ class ExecutionResults:
 
     results: dict[str, dict[str, EvaluationResult]] = field(default_factory=dict)
 
-    def has_script_error(self, code_id: str) -> bool:
-        """Check if any test for a given code id failed due to a script-level error."""
-        code_results = self.results.get(code_id, {})
-        return any(res.status == "error" for res in code_results.values())
-
     def __getitem__(self, code_id: str) -> dict[str, EvaluationResult]:
         return self.results[code_id]
 
