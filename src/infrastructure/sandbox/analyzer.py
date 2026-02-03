@@ -154,7 +154,6 @@ class PytestXmlAnalyzer:
         # Determine status and details
         status: Literal["passed", "failed", "error"] = "passed"
         details = None
-        script_error = False
 
         # Check for failure
         failure = testcase.find("failure")
@@ -169,23 +168,8 @@ class PytestXmlAnalyzer:
             status = "error"
             raw_details = error.text or error.get("message", "")
             details = self._sanitize_details(raw_details)
-            # Check if this is a script-level error (syntax, import, etc.)
-            if details:
-                details_lower = details.lower()
-                if any(
-                    err in details_lower
-                    for err in [
-                        "syntaxerror",
-                        "indentationerror",
-                        "importerror",
-                        "modulenotfounderror",
-                        "invalid syntax",
-                        "was never closed",
-                    ]
-                ):
-                    script_error = True
 
-        # Check if this test timed out (already handled by status="error" usually, but can check details)
+        # Check if this test timed out
         if details:
             details_lower = details.lower()
             if "timeout" in details_lower or "timed out" in details_lower:
@@ -206,23 +190,7 @@ class PytestXmlAnalyzer:
         self, basic_result: BasicExecutionResult
     ) -> EvaluationResult:
         """Analyze execution results when XML parsing failed or wasn't available."""
-        script_error = False
         details = basic_result.error or basic_result.output or "No output available"
-
-        # Check if this was a script-level error (syntax, import, etc.)
-        if not basic_result.success:
-            # Look for common error patterns in stderr/details
-            error_output = details.lower()
-            if any(
-                error_type in error_output
-                for error_type in [
-                    "syntaxerror",
-                    "indentationerror",
-                    "importerror",
-                    "modulenotfounderror",
-                ]
-            ):
-                script_error = True
 
         status: Literal["error"] = "error"
         if basic_result.timeout:
