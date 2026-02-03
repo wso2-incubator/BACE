@@ -235,4 +235,3 @@ class PytestXmlAnalyzer:
             error_log=self._sanitize_details(details),
             execution_time=basic_result.execution_time,
         )
-        )

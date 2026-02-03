@@ -414,4 +414,3 @@ class SafeCodeSandbox:
             python_executable=config.python_executable,
             test_method_timeout=config.test_method_timeout,
         )
-        )
