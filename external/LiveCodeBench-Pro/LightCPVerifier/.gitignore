@@ -1,9 +1,0 @@
-node_modules/
-data/
-submissions/
-problems/
-scripts/*.json
-*.tar.gz
-*.json
-.DS_Store
-.vscode/

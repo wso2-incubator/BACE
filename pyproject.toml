@@ -183,15 +183,3 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "networkx.*"
 ignore_missing_imports = true
-
-[tool.uv.workspace]
-members = [
-    "external/human-eval",
-    "external/LiveCodeBench-Pro",
-    "external/LiveCodeBench",
-]
-
-[tool.uv.sources]
-human-eval = { workspace = true, editable = true }
-livecodebench-pro = { workspace = true, editable = true }
-livecodebench = { workspace = true, editable = true }
