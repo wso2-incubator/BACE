@@ -17,6 +17,8 @@ class TestExecutor:
     providing a clean separation between execution and analysis concerns.
     """
 
+    __test__ = False
+
     def __init__(
         self,
         timeout: int = 30,

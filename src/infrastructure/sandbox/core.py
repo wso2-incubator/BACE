@@ -376,7 +376,7 @@ class SafeCodeSandbox:
                 result = analyzer.analyze_pytest_xml(xml_content, basic_result)
 
                 logger.debug(
-                    f"SafeCodeSandbox: test script result: {result.status} (script_error={result.script_error})"
+                    f"SafeCodeSandbox: test script result: {result.status}"
                 )
                 return result
 

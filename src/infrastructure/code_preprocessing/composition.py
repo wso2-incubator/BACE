@@ -1,7 +1,6 @@
 """Compose complete executable test scripts from programmer and tester code."""
 
 import ast
-from typing import List, Optional
 
 from loguru import logger
 

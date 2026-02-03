@@ -17,10 +17,10 @@ class TestResult:
     Represents the result of a single unit test execution.
     """
 
-    details: str | None
+    __test__ = False
     status: Literal["passed", "failed", "error"]
+    error_log: str | None = None
     execution_time: float = 0.0
-    script_error: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class ExecutionResult:
         """
         Check if any test failed due to a script-level error (e.g., SyntaxError in code).
         """
-        return any(res.script_error for res in self.test_results.values())
+        return any(res.status == "error" for res in self.test_results.values())
 
 
 @dataclass(frozen=True)

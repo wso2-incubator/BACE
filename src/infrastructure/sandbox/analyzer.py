@@ -140,11 +140,9 @@ class PytestXmlAnalyzer:
                     raw_details = error_node.text or error_node.get("message", "")
                     details = self._sanitize_details(raw_details)
                     return TestResult(
-                        name="collection_error",
                         status="error",
-                        details=details,
+                        error_log=details,
                         execution_time=basic_result.execution_time,
-                        script_error=True,
                     )
 
             return self._analyze_execution_error(basic_result)
@@ -169,13 +167,21 @@ class PytestXmlAnalyzer:
             status = "error"
             raw_details = error.text or error.get("message", "")
             details = self._sanitize_details(raw_details)
-            # Check if this is a syntax error (script-level error)
-            if details and (
-                "SyntaxError" in details
-                or "was never closed" in details
-                or "invalid syntax" in details
-            ):
-                script_error = True
+            # Check if this is a script-level error (syntax, import, etc.)
+            if details:
+                details_lower = details.lower()
+                if any(
+                    err in details_lower
+                    for err in [
+                        "syntaxerror",
+                        "indentationerror",
+                        "importerror",
+                        "modulenotfounderror",
+                        "invalid syntax",
+                        "was never closed",
+                    ]
+                ):
+                    script_error = True
 
         # Check if this test timed out (already handled by status="error" usually, but can check details)
         if details:
@@ -189,11 +195,9 @@ class PytestXmlAnalyzer:
             execution_time = basic_result.execution_time
 
         return TestResult(
-            name=test_name,
             status=status,
-            details=details,
+            error_log=details,
             execution_time=execution_time,
-            script_error=script_error,
         )
 
     def _analyze_execution_error(
@@ -225,9 +229,7 @@ class PytestXmlAnalyzer:
             )
 
         return TestResult(
-            name="execution_error",
             status=status,
-            details=self._sanitize_details(details),
+            error_log=self._sanitize_details(details),
             execution_time=basic_result.execution_time,
-            script_error=script_error,
         )

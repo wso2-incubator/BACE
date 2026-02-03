@@ -46,20 +46,7 @@ class SandboxConfig:
             )
 
 
-@dataclass
-class TestResult:
-    """
-    Result of a single test execution.
-    Consolidated to represent the outcome of a pytest function.
-    """
-
-    name: str
-    status: Literal["passed", "failed", "error"]
-    details: Optional[str] = None
-    execution_time: float = 0.0
-    script_error: bool = (
-        False  # True if failure was at script level (e.g., SyntaxError)
-    )
+from coevolution.core.interfaces.data import TestResult
 
 
 @dataclass

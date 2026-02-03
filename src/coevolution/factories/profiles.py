@@ -45,7 +45,7 @@ from coevolution.strategies.operators.agent_coder_llm_operator import (
     AgentCoderLLMOperator,
 )
 from infrastructure.llm_client import LLMClient
-from infrastructure.sandbox import SandboxConfig
+from infrastructure.sandbox.types import SandboxConfig
 
 from ..core.individual import CodeIndividual, TestIndividual
 from ..core.interfaces import (

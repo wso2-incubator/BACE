@@ -41,8 +41,6 @@ from .sandbox import (
     PytestXmlAnalyzer,
     SafeCodeSandbox,
     SandboxConfig,
-    TestAnalysis,
-    TestExecutionResult,
     TestExecutor,
     TestResult,
     check_test_execution_status,
@@ -62,10 +60,8 @@ __all__ = [
     "create_safe_test_environment",
     "check_test_execution_status",
     # Types
-    "TestExecutionResult",
     "BasicExecutionResult",
     "TestResult",
-    "TestAnalysis",
     "CodeExecutionError",
     "CodeExecutionTimeoutError",
     # New architecture
