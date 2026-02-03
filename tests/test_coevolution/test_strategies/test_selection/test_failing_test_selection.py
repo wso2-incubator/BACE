@@ -5,9 +5,13 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
-from coevolution.core.interfaces import CoevolutionContext, InteractionData
+from coevolution.core.interfaces import (
+    CoevolutionContext,
+    EvaluationResult,
+    ExecutionResults,
+    InteractionData,
+)
 from coevolution.strategies.selection.failing_test_selection import FailingTestSelector
-from infrastructure.sandbox import TestExecutionResult, TestResult
 
 
 class TestFailingTestSelector(unittest.TestCase):
@@ -76,28 +80,23 @@ class TestFailingTestSelector(unittest.TestCase):
             status_literal = cast(Literal["passed", "failed", "error"], raw_status)
 
             # Mock Result
-            result = TestResult(
-                name=f"test_{i}",
-                description=f"test_{i}",
+            result = EvaluationResult(
                 status=status_literal,
-                details=data.get("details", None),
+                error_log=data.get("details", None),
             )
             test_results[mock_ind.id] = result
 
         # Mock Population object - now just the list of individuals
         self.mock_context.test_populations[test_type] = individuals
 
-        # Mock ExecutionResult
-        mock_exec_result = MagicMock(spec=TestExecutionResult)
-        mock_exec_result.script_error = False
-        mock_exec_result.test_results = test_results
-
-        # Setup Context
+        # Setup InteractionData
+        # Key alignment: {code_id: {test_id: result}}
+        exec_results = ExecutionResults(
+            results={self.mock_code_individual.id: test_results}
+        )
 
         mock_interaction = MagicMock(spec=InteractionData)
-        mock_interaction.execution_results = {
-            self.mock_code_individual.id: mock_exec_result
-        }
+        mock_interaction.execution_results = exec_results
 
         # Build a simple integer observation matrix (rows=code, cols=tests).
         # By convention 1 => pass, 0 => fail. Tests in this suite mock only the
@@ -157,21 +156,19 @@ class TestFailingTestSelector(unittest.TestCase):
 
         diff_pop = [diff_ind]
 
-        diff_result = TestResult(
-            name="diff_0", description="diff_0", status="failed", details="DiffErr"
+        diff_result = EvaluationResult(status="failed", error_log="DiffErr")
+        diff_test_results = {diff_ind.id: diff_result}
+
+        diff_exec_results = ExecutionResults(
+            results={self.mock_code_individual.id: diff_test_results}
         )
-        diff_exec_res = MagicMock(spec=TestExecutionResult)
-        diff_exec_res.script_error = False
-        diff_exec_res.test_results = {diff_ind.id: diff_result}
 
         diff_interaction = MagicMock(spec=InteractionData)
-        diff_interaction.execution_results = {
-            self.mock_code_individual.id: diff_exec_res
-        }
+        diff_interaction.execution_results = diff_exec_results
         # Build integer observation matrix for the differential interaction.
-        diff_obs = np.ones((1, len(diff_exec_res.test_results)), dtype=int)
-        for idx, tr in enumerate(diff_exec_res.test_results.values()):
-            if getattr(tr, "status", "passed") in ("failed", "error"):
+        diff_obs = np.ones((1, len(diff_test_results)), dtype=int)
+        for idx, tr in enumerate(diff_test_results.values()):
+            if tr.status in ("failed", "error"):
                 diff_obs[0, idx] = 0
         diff_interaction.observation_matrix = diff_obs
 
@@ -190,22 +187,18 @@ class TestFailingTestSelector(unittest.TestCase):
                 self.assertEqual(population_type, "differential")
                 self.assertEqual(selected_test.id, "diff_0")
 
-    def test_select_failing_test_script_error(self) -> None:
-        """Should skip selection if script_error is True (global failure)."""
-        self._create_mock_population_data("unittest", [{"status": "failed"}])
-
-        # Force script_error = True
-        interaction = self.mock_context.interactions["unittest"]
-        interaction.execution_results[self.mock_code_individual.id].script_error = True
+    def test_select_failing_test_with_error_status(self) -> None:
+        """Should include tests with 'error' status in selection."""
+        self._create_mock_population_data("unittest", [{"status": "error"}])
 
         result = FailingTestSelector.select_k_failing_tests(
             self.mock_context, self.mock_code_individual, k=1
         )
-        # Using only the observation_matrix for selection means script_error
-        # should not prevent choosing a failing test when the matrix indicates one.
+        # Tests with 'error' status (e.g. syntax errors) are also valid candidates for selection.
         self.assertEqual(len(result), 1)
         if result:
             selected_test, population_type = result[0]
+            self.assertEqual(population_type, "unittest")
             self.assertEqual(selected_test.id, "unittest_0")
 
     def test_select_failing_test_missing_execution_result(self) -> None:

@@ -76,7 +76,7 @@ class FailingTestSelector:
 
             # Get tests that failed against this code individual using the execution results
             for test_ind in test_pop:
-                if test_results[test_ind.id].status in ["failed"]:
+                if test_results[test_ind.id].status in ["failed", "error"]:
                     candidates.append((test_ind, test_type))
 
         if not candidates:
