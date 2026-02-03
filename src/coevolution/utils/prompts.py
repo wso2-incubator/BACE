@@ -307,6 +307,20 @@ Note that if the output of the solution is a string, it will not contain a newli
 
     - **Objective**: To assess the function's performance and scalability with large data samples.
 
+**Test Case Structure**:
+    - Each test case should be a standalone pytest function, wrapped in a code block.
+    - If solution is in a class, you should create an instance of the class in each test function to call the method to be tested.
+        Eg: ```python
+def test_example():
+    sol = Solution()
+    assert sol.method_name(args) == expected_output
+```
+    - If solution is not a class, you can directly call the function in the test.
+        Eg: ```python
+def test_example():
+    assert function_name(args) == expected_output
+```
+
 **General Instructions**:
 
     - Implement a comprehensive set of test cases following the guidelines above.
@@ -314,12 +328,10 @@ Note that if the output of the solution is a string, it will not contain a newli
     - Pay special attention to edge cases as they often reveal hidden bugs.
     - For large-scale tests, focus on the function's efficiency and performance under heavy loads.
     - Write tests as standalone pytest functions in separate python code blocks.
-    - Each test function should work independently and create its own Solution instance if needed.
-    - Use plain assert statements (e.g., assert x == y, not self.assertEqual).
+    - Use plain assert statements.
     - Do not use the examples given in the problem.
     - Do not write any other top-level functions or classes.
     - The solution code will be appended to the test cases for execution, do not include it in your response.
-    - You should NOT import the solution code; assume it is already present in the execution environment.
     - You should write {population_size} distinct test cases separately in separate code blocks.
 
 </instructions>
