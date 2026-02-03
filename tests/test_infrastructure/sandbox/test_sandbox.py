@@ -4,17 +4,14 @@ Comprehensive tests for the SafeCodeSandbox class and associated utilities.
 Refactored for single-test pytest architecture.
 """
 
-import os
-from typing import Literal
-
-import pytest
-
 from coevolution.core.interfaces.data import EvaluationResult
-from infrastructure.sandbox import (BasicExecutionResult, PytestXmlAnalyzer,
-                                    SafeCodeSandbox, TestExecutor,
-                                    check_test_execution_status,
-                                    create_safe_test_environment,
-                                    create_test_executor)
+from infrastructure.sandbox import (
+    PytestXmlAnalyzer,
+    SafeCodeSandbox,
+    TestExecutor,
+    check_test_execution_status,
+    create_safe_test_environment,
+)
 
 
 class TestSafeCodeSandbox:
@@ -79,6 +76,7 @@ def test_failing():
 """
         result = self.sandbox.execute_test_script(test_script)
         assert result.status == "failed"
+        assert result.error_log is not None
         assert "AssertionError" in result.error_log
 
     def test_single_test_error(self) -> None:
@@ -91,6 +89,7 @@ def test_error():
         # In pytest, caught exceptions are generally "failed" in JUnit XML if it's an assertion or "error" if it's outside.
         # But our analyzer maps it.
         assert result.status in ["failed", "error"]
+        assert result.error_log is not None
         assert "ValueError: Something went wrong" in result.error_log
 
     def test_script_level_syntax_error(self) -> None:
@@ -101,6 +100,7 @@ def test_broken(:
 """
         result = self.sandbox.execute_test_script(test_script)
         assert result.status == "error"
+        assert result.error_log is not None
         assert (
             "SyntaxError" in result.error_log
             or "invalid syntax" in result.error_log.lower()
@@ -115,6 +115,7 @@ def test_something():
 """
         result = self.sandbox.execute_test_script(test_script)
         assert result.status == "error"
+        assert result.error_log is not None
         assert "no module named" in result.error_log.lower()
 
     def test_per_test_timeout(self) -> None:
@@ -129,8 +130,10 @@ def test_slow():
         result = sandbox.execute_test_script(test_script)
         # Use simple error status as different environments might report it differently (pytest timeout vs our own)
         assert result.status == "error" or result.status == "failed"
+        assert result.error_log is not None
         assert (
-            "timeout" in result.error_log.lower() or "timed out" in result.error_log.lower()
+            "timeout" in result.error_log.lower()
+            or "timed out" in result.error_log.lower()
         )
 
 
@@ -149,6 +152,7 @@ class TestPytestXmlAnalyzer:
         analyzer = PytestXmlAnalyzer()
         text_with_paths = "Error in /tmp/tmpxyz123.py:42 and C:\\Temp\\tmpabc456.py:10"
         sanitized = analyzer._sanitize_details(text_with_paths)
+        assert sanitized is not None
         assert "test_script.py:42" in sanitized
         assert "test_script.py:10" in sanitized
         assert "tmpxyz123" not in sanitized
