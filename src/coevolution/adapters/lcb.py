@@ -5,6 +5,7 @@ import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from datasets import load_dataset  # type: ignore[import-untyped]
@@ -99,33 +100,56 @@ class Solution:
 
 
 def load_code_generation_dataset(
-    release_version: str = "release_v5",
+    release_version: str = "release_v6",
     start_date: str | None = None,
     end_date: str | None = None,
     difficulty: Difficulty | None = None,
 ) -> list[LCBCodeGenerationProblem]:
-    dataset = load_dataset(
-        "livecodebench/code_generation_lite",
-        trust_remote_code=True,
-        version_tag=release_version,
-    )
+    lcb_cache_path = Path(f"data/lcb_{release_version}.jsonl")
 
-    # Fix: The dataset might need to access a specific split
-    if hasattr(dataset, "keys"):
-        # If it's a DatasetDict, get the appropriate split
-        if "train" in dataset:
-            logger.info("Using 'train' split of the dataset.")
-            dataset = dataset["train"]
-        elif "test" in dataset:
-            logger.info("Using 'test' split of the dataset.")
-            dataset = dataset["test"]
-        else:
-            # Get the first available split
-            logger.info("Using the first available split of the dataset.")
-            dataset = dataset[list(dataset.keys())[0]]
+    if lcb_cache_path.exists():
+        logger.info(f"Loading LCB dataset from cache: {lcb_cache_path}")
+        with open(lcb_cache_path, "r") as f:
+            dataset_list = [json.loads(line) for line in f]
+    else:
+        logger.info("Fetching LCB dataset from Hugging Face.")
+        dataset = load_dataset(
+            "livecodebench/code_generation_lite",
+            trust_remote_code=True,
+            version_tag=release_version,
+        )
+
+        # Fix: The dataset might need to access a specific split
+        if hasattr(dataset, "keys"):
+            # If it's a DatasetDict, get the appropriate split
+            if "train" in dataset:
+                logger.info("Using 'train' split of the dataset.")
+                dataset = dataset["train"]
+            elif "test" in dataset:
+                logger.info("Using 'test' split of the dataset.")
+                dataset = dataset["test"]
+            else:
+                # Get the first available split
+                logger.info("Using the first available split of the dataset.")
+                dataset = dataset[list(dataset.keys())[0]]
+
+        dataset_list = [dict(p) for p in dataset]
+
+        # Save to cache
+        logger.info(f"Saving LCB dataset to cache: {lcb_cache_path}")
+        lcb_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lcb_cache_path, "w") as f:
+            for record in dataset_list:
+
+                def json_serializable(obj: Any) -> str:
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    return str(obj)
+
+                f.write(json.dumps(record, default=json_serializable) + "\n")
 
     dataset_items: list[LCBCodeGenerationProblem] = [
-        LCBCodeGenerationProblem(**p) for p in dataset
+        LCBCodeGenerationProblem(**p) for p in dataset_list
     ]
 
     # Filter only problems with difficulty hard. TODO: Make this configurable.
