@@ -43,7 +43,14 @@ from .config import (
 from .context import CoevolutionContext
 
 # 2. Data structures (depends on types)
-from .data import ExecutionResult, InteractionData, LogEntry, Problem, Test, TestResult
+from .data import (
+    EvaluationResult,
+    ExecutionResults,
+    InteractionData,
+    LogEntry,
+    Problem,
+    Test,
+)
 
 # 6. Operators (depends on data, types)
 from .operators import (
@@ -72,7 +79,6 @@ from .types import (
     OPERATION_INITIAL,
     OPERATION_MUTATION,
     OPERATION_REPRODUCTION,
-    ExecutionResults,
     InteractionKey,
     LifecycleEvent,
     Operation,
@@ -94,12 +100,12 @@ __all__ = [
     "ParentDict",
     "ParentProbabilities",
     # Data
-    "ExecutionResult",
+    "EvaluationResult",
+    "ExecutionResults",
     "InteractionData",
     "LogEntry",
     "Problem",
     "Test",
-    "TestResult",
     # Config
     "BayesianConfig",
     "EvolutionConfig",

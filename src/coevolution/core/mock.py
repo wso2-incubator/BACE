@@ -17,7 +17,7 @@ from .interfaces import (
     BasePopulation,
     BayesianConfig,
     CoevolutionContext,
-    ExecutionResult,
+    EvaluationResult,
     ExecutionResults,
     IBeliefUpdater,
     IEliteSelectionStrategy,
@@ -36,7 +36,6 @@ from .interfaces import (
     PopulationConfig,
     Problem,
     Test,
-    TestResult,
 )
 from .population import CodePopulation, TestPopulation
 
@@ -512,36 +511,33 @@ class MockExecutionSystem(IExecutionSystem):
             )
             empty_matrix = np.zeros((num_code, num_tests), dtype=int)
             return InteractionData(
-                execution_results={}, observation_matrix=empty_matrix
+                execution_results=ExecutionResults(results={}),
+                observation_matrix=empty_matrix,
             )
 
         logger.debug("MockExecutionSystem: 'Running' all tests (mock)...")
 
-        execution_results: dict[str, ExecutionResult] = {}
+        execution_results: ExecutionResults = ExecutionResults(results={})
         observation_matrix = np.zeros((num_code, num_tests), dtype=int)
-
-        # Collect ordered test ids for deterministic mapping
-        # test_ids = [t.id for t in test_population]
 
         for i, code_ind in enumerate(code_population):
             logger.trace(f"Executing generated tests for Code ID {code_ind.id}")
             # Determine pass/fail per test (mocked by code probability)
             is_passing = np.random.rand(num_tests) < code_ind.probability
 
-            # Build TestResult mapping keyed by test individual id
-            test_results: dict[str, TestResult] = {}
+            # Build EvaluationResult mapping keyed by test individual id
+            code_results: dict[str, EvaluationResult] = {}
             for j, test_ind in enumerate(test_population):
                 passed = bool(is_passing[j])
                 observation_matrix[i, j] = 1 if passed else 0
-                details = None if passed else "Mock failure message"
+                error_log = None if passed else "Mock failure message"
                 status = "passed" if passed else "failed"
                 status_lit = cast(Literal["passed", "failed", "error"], status)
-                test_results[test_ind.id] = TestResult(
-                    details=details, status=status_lit
+                code_results[test_ind.id] = EvaluationResult(
+                    error_log=error_log, status=status_lit
                 )
 
-            exec_result = ExecutionResult(script_error=False, test_results=test_results)
-            execution_results[code_ind.id] = exec_result
+            execution_results.results[code_ind.id] = code_results
 
         return InteractionData(
             execution_results=execution_results, observation_matrix=observation_matrix
@@ -573,17 +569,17 @@ class MockExecutionSystem(IExecutionSystem):
 
         for row_idx, code_ind in enumerate(code_population):
             code_id = code_ind.id
-            exec_result = execution_results.get(code_id)
-            if exec_result is None:
+            code_results = execution_results.get(code_id)
+            if code_results is None:
                 # Missing entry -> leave zeros
                 continue
-            for test_id, test_result in exec_result.test_results.items():
+            for test_id, evaluation_result in code_results.items():
                 col_idx = test_id_to_idx.get(test_id)
                 if col_idx is None:
                     # unknown test id -> skip
                     continue
                 combined_matrix[row_idx, col_idx] = (
-                    1 if test_result.status == "passed" else 0
+                    1 if evaluation_result.status == "passed" else 0
                 )
 
         return combined_matrix

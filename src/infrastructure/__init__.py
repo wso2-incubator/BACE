@@ -5,7 +5,7 @@ This module provides shared functionality including:
 - Code Preprocessing: For parsing, analyzing, transforming, and building test code
 - LLMClient: Unified interface for different LLM providers
 - SafeCodeSandbox: Safe execution environment for generated code
-- Enhanced typing: TestExecutionResult, BasicExecutionResult, TestDetails for type safety
+- Enhanced typing: EvaluationResult, BasicExecutionResult
 - Configuration: BaseConfig and specialized config classes for experiments
 - LLM Factory: Factory functions for creating LLM instances
 - Coevolution: Bayesian coevolution algorithms with selection strategies
@@ -38,11 +38,11 @@ from .sandbox import (
     BasicExecutionResult,
     CodeExecutionError,
     CodeExecutionTimeoutError,
+    EvaluationResult,
     PytestXmlAnalyzer,
     SafeCodeSandbox,
     SandboxConfig,
     TestExecutor,
-    TestResult,
     check_test_execution_status,
     create_safe_test_environment,
     create_test_executor,
@@ -61,7 +61,7 @@ __all__ = [
     "check_test_execution_status",
     # Types
     "BasicExecutionResult",
-    "TestResult",
+    "EvaluationResult",
     "CodeExecutionError",
     "CodeExecutionTimeoutError",
     # New architecture

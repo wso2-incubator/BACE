@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 from loguru import logger
 
-from .types import BasicExecutionResult, TestResult
+from .types import BasicExecutionResult, EvaluationResult
 
 
 class PytestXmlAnalyzer:
@@ -89,7 +89,7 @@ class PytestXmlAnalyzer:
 
     def analyze_pytest_xml(
         self, xml_content: Optional[str], basic_result: BasicExecutionResult
-    ) -> TestResult:
+    ) -> EvaluationResult:
         """
         Analyze pytest XML output and return a single test result.
 
@@ -98,7 +98,7 @@ class PytestXmlAnalyzer:
             basic_result: Basic execution result from code execution
 
         Returns:
-            TestResult with detailed test analysis
+            EvaluationResult with detailed test analysis
         """
         logger.debug(
             f"Analyzing pytest XML output: xml_available={xml_content is not None}, success={basic_result.success}, return_code={basic_result.return_code}"
@@ -119,7 +119,7 @@ class PytestXmlAnalyzer:
 
     def _parse_xml_content(
         self, xml_content: str, basic_result: BasicExecutionResult
-    ) -> TestResult:
+    ) -> EvaluationResult:
         """Parse JUnit XML content and extract the test result."""
         try:
             root = ET.fromstring(xml_content)
@@ -139,7 +139,7 @@ class PytestXmlAnalyzer:
                 if error_node is not None:
                     raw_details = error_node.text or error_node.get("message", "")
                     details = self._sanitize_details(raw_details)
-                    return TestResult(
+                    return EvaluationResult(
                         status="error",
                         error_log=details,
                         execution_time=basic_result.execution_time,
@@ -194,7 +194,7 @@ class PytestXmlAnalyzer:
         except (ValueError, TypeError):
             execution_time = basic_result.execution_time
 
-        return TestResult(
+        return EvaluationResult(
             status=status,
             error_log=details,
             execution_time=execution_time,
@@ -202,7 +202,7 @@ class PytestXmlAnalyzer:
 
     def _analyze_execution_error(
         self, basic_result: BasicExecutionResult
-    ) -> TestResult:
+    ) -> EvaluationResult:
         """Analyze execution results when XML parsing failed or wasn't available."""
         script_error = False
         details = basic_result.error or basic_result.output or "No output available"
@@ -228,7 +228,7 @@ class PytestXmlAnalyzer:
                 f"Execution timed out after {basic_result.execution_time}s. {details}"
             )
 
-        return TestResult(
+        return EvaluationResult(
             status=status,
             error_log=self._sanitize_details(details),
             execution_time=basic_result.execution_time,

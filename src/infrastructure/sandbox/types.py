@@ -46,7 +46,7 @@ class SandboxConfig:
             )
 
 
-from coevolution.core.interfaces.data import TestResult
+from coevolution.core.interfaces.data import EvaluationResult
 
 
 @dataclass

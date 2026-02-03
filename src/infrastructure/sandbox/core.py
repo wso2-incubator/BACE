@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from .analyzer import PytestXmlAnalyzer
-from .types import BasicExecutionResult, SandboxConfig, TestResult
+from .types import BasicExecutionResult, EvaluationResult, SandboxConfig
 
 
 class SafeCodeSandbox:
@@ -300,7 +300,7 @@ class SafeCodeSandbox:
 
         # Temporary directory automatically cleaned up here
 
-    def execute_test_script(self, test_script: str) -> TestResult:
+    def execute_test_script(self, test_script: str) -> EvaluationResult:
         """
         Execute a test script containing a single test function and return the result.
 
@@ -308,7 +308,7 @@ class SafeCodeSandbox:
             test_script: The test script to execute
 
         Returns:
-            TestResult containing the execution outcome
+            EvaluationResult containing the execution outcome
         """
         logger.debug(f"SafeCodeSandbox: executing test script (len={len(test_script)})")
 
@@ -375,9 +375,7 @@ class SafeCodeSandbox:
                 analyzer = PytestXmlAnalyzer()
                 result = analyzer.analyze_pytest_xml(xml_content, basic_result)
 
-                logger.debug(
-                    f"SafeCodeSandbox: test script result: {result.status}"
-                )
+                logger.debug(f"SafeCodeSandbox: test script result: {result.status}")
                 return result
 
             except subprocess.TimeoutExpired:

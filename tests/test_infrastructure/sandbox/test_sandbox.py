@@ -9,9 +9,9 @@ from typing import Literal
 
 import pytest
 
-from infrastructure.sandbox import (BasicExecutionResult, PytestXmlAnalyzer,
-                                    SafeCodeSandbox, TestExecutor, TestResult,
-                                    check_test_execution_status,
+from infrastructure.sandbox import (BasicExecutionResult, EvaluationResult,
+                                    PytestXmlAnalyzer, SafeCodeSandbox,
+                                    TestExecutor, check_test_execution_status,
                                     create_safe_test_environment,
                                     create_test_executor)
 
@@ -66,7 +66,7 @@ def test_addition():
     assert 2 + 2 == 4
 """
         result = self.sandbox.execute_test_script(test_script)
-        assert isinstance(result, TestResult)
+        assert isinstance(result, EvaluationResult)
         assert result.status == "passed"
         assert result.execution_time >= 0
 
@@ -157,11 +157,11 @@ class TestTestExecutor:
     """Test cases for TestExecutor high-level wrapper."""
 
     def test_executor_delegation(self) -> None:
-        """Test that TestExecutor correctly delegates and returns TestResult."""
+        """Test that TestExecutor correctly delegates and returns EvaluationResult."""
         executor = TestExecutor(timeout=5)
         test_script = "def test_pass(): assert True"
         result = executor.execute_test_script(test_script)
-        assert isinstance(result, TestResult)
+        assert isinstance(result, EvaluationResult)
         assert result.status == "passed"
 
 
@@ -175,14 +175,19 @@ class TestSandboxUtils:
 
     def test_check_test_execution_status_helper(self) -> None:
         # Test passed
-        res_pass = TestResult(status="passed")
+        res_pass = EvaluationResult(status="passed")
         assert "TEST PASSED" in check_test_execution_status(res_pass)
 
         # Test failed
-        res_fail = TestResult(status="failed", error_log="AssertionError")
+        res_fail = EvaluationResult(status="failed", error_log="AssertionError")
         assert "TEST FAILED" in check_test_execution_status(res_fail)
 
         # Script error
-        res_script = TestResult(status="error", error_log="SyntaxError")
+        res_script = EvaluationResult(status="error", error_log="SyntaxError")
+        assert "TEST ERROR" in check_test_execution_status(res_script)
+        assert "SCRIPT ERROR" in check_test_execution_status(res_script)
+
+        # Script error
+        res_script = EvaluationResult(status="error", error_log="SyntaxError")
         assert "TEST ERROR" in check_test_execution_status(res_script)
         assert "SCRIPT ERROR" in check_test_execution_status(res_script)

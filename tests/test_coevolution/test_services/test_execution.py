@@ -18,16 +18,16 @@ import pytest
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import (  # The new dict value type
     OPERATION_INITIAL,
-    ExecutionResult,
+    EvaluationResult,
+    ExecutionResults,
     InteractionData,
 )
 from coevolution.core.population import CodePopulation, TestPopulation
-from coevolution.services.execution import ExecutionSystem, _execute_single_code
+from coevolution.services.execution import ExecutionSystem, _execute_atomic_interaction
 
 # Rename the legacy one so we don't confuse it with the new one
+from infrastructure.sandbox import EvaluationResult as SandboxEvaluationResult
 from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
-from infrastructure.sandbox import TestExecutionResult as SandboxResult
-from infrastructure.sandbox import TestResult as SandboxTestResult
 
 
 # Fixtures for test setup
@@ -123,10 +123,10 @@ def mock_execution_results() -> list[SandboxResult]:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
             ],
@@ -139,13 +139,13 @@ def mock_execution_results() -> list[SandboxResult]:
             tests_failed=2,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive",
                     description="",
                     status="failed",
                     details="AssertionError",
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="failed",
@@ -161,10 +161,10 @@ def mock_execution_results() -> list[SandboxResult]:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="failed",
@@ -187,10 +187,10 @@ def mock_execution_results_list() -> list[SandboxResult]:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
             ],
@@ -203,13 +203,13 @@ def mock_execution_results_list() -> list[SandboxResult]:
             tests_failed=2,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive",
                     description="",
                     status="failed",
                     details="AssertionError",
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="failed",
@@ -225,10 +225,10 @@ def mock_execution_results_list() -> list[SandboxResult]:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="failed",
@@ -337,10 +337,10 @@ class TestExecuteTests:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
             ],
@@ -394,13 +394,13 @@ class TestExecuteTests:
                 tests_failed=0,
                 tests_errors=0,
                 test_results=[
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_positive",
                         description="",
                         status="passed",
                         details=None,
                     ),
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_zero", description="", status="passed", details=None
                     ),
                 ],
@@ -454,7 +454,7 @@ class TestExecuteTests:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
                 # Missing the second test result!
@@ -494,7 +494,7 @@ class TestWorkerFunction:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_example", description="", status="passed", details=None
                 ),
             ],
@@ -838,7 +838,7 @@ class TestAdditionalEdgeCases:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_foo", description="", status="passed", details=None
                 )
             ],
@@ -900,7 +900,7 @@ class TestAdditionalEdgeCases:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name=f"test_{i}", description="", status="passed", details=None
                 )
                 for i in range(2)
@@ -936,13 +936,13 @@ class TestAdditionalEdgeCases:
             tests_failed=2,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive",
                     description="",
                     status="failed",
                     details="AssertionError",
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="failed",
@@ -1022,10 +1022,10 @@ class TestAdditionalEdgeCases:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="error",
@@ -1065,13 +1065,13 @@ class TestAdditionalEdgeCases:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_extra", description="", status="failed", details=None
                 ),
             ],
@@ -1144,13 +1144,13 @@ class TestAdditionalEdgeCases:
                     tests_failed=1,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_positive",
                             description="",
                             status="passed",
                             details=None,
                         ),
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_zero",
                             description="",
                             status="failed",
@@ -1167,13 +1167,13 @@ class TestAdditionalEdgeCases:
                     tests_failed=1,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_positive",
                             description="",
                             status="failed",
                             details="fail",
                         ),
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_zero",
                             description="",
                             status="passed",
@@ -1190,13 +1190,13 @@ class TestAdditionalEdgeCases:
                     tests_failed=2,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_positive",
                             description="",
                             status="failed",
                             details="fail",
                         ),
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_zero",
                             description="",
                             status="failed",
@@ -1274,7 +1274,7 @@ class TestAdditionalEdgeCases:
                     tests_failed=0,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name=f"test_{i}",
                             description="",
                             status="passed",
@@ -1291,7 +1291,7 @@ class TestAdditionalEdgeCases:
                     tests_failed=15,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name=f"test_{i}",
                             description="",
                             status="failed",
@@ -1348,13 +1348,13 @@ class TestAdditionalEdgeCases:
                     tests_failed=0,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_positive",
                             description="",
                             status="passed",
                             details=None,
                         ),
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_zero",
                             description="",
                             status="passed",
@@ -1422,7 +1422,7 @@ class TestMatrixAlignmentAndConsistency:
                 tests_failed=2 - sum(pattern),
                 tests_errors=0,
                 test_results=[
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name=f"test_{i}",
                         description="",
                         status="passed" if pattern[i] == 1 else "failed",
@@ -1482,13 +1482,13 @@ class TestMatrixAlignmentAndConsistency:
                 tests_failed=0,
                 tests_errors=0,
                 test_results=[
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_positive",
                         description="",
                         status="passed",
                         details=None,
                     ),
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_zero", description="", status="passed", details=None
                     ),
                 ],
@@ -1501,13 +1501,13 @@ class TestMatrixAlignmentAndConsistency:
                 tests_failed=1,
                 tests_errors=0,
                 test_results=[
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_positive",
                         description="",
                         status="passed",
                         details=None,
                     ),
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_zero",
                         description="",
                         status="failed",
@@ -1605,13 +1605,13 @@ class TestMatrixAlignmentAndConsistency:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive",
                     description="",
                     status="failed",
                     details=error_msg,
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero",
                     description="",
                     status="passed",
@@ -1651,10 +1651,10 @@ class TestMatrixAlignmentAndConsistency:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
             ],
@@ -1689,10 +1689,10 @@ class TestSequentialVsMultiprocessing:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_positive", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_zero", description="", status="passed", details=None
                 ),
             ],
@@ -1759,13 +1759,13 @@ class TestErrorRecovery:
                 tests_failed=0,
                 tests_errors=0,
                 test_results=[
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_positive",
                         description="",
                         status="passed",
                         details=None,
                     ),
-                    SandboxTestResult(
+                    SandboxEvaluationResult(
                         name="test_zero", description="", status="passed", details=None
                     ),
                 ],
@@ -1915,10 +1915,10 @@ class TestArchitecturalWeaknesses:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_a", description="", status="passed", details=None
                 ),  # Position 0
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_b", description="", status="failed", details="fail"
                 ),  # Position 1
             ],
@@ -2007,7 +2007,7 @@ class TestArchitecturalWeaknesses:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="t1", description="", status="passed", details=None
                 )
             ],
@@ -2040,7 +2040,7 @@ class TestArchitecturalWeaknesses:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_0", description="", status="passed", details=None
                 )
             ],
@@ -2112,7 +2112,7 @@ class TestArchitecturalWeaknesses:
                     tests_failed=0,
                     tests_errors=0,
                     test_results=[
-                        SandboxTestResult(
+                        SandboxEvaluationResult(
                             name="test_0", description="", status="passed", details=None
                         )
                     ],
@@ -2186,10 +2186,10 @@ class TestArchitecturalWeaknesses:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_0", description="", status="passed", details=None
                 ),
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_extra", description="", status="passed", details=None
                 ),
             ],
@@ -2255,7 +2255,7 @@ class TestArchitecturalWeaknesses:
             tests_failed=0,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_0", description="", status="passed", details=None
                 )
             ],
@@ -2294,7 +2294,7 @@ class TestArchitecturalWeaknesses:
             tests_failed=1,
             tests_errors=0,
             test_results=[
-                SandboxTestResult(
+                SandboxEvaluationResult(
                     name="test_0",
                     description="",
                     status="failed",

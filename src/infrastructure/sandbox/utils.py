@@ -4,7 +4,7 @@ from typing import Optional
 
 from .core import SafeCodeSandbox
 from .executor import TestExecutor
-from .types import TestResult
+from .types import EvaluationResult
 
 
 def create_safe_test_environment(
@@ -87,12 +87,12 @@ def create_test_executor(test_method_timeout: Optional[int] = 30) -> TestExecuto
     )
 
 
-def check_test_execution_status(result: TestResult) -> str:
+def check_test_execution_status(result: EvaluationResult) -> str:
     """
     Helper function to get a human-readable status of test execution.
 
     Args:
-        result: TestResult from execute_test_script
+        result: EvaluationResult from execute_test_script
 
     Returns:
         String describing the execution status

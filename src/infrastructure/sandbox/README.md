@@ -103,17 +103,16 @@ executor = create_test_executor(test_method_timeout=30)
 
 ## Data Classes
 
-### TestResult
+### EvaluationResult (from core.interfaces)
 
-Individual test case result:
+A unified test case result used throughout the framework:
 
 ```python
-@dataclass
-class TestResult:
-    name: str                                    # Test method name
-    description: str                             # Full test description
-    status: Literal["passed", "failed", "error"] # Test status
-    details: Optional[str]                       # Error message/traceback
+@dataclass(frozen=True)
+class EvaluationResult:
+    status: Literal["passed", "failed", "error"]
+    error_log: Optional[str] = None
+    execution_time: float = 0.0
 ```
 
 ### BasicExecutionResult
@@ -131,25 +130,19 @@ class BasicExecutionResult:
     return_code: int       # Process return code
 ```
 
-### TestExecutionResult
+### SandboxConfig
 
-Comprehensive test execution result:
+Serializable configuration for creating sandboxes:
 
 ```python
-@dataclass
-class TestExecutionResult:
-    script_error: bool              # Script-level error occurred
-    tests_passed: int               # Number of passed tests
-    tests_failed: int               # Number of failed tests
-    tests_errors: int               # Number of errored tests
-    test_results: List[TestResult]  # Individual test results (in script order)
-    summary: str                    # Human-readable summary
-    
-    # Properties
-    total_tests: int                # Total test count
-    success_rate: float             # Pass rate (0.0 to 1.0)
-    has_failures: bool              # Any failures/errors
-    all_tests_passed: bool          # All tests passed
+@dataclass(frozen=True)
+class SandboxConfig:
+    timeout: int = 30
+    max_memory_mb: int = 100
+    max_output_size: int = 10000
+    allowed_imports: Optional[List[str]] = None
+    python_executable: Optional[str] = None
+    test_method_timeout: Optional[int] = None
 ```
 
 ## Key Features

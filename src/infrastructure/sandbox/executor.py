@@ -6,7 +6,7 @@ from loguru import logger
 
 from .analyzer import PytestXmlAnalyzer
 from .core import SafeCodeSandbox
-from .types import BasicExecutionResult, TestResult
+from .types import BasicExecutionResult, EvaluationResult
 
 
 class TestExecutor:
@@ -52,7 +52,7 @@ class TestExecutor:
             f"Initialized TestExecutor(timeout={timeout}, max_memory_mb={max_memory_mb}, max_output_size={max_output_size}, test_method_timeout={test_method_timeout})"
         )
 
-    def execute_test_script(self, test_script: str) -> TestResult:
+    def execute_test_script(self, test_script: str) -> EvaluationResult:
         """
         Execute a test script and return a single test result.
 
@@ -60,7 +60,7 @@ class TestExecutor:
             test_script: The test script to execute
 
         Returns:
-            TestResult with detailed analysis
+            EvaluationResult with detailed analysis
         """
         logger.debug(f"TestExecutor: executing test script (len={len(test_script)})")
 

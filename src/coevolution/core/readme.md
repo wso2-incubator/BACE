@@ -267,27 +267,27 @@ type InteractionKey = tuple[str, str, str, str]
 
 **Key Classes**:
 
-#### `TestResult`
+#### `EvaluationResult`
 
 Represents result of a single unit test execution.
 
 - `status`: "passed" | "failed" | "error"
-- `details`: Error message or output
+- `error_log`: Error message or stack trace
+- `execution_time`: Time taken in seconds
 
-#### `ExecutionResult`
+#### `ExecutionResults`
 
-Result of executing a test suite against one code individual.
+Represents the collected results of executing a code population against tests.
 
-- `script_error`: Whether the code had syntax/runtime errors
-- `test_results`: Dict mapping test names to `TestResult`
+- `results`: Dict mapping `code_id -> {test_id -> EvaluationResult}`
 
 #### `InteractionData`
 
 Captures interaction between code and test populations.
 
-- `execution_results`: ID-keyed mapping of execution outcomes
+- `execution_results`: `ExecutionResults` instance containing ID-keyed outcomes
 - `observation_matrix`: NumPy array with shape `(n_code, n_test)`
-  - `observation_matrix[i, j]` = code[i] vs test[j] result
+  - `observation_matrix[i, j] = 1` if code[i] passed test[j], else 0
   - Ensures strict index alignment
 
 **Why InteractionData?**

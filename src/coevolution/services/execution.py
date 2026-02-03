@@ -8,16 +8,15 @@ This module provides a unified system for:
 
 import multiprocessing
 import os
-from typing import Optional
 
 import numpy as np
 from loguru import logger
 
 import infrastructure.code_preprocessing as cpp
-from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig, TestResult
+from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 
 from ..core.interfaces import (
-    ExecutionResult,
+    EvaluationResult,
     ExecutionResults,
     IExecutionSystem,
     InteractionData,
@@ -31,7 +30,7 @@ def _execute_atomic_interaction(
     code_snippet: str,
     test_snippet: str,
     sandbox_config: SandboxConfig,
-) -> tuple[int, int, TestResult]:
+) -> tuple[int, int, EvaluationResult]:
     """
     Worker function to execute a single code snippet against a single test function.
 
@@ -43,7 +42,7 @@ def _execute_atomic_interaction(
         sandbox_config: Serializable configuration for creating a fresh sandbox
 
     Returns:
-        Tuple of (code_idx, test_idx, TestResult)
+        Tuple of (code_id, test_id, EvaluationResult)
     """
     try:
         # CRITICAL: Reconfigure logging in child process
@@ -58,7 +57,7 @@ def _execute_atomic_interaction(
         script = cpp.composition.compose_pytest_script(code_snippet, test_snippet)
 
         # Execute in sandbox
-        result: TestResult = sandbox.execute_test_script(script)
+        result: EvaluationResult = sandbox.execute_test_script(script)
 
         return code_idx, test_idx, result
 
@@ -68,7 +67,7 @@ def _execute_atomic_interaction(
             exc_info=True,
         )
         # Return a failure result
-        fail_result = TestResult(
+        fail_result = EvaluationResult(
             status="error",
             error_log=f"Fatal worker error: {str(e)}",
             execution_time=0.0,
@@ -136,10 +135,10 @@ class ExecutionSystem(IExecutionSystem):
         observation_matrix = np.zeros((num_codes, num_tests), dtype=int)
 
         # 2. Prepare the Dictionary (The Human/Log Truth)
-        execution_results_dict: ExecutionResults = {}
+        execution_results: ExecutionResults = ExecutionResults(results={})
         # Initialize dictionary with empty results for all code individuals
         for code in code_population:
-            execution_results_dict[code.id] = ExecutionResult(test_results={})
+            execution_results.results[code.id] = {}
 
         total_evaluations = num_codes * num_tests
         num_workers = self._get_num_workers(total_evaluations)
@@ -171,12 +170,12 @@ class ExecutionSystem(IExecutionSystem):
             code_id = code_population[code_idx].id
             test_id = test_population[test_idx].id
 
-            # We know execution_results_dict[code_id] exists because we initialized it
-            execution_results_dict[code_id].test_results[test_id] = sb_test_res
+            # We know execution_results.results[code_id] exists because we initialized it
+            execution_results.results[code_id][test_id] = sb_test_res
 
         # 5. Return the Atomic Artifact
         return InteractionData(
-            execution_results=execution_results_dict,
+            execution_results=execution_results,
             observation_matrix=observation_matrix,
         )
 
@@ -184,7 +183,7 @@ class ExecutionSystem(IExecutionSystem):
         self,
         tasks: list[tuple[int, int, str, str, SandboxConfig]],
         num_workers: int,
-    ) -> list[tuple[int, int, TestResult]]:
+    ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks using multiprocessing pool."""
         try:
             with multiprocessing.Pool(processes=num_workers) as pool:
@@ -201,7 +200,7 @@ class ExecutionSystem(IExecutionSystem):
     def _execute_sequentially(
         self,
         tasks: list[tuple[int, int, str, str, SandboxConfig]],
-    ) -> list[tuple[int, int, TestResult]]:
+    ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")
         results = []

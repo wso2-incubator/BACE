@@ -4,10 +4,7 @@ Type aliases, enums, and constants for the coevolution framework.
 """
 
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, TypeAlias
-
-if TYPE_CHECKING:
-    from .data import ExecutionResult
+from typing import Literal, TypeAlias
 
 # Type alias for genetic operations
 type Operation = str
@@ -36,9 +33,4 @@ class LifecycleEvent(Enum):
 
 type ParentProbabilities = list[float]
 
-# ExecutionResults is an alias mapping a code-individual ID (str) to its
-# ExecutionResult. We use a forward-reference string for `ExecutionResult`
-# to avoid evaluation order issues at import time and mark it as a TypeAlias
-# for clearer typing semantics.
-ExecutionResults: TypeAlias = dict[str, "ExecutionResult"]
 InteractionKey: TypeAlias = tuple[str, str, str, str]

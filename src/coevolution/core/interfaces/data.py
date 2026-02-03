@@ -8,35 +8,52 @@ from typing import Any, Literal
 
 import numpy as np
 
-from .types import ExecutionResults, LifecycleEvent
+from .types import LifecycleEvent
 
 
 @dataclass(frozen=True)
-class TestResult:
+class EvaluationResult:
     """
     Represents the result of a single unit test execution.
     """
 
-    __test__ = False
     status: Literal["passed", "failed", "error"]
     error_log: str | None = None
     execution_time: float = 0.0
 
 
 @dataclass(frozen=True)
-class ExecutionResult:
+class ExecutionResults:
     """
-    Represents the collected results of executing a code individual against multiple tests.
+    Represents the collected results of executing a code population against tests.
+
+    Maps code_id -> {test_id -> EvaluationResult}
     """
 
-    test_results: dict[str, TestResult] = field(default_factory=dict)
+    results: dict[str, dict[str, EvaluationResult]] = field(default_factory=dict)
 
-    @property
-    def script_error(self) -> bool:
-        """
-        Check if any test failed due to a script-level error (e.g., SyntaxError in code).
-        """
-        return any(res.status == "error" for res in self.test_results.values())
+    def has_script_error(self, code_id: str) -> bool:
+        """Check if any test for a given code id failed due to a script-level error."""
+        code_results = self.results.get(code_id, {})
+        return any(res.status == "error" for res in code_results.values())
+
+    def __getitem__(self, code_id: str) -> dict[str, EvaluationResult]:
+        return self.results[code_id]
+
+    def __iter__(self):
+        return iter(self.results)
+
+    def keys(self):
+        return self.results.keys()
+
+    def values(self):
+        return self.results.values()
+
+    def items(self):
+        return self.results.items()
+
+    def get(self, code_id: str, default=None):
+        return self.results.get(code_id, default)
 
 
 @dataclass(frozen=True)
