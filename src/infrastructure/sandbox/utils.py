@@ -2,9 +2,10 @@
 
 from typing import Optional
 
+from coevolution.core.interfaces.data import EvaluationResult
+
 from .core import SafeCodeSandbox
 from .executor import TestExecutor
-from .types import EvaluationResult
 
 
 def create_safe_test_environment(
@@ -104,4 +105,5 @@ def check_test_execution_status(result: EvaluationResult) -> str:
     elif result.status == "error":
         return f"TEST ERROR/SCRIPT ERROR. Error: {(result.error_log or '')[:100]}..."
     else:
+        return f"UNKNOWN STATUS: {result.status}"
         return f"UNKNOWN STATUS: {result.status}"

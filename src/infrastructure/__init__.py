@@ -27,6 +27,8 @@ Usage (Hierarchical Imports):
     from infrastructure.config import BaseConfig, ExperimentConfig
 """
 
+from coevolution.core.interfaces.data import EvaluationResult
+
 # Only re-export exceptions from code_preprocessing for convenience
 from .code_preprocessing import (
     CodeParsingError,
@@ -38,7 +40,6 @@ from .sandbox import (
     BasicExecutionResult,
     CodeExecutionError,
     CodeExecutionTimeoutError,
-    EvaluationResult,
     PytestXmlAnalyzer,
     SafeCodeSandbox,
     SandboxConfig,
@@ -69,4 +70,5 @@ __all__ = [
     "PytestXmlAnalyzer",
     "create_test_executor",
 ]
+__version__ = "0.1.0"
 __version__ = "0.1.0"

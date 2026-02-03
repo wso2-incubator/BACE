@@ -6,7 +6,9 @@ from typing import Literal, Optional
 
 from loguru import logger
 
-from .types import BasicExecutionResult, EvaluationResult
+from coevolution.core.interfaces.data import EvaluationResult
+
+from .types import BasicExecutionResult
 
 
 class PytestXmlAnalyzer:
@@ -232,4 +234,5 @@ class PytestXmlAnalyzer:
             status=status,
             error_log=self._sanitize_details(details),
             execution_time=basic_result.execution_time,
+        )
         )

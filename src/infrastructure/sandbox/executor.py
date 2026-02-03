@@ -4,9 +4,11 @@ from typing import List, Optional
 
 from loguru import logger
 
+from coevolution.core.interfaces.data import EvaluationResult
+
 from .analyzer import PytestXmlAnalyzer
 from .core import SafeCodeSandbox
-from .types import BasicExecutionResult, EvaluationResult
+from .types import BasicExecutionResult
 
 
 class TestExecutor:
@@ -77,4 +79,5 @@ class TestExecutor:
         Returns:
             BasicExecutionResult
         """
+        return self.sandbox.execute_code(code)
         return self.sandbox.execute_code(code)

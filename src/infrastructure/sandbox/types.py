@@ -46,9 +46,6 @@ class SandboxConfig:
             )
 
 
-from coevolution.core.interfaces.data import EvaluationResult as EvaluationResult
-
-
 @dataclass
 class BasicExecutionResult:
     """Result of basic code execution."""

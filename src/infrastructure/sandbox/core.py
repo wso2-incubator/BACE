@@ -9,8 +9,10 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from coevolution.core.interfaces.data import EvaluationResult
+
 from .analyzer import PytestXmlAnalyzer
-from .types import BasicExecutionResult, EvaluationResult, SandboxConfig
+from .types import BasicExecutionResult, SandboxConfig
 
 
 class SafeCodeSandbox:
@@ -411,4 +413,5 @@ class SafeCodeSandbox:
             allowed_imports=config.allowed_imports,
             python_executable=config.python_executable,
             test_method_timeout=config.test_method_timeout,
+        )
         )

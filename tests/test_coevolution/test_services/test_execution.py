@@ -22,11 +22,11 @@ from coevolution.core.interfaces import (  # The new dict value type
     ExecutionResults,
     InteractionData,
 )
-from coevolution.core.population import CodePopulation, TestPopulation
-from coevolution.services.execution import ExecutionSystem, _execute_atomic_interaction
 
 # Rename the legacy one so we don't confuse it with the new one
-from infrastructure.sandbox import EvaluationResult as SandboxEvaluationResult
+from coevolution.core.interfaces.data import EvaluationResult as SandboxEvaluationResult
+from coevolution.core.population import CodePopulation, TestPopulation
+from coevolution.services.execution import ExecutionSystem, _execute_atomic_interaction
 from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 
 

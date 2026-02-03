@@ -9,9 +9,10 @@ from typing import Literal
 
 import pytest
 
-from infrastructure.sandbox import (BasicExecutionResult, EvaluationResult,
-                                    PytestXmlAnalyzer, SafeCodeSandbox,
-                                    TestExecutor, check_test_execution_status,
+from coevolution.core.interfaces.data import EvaluationResult
+from infrastructure.sandbox import (BasicExecutionResult, PytestXmlAnalyzer,
+                                    SafeCodeSandbox, TestExecutor,
+                                    check_test_execution_status,
                                     create_safe_test_environment,
                                     create_test_executor)
 
@@ -187,6 +188,10 @@ class TestSandboxUtils:
         assert "TEST ERROR" in check_test_execution_status(res_script)
         assert "SCRIPT ERROR" in check_test_execution_status(res_script)
 
+        # Script error
+        res_script = EvaluationResult(status="error", error_log="SyntaxError")
+        assert "TEST ERROR" in check_test_execution_status(res_script)
+        assert "SCRIPT ERROR" in check_test_execution_status(res_script)
         # Script error
         res_script = EvaluationResult(status="error", error_log="SyntaxError")
         assert "TEST ERROR" in check_test_execution_status(res_script)
