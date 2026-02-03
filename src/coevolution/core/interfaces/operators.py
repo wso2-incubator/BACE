@@ -6,7 +6,6 @@ Operator protocols and related DTOs for genetic operations.
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from .data import Test
 from .types import Operation
 
 
