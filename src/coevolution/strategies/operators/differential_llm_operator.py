@@ -21,7 +21,6 @@ from coevolution.utils.prompts import DIFFERENTIAL_INPUT_GENERATOR_PROMPT
 from infrastructure.code_preprocessing import (
     CodeParsingError,
     CodeTransformationError,
-    composition,
     transformation,
 )
 
