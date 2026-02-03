@@ -1,8 +1,8 @@
-"""Pytest test operator implementation and DTOs.
+"""Unit test operator implementation and DTOs.
 
-Contains `PytestLLMOperator` (formerly UnittestLLMOperator) and the DTOs used for
-pytest-based test generation and manipulation. Now generates standalone test
-functions instead of unittest.TestCase classes.
+Contains `UnittestLLMOperator` and the DTOs used for test generation and
+manipulation. Generates standalone pytest-style test functions instead of
+unittest.TestCase classes.
 """
 
 from dataclasses import dataclass
@@ -57,12 +57,12 @@ class UnittestEditInput(BaseOperatorInput):
     failing_code_snippets_with_traces: list[tuple[str, str]]  # (snippet, trace)
 
 
-class PytestLLMOperator(BaseLLMOperator, IOperator):
+class UnittestLLMOperator(BaseLLMOperator, IOperator):
     """
-    Concrete LLM-based genetic operator for pytest standalone test functions.
+    Concrete LLM-based genetic operator for unit test functions.
 
-    Formerly UnittestLLMOperator, now generates pytest functions instead of unittest
-    classes. This dramatically simplifies the implementation by removing AST
+    Generates pytest-style functions instead of unittest classes. This
+    dramatically simplifies the implementation by removing AST
     manipulation for class reconstruction.
     """
 
@@ -256,7 +256,7 @@ class PytestLLMOperator(BaseLLMOperator, IOperator):
     def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
         operation = getattr(input_dto, "operation", "unknown")
         logger.info(
-            f"Applying pytest test operator for operation '{operation}' with input type {type(input_dto).__name__}"
+            f"Applying unit test operator for operation '{operation}' with input type {type(input_dto).__name__}"
         )
         match input_dto:
             case UnittestMutationInput():
@@ -278,14 +278,9 @@ class PytestLLMOperator(BaseLLMOperator, IOperator):
         return result
 
 
-# Backward compatibility alias
-UnittestLLMOperator = PytestLLMOperator
-
-
 __all__ = [
     "UnittestMutationInput",
     "UnittestCrossoverInput",
     "UnittestEditInput",
-    "UnittestLLMOperator",  # Legacy name
-    "PytestLLMOperator",  # New name
+    "UnittestLLMOperator",
 ]
