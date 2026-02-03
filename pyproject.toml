@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "APR-research-wso2"
+name = "BACE"
 version = "0.1.0"
-description = "Automated Program Repair using LLMs"
+description = "Bayesian Anchored Co-Evolution of Code and Test Populations"
 readme = "README.md"
 requires-python = "==3.12.*"
 
@@ -133,11 +133,8 @@ dependencies = [
     "websocket-client==1.8.0",
     "xxhash==3.5.0",
     "zstandard==0.25.0",
-    "human-eval",
-    "livecodebench-pro",
     "huggingface-hub>=0.35.3",
     "datasets==3.6.0",
-    "livecodebench",
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
     "loguru>=0.7.3",
@@ -170,11 +167,6 @@ strict = true
 mypy_path = "src"
 explicit_package_bases = true
 
-
-[[tool.mypy.overrides]]
-module = "human_eval.*"
-ignore_missing_imports = true
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "fire"
