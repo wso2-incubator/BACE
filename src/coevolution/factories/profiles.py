@@ -393,6 +393,7 @@ def create_differential_test_profile(
     prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
 
     differential_finder = DifferentialFinder(
+        language_adapter=language_adapter,
         sandbox_config=sandbox_config,
         enable_multiprocessing=cpu_workers > 1,
         cpu_workers=cpu_workers,
