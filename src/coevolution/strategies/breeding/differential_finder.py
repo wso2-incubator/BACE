@@ -3,15 +3,13 @@ Concrete implementation of the Divergence Finder.
 Uses the execution sandbox to identify differences between two code snippets.
 """
 
-import ast
 import multiprocessing
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 from loguru import logger
 
-from infrastructure.code_preprocessing.analysis import validate_code_syntax
-from infrastructure.code_preprocessing.composition import compose_lcb_output_script
+from coevolution.core.interfaces.language import ILanguageAdapter
 from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 
 from .differential_breeding import DifferentialResult, IDifferentialFinder
@@ -32,7 +30,7 @@ WorkerResult = Union[
 
 
 def _worker_entry(
-    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig],
+    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, ILanguageAdapter],
 ) -> WorkerResult:
     """
     Stateless worker function for parallel execution.
@@ -46,7 +44,9 @@ def _worker_entry(
     """
 
     # Unpack arguments
-    idx, input_data, code_a_snippet, code_b_snippet, config = task_args
+    idx, input_data, code_a_snippet, code_b_snippet, config, language_adapter = (
+        task_args
+    )
 
     try:
         # 1. Hydrate Sandbox
@@ -58,7 +58,9 @@ def _worker_entry(
         # Helper to run a single snippet
         def run_snippet(snippet: str) -> Optional[str]:
             test_input_formatted = {"inputdata": input_data}
-            script = compose_lcb_output_script(snippet, str(test_input_formatted))
+            script = language_adapter.compose_evaluation_script(
+                snippet, str(test_input_formatted)
+            )
             exec_result = sandbox.execute_code(script)
 
             if exec_result.error:
@@ -102,6 +104,7 @@ class DifferentialFinder(IDifferentialFinder):
     def __init__(
         self,
         sandbox_config: SandboxConfig,
+        language_adapter: ILanguageAdapter,
         enable_multiprocessing: bool = True,
         cpu_workers: int = 4,
     ) -> None:
@@ -114,6 +117,7 @@ class DifferentialFinder(IDifferentialFinder):
             cpu_workers: Number of worker processes (default 4).
         """
         self.sandbox_config = sandbox_config
+        self.language_adapter = language_adapter
         self.enable_multiprocessing = enable_multiprocessing
         self.cpu_workers = cpu_workers
 
@@ -126,7 +130,7 @@ class DifferentialFinder(IDifferentialFinder):
         Executes the generator script to produce a list of test inputs.
         This step is always sequential as it's a single script execution.
         """
-        if not validate_code_syntax(generator_script):
+        if not self.language_adapter.is_syntax_valid(generator_script):
             logger.warning(
                 "Input generator script produced invalid Python code. No test inputs generated."
             )
@@ -136,15 +140,14 @@ class DifferentialFinder(IDifferentialFinder):
         # Use the local sandbox instance
         output = self._local_sandbox.execute_code(generator_script).output.strip()
 
-        try:
-            test_inputs: list[dict[str, Any]] = ast.literal_eval(output)
-            return test_inputs
-        except (SyntaxError, ValueError) as e:
+        test_inputs = self.language_adapter.parse_test_inputs(output)
+        if not test_inputs:
             logger.warning(
-                f"Failed to parse input generator output: {e}. No test inputs generated."
+                "No test inputs generated or failed to parse generator output."
             )
             logger.debug(f"Generator output was:\n{output[:1000]}...")
-            return []
+
+        return test_inputs
 
     def find_differential(
         self,
@@ -204,7 +207,9 @@ class DifferentialFinder(IDifferentialFinder):
     ) -> Optional[str]:
         """Helper for sequential run using self._local_sandbox."""
         test_input_formatted = {"inputdata": input_data}
-        script = compose_lcb_output_script(code, str(test_input_formatted))
+        script = self.language_adapter.compose_evaluation_script(
+            code, str(test_input_formatted)
+        )
         exec_result = self._local_sandbox.execute_code(script)
         return None if exec_result.error else exec_result.output.strip()
 
@@ -216,7 +221,7 @@ class DifferentialFinder(IDifferentialFinder):
 
         # Prepare Tasks
         tasks = [
-            (i, inp, code_a, code_b, self.sandbox_config)
+            (i, inp, code_a, code_b, self.sandbox_config, self.language_adapter)
             for i, inp in enumerate(inputs)
         ]
 

@@ -57,6 +57,7 @@ from ..core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
+from ..core.interfaces.language import ILanguageAdapter
 from ..strategies.breeding.code_breeding import CodeBreedingStrategy
 from ..strategies.breeding.differential_breeding import DifferentialBreedingStrategy
 from ..strategies.breeding.differential_finder import DifferentialFinder
@@ -77,6 +78,7 @@ from ..strategies.selection.parent_selection import RouletteWheelParentSelection
 
 def create_default_code_profile(
     llm_client: LLMClient,
+    language_adapter: ILanguageAdapter,
     initial_prior: float = 0.2,
     initial_population_size: int = 10,
     max_population_size: int = 15,
@@ -142,7 +144,7 @@ def create_default_code_profile(
     )
 
     # Create operator
-    code_operator = CodeLLMOperator(llm=llm_client)
+    code_operator = CodeLLMOperator(llm=llm_client, language_adapter=language_adapter)
 
     # Create operator rates config
     operator_rates = OperatorRatesConfig(
@@ -189,6 +191,7 @@ def create_default_code_profile(
 
 def create_unittest_test_profile(
     llm_client: LLMClient,
+    language_adapter: ILanguageAdapter,
     initial_prior: float = 0.2,
     initial_population_size: int = 20,
     max_population_size: int = 20,
@@ -251,7 +254,9 @@ def create_unittest_test_profile(
     )
 
     # Create operator
-    test_operator = UnittestLLMOperator(llm=llm_client)
+    test_operator = UnittestLLMOperator(
+        llm=llm_client, language_adapter=language_adapter
+    )
 
     # Create operator rates config
     operator_rates = OperatorRatesConfig(
@@ -301,6 +306,7 @@ def create_unittest_test_profile(
 
 def create_differential_test_profile(
     llm_client: LLMClient,
+    language_adapter: ILanguageAdapter,
     sandbox_config: SandboxConfig,
     initial_prior: float = 0.5,
     initial_population_size: int = 0,  # Bootstrap mode
@@ -369,7 +375,9 @@ def create_differential_test_profile(
     )
 
     # Create operator
-    differential_operator = DifferentialLLMOperator(llm=llm_client)
+    differential_operator = DifferentialLLMOperator(
+        llm=llm_client, language_adapter=language_adapter
+    )
 
     # Create operator rates config
     operator_rates = OperatorRatesConfig(
@@ -460,6 +468,7 @@ def create_public_test_profile(
 
 def create_agent_coder_code_profile(
     llm_client: LLMClient,
+    language_adapter: ILanguageAdapter,
     initial_prior: float = 0.2,
     llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
@@ -495,7 +504,9 @@ def create_agent_coder_code_profile(
 
     # 2. Create Stateful Operator
     # Note: The Orchestrator MUST manage the lifecycle (reset_session) of this operator.
-    agent_operator = AgentCoderLLMOperator(llm=llm_client)
+    agent_operator = AgentCoderLLMOperator(
+        llm=llm_client, language_adapter=language_adapter
+    )
 
     # 3. Configure Operations (Edit Only)
     operator_rates = OperatorRatesConfig(operation_rates={"edit": 1.0})

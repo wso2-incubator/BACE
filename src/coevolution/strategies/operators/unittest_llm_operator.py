@@ -16,6 +16,10 @@ from coevolution.core.interfaces import (
     OperatorOutput,
     OperatorResult,
 )
+from coevolution.core.interfaces.language import (
+    LanguageParsingError,
+    LanguageTransformationError,
+)
 from coevolution.utils.prompts import (
     CROSSOVER_TEST,
     EDIT_ALL_FAILING_UNITTEST,
@@ -23,11 +27,6 @@ from coevolution.utils.prompts import (
     EDIT_DISCRIMINATING_UNITTEST,
     INITIAL_TEST_AGENT_CODER_STYLE,
     MUTATE_TEST,
-)
-from infrastructure.code_preprocessing import (
-    CodeParsingError,
-    CodeTransformationError,
-    extraction,
 )
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
@@ -70,17 +69,17 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         return {"mutation", "crossover", "edit"}
 
     def _extract_test_functions(self, test_code: str) -> list[str]:
-        """Extract standalone pytest test functions from code."""
-        return extraction.extract_test_functions_code(test_code)
+        """Extract standalone test functions from code."""
+        return self.language_adapter.split_tests(test_code)
 
     def _extract_first_test_function(self, code: str) -> str:
         """Extract the first test function from code."""
         functions = self._extract_test_functions(code)
         if not functions:
-            raise CodeParsingError("No test functions found in generated code")
+            raise LanguageParsingError("No test functions found in generated code")
         return functions[0]
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         """
         Generate initial pytest test functions and return them as snippets.
@@ -105,9 +104,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         response: str = self._generate(prompt)
 
         # Extract all code blocks since prompt asks for separate blocks per test
-        all_code_blocks: list[str] = extraction.extract_all_code_blocks_from_response(
-            response
-        )
+        all_code_blocks: list[str] = self.language_adapter.extract_code_blocks(response)
         logger.debug(f"Extracted {len(all_code_blocks)} code blocks from response")
 
         # Extract test functions from all code blocks
@@ -141,7 +138,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
                 starter_code=input_dto.starter_code,
             )
             response_additional = self._generate(prompt_additional)
-            all_blocks_additional = extraction.extract_all_code_blocks_from_response(
+            all_blocks_additional = self.language_adapter.extract_code_blocks(
                 response_additional
             )
             for code_block in all_blocks_additional:
@@ -167,7 +164,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
 
         return OperatorOutput(results=results)
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_crossover(self, input_dto: UnittestCrossoverInput) -> OperatorOutput:
         logger.debug("Performing test crossover operation")
         prompt = CROSSOVER_TEST.format(
@@ -183,7 +180,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             results=[OperatorResult(snippet=child, metadata={"operation": "crossover"})]
         )
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_mutation(self, input_dto: UnittestMutationInput) -> OperatorOutput:
         logger.debug("Performing test mutation operation")
         prompt = MUTATE_TEST.format(
@@ -200,7 +197,7 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             ]
         )
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_edit(self, input_dto: UnittestEditInput) -> OperatorOutput:
         logger.debug("Performing unittest edit operation")
 

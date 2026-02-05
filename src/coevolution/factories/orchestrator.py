@@ -53,6 +53,7 @@ from ..core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
+from ..core.interfaces.language import ILanguageAdapter
 from ..services.ledger import InteractionLedger
 
 
@@ -100,6 +101,7 @@ class OrchestratorBuilder:
         self._execution_system: IExecutionSystem | None = None
         self._bayesian_system: IBeliefUpdater | None = None
         self._ledger_factory: LedgerFactory = InteractionLedger  # Default factory
+        self._language_adapter: ILanguageAdapter | None = None
 
     def with_evolution_config(
         self,
@@ -227,6 +229,21 @@ class OrchestratorBuilder:
         self._ledger_factory = ledger_factory
         return self
 
+    def with_language_adapter(
+        self, language_adapter: ILanguageAdapter
+    ) -> "OrchestratorBuilder":
+        """
+        Set language adapter.
+
+        Args:
+            language_adapter: Adapter for language-specific operations
+
+        Returns:
+            Self for method chaining
+        """
+        self._language_adapter = language_adapter
+        return self
+
     def _validate(self) -> None:
         """
         Validate that all required components are set.
@@ -263,6 +280,9 @@ class OrchestratorBuilder:
         if self._bayesian_system is None:
             errors.append("Bayesian system not set (use with_bayesian_system())")
 
+        if self._language_adapter is None:
+            errors.append("Language adapter not set (use with_language_adapter())")
+
         if errors:
             error_msg = "Validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
             raise ValueError(error_msg)
@@ -286,6 +306,7 @@ class OrchestratorBuilder:
         assert self._execution_system is not None
         assert self._bayesian_system is not None
         assert self._ledger_factory is not None
+        assert self._language_adapter is not None
 
         config = OrchestratorConfig(
             evo_config=self._evo_config,
@@ -295,6 +316,7 @@ class OrchestratorBuilder:
             execution_system=self._execution_system,
             bayesian_system=self._bayesian_system,
             ledger_factory=self._ledger_factory,
+            language_adapter=self._language_adapter,
         )
 
         logger.info("OrchestratorConfig built successfully")
@@ -330,4 +352,5 @@ def build_orchestrator_from_config(config: OrchestratorConfig) -> Any:
         execution_system=config.execution_system,
         bayesian_system=config.bayesian_system,
         ledger_factory=config.ledger_factory,
+        language_adapter=config.language_adapter,
     )

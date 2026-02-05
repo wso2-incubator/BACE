@@ -24,8 +24,10 @@ from coevolution.utils.prompts import (
     INITIAL_CODE_SINGLE_SOLUTION,
     MUTATE_CODE,
 )
-from infrastructure.code_preprocessing import CodeParsingError, analysis, extraction
-from infrastructure.code_preprocessing.exceptions import CodeTransformationError
+from infrastructure.code_preprocessing.exceptions import (
+    CodeParsingError,
+    CodeTransformationError,
+)
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
@@ -55,10 +57,10 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         return {"mutation", "crossover", "edit"}
 
     def _extract_all_code_blocks(self, response: str) -> List[str]:
-        return extraction.extract_all_code_blocks_from_response(response)
+        return self.language_adapter.extract_code_blocks(response)
 
     def _contains_starter_code(self, code: str, starter_code: str) -> bool:
-        return analysis.contains_starter_code(code, starter_code)
+        return self.language_adapter.contains_starter_code(code, starter_code)
 
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
@@ -81,7 +83,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
 
         response: str = self._generate(prompt)
         code_blocks: list[str] = (
-            [extraction.extract_code_block_from_response(response)]
+            self.language_adapter.extract_code_blocks(response)
             if population_size == 1
             else self._extract_all_code_blocks(response)
         )
@@ -117,7 +119,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         )
 
         response = self._generate(prompt)
-        child_code = extraction.extract_code_block_from_response(response)
+        child_code = self._extract_code_block(response)
 
         if not self._contains_starter_code(child_code, input_dto.starter_code):
             logger.error("Crossover result does not contain starter code structure.")
@@ -140,7 +142,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             starter_code=input_dto.starter_code,
         )
         response = self._generate(prompt)
-        mutated_code = extraction.extract_code_block_from_response(response)
+        mutated_code = self._extract_code_block(response)
 
         if not self._contains_starter_code(mutated_code, input_dto.starter_code):
             logger.error("Mutation result does not contain starter code structure.")
@@ -176,7 +178,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             feedback=feedback,
         )
         response = self._generate(prompt)
-        edited_code = extraction.extract_code_block_from_response(response)
+        edited_code = self._extract_code_block(response)
 
         if not self._contains_starter_code(edited_code, input_dto.starter_code):
             logger.error("Edit result does not contain starter code structure.")

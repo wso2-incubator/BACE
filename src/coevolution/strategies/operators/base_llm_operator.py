@@ -16,7 +16,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from infrastructure.code_preprocessing import extraction
+from coevolution.core.interfaces.language import ILanguageAdapter
 
 
 def llm_retry(
@@ -63,8 +63,9 @@ class BaseLLMOperator:
     prompt construction and postprocessing.
     """
 
-    def __init__(self, llm: ILanguageModel) -> None:
+    def __init__(self, llm: ILanguageModel, language_adapter: ILanguageAdapter) -> None:
         self._llm = llm
+        self.language_adapter = language_adapter
         logger.debug(f"Initialized {self.__class__.__name__}")
 
     @llm_retry(exception_types=(LLMGenerationError,))
@@ -90,20 +91,18 @@ class BaseLLMOperator:
 
     def _extract_code_block(self, response: str) -> str:
         """
-        Extract Python code block from LLM response.
-
-        Uses code_preprocessing utilities to extract the first Python code block.
-        If no code block is found, returns the original response.
+        Extract code block from LLM response using language adapter.
 
         Args:
             response: Raw text response from the LLM
 
         Returns:
-            Extracted Python code block or original response if not found
+            Extracted code block or the original response if no block found
         """
-        extracted_code: str = extraction.extract_code_block_from_response(response)
-        logger.trace(f"Extracted code preview: {extracted_code[:100]}...")
-        return extracted_code
+        blocks = self.language_adapter.extract_code_blocks(response)
+        if blocks:
+            return blocks[0]
+        return response
 
 
 __all__ = [

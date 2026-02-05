@@ -12,7 +12,7 @@ import os
 import numpy as np
 from loguru import logger
 
-import infrastructure.code_preprocessing as cpp
+from coevolution.core.interfaces.language import ILanguageAdapter
 from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
 
 from ..core.interfaces import (
@@ -30,6 +30,7 @@ def _execute_atomic_interaction(
     code_snippet: str,
     test_snippet: str,
     sandbox_config: SandboxConfig,
+    language_adapter: ILanguageAdapter,
 ) -> tuple[int, int, EvaluationResult]:
     """
     Worker function to execute a single code snippet against a single test function.
@@ -40,6 +41,7 @@ def _execute_atomic_interaction(
         code_snippet: The code snippet to test
         test_snippet: The test function snippet
         sandbox_config: Serializable configuration for creating a fresh sandbox
+        language_adapter: Adapter for composing the test script
 
     Returns:
         Tuple of (code_id, test_id, EvaluationResult)
@@ -53,8 +55,8 @@ def _execute_atomic_interaction(
         # Create fresh sandbox instance in this worker process
         sandbox = SafeCodeSandbox.from_config(sandbox_config)
 
-        # Compose the complete test script using pytest style
-        script = cpp.composition.compose_pytest_script(code_snippet, test_snippet)
+        # Compose the complete test script using the language adapter
+        script = language_adapter.compose_test_script(code_snippet, test_snippet)
 
         # Execute in sandbox
         result: EvaluationResult = sandbox.execute_test_script(script)
@@ -82,7 +84,8 @@ class ExecutionSystem(IExecutionSystem):
 
     def __init__(
         self,
-        sandbox_config: SandboxConfig,
+        sandbox_config: "SandboxConfig",
+        language_adapter: ILanguageAdapter,
         enable_multiprocessing: bool = True,
         cpu_workers: int | None = None,
     ):
@@ -91,10 +94,12 @@ class ExecutionSystem(IExecutionSystem):
 
         Args:
             sandbox_config: Configuration for creating sandbox instances
+            language_adapter: Adapter for language-specific operations
             enable_multiprocessing: Whether to use multiprocessing for parallel execution
             cpu_workers: Number of worker processes (None = auto-detect from CPU count)
         """
         self.sandbox_config = sandbox_config
+        self.language_adapter = language_adapter
         self.enable_multiprocessing = enable_multiprocessing
         self._cpu_workers = cpu_workers
 
@@ -150,7 +155,14 @@ class ExecutionSystem(IExecutionSystem):
 
         # 3. Run the workers (atomic tasks: (code_snippet, test_snippet))
         tasks = [
-            (i, j, code.snippet, test.snippet, self.sandbox_config)
+            (
+                i,
+                j,
+                code.snippet,
+                test.snippet,
+                self.sandbox_config,
+                self.language_adapter,
+            )
             for i, code in enumerate(code_population)
             for j, test in enumerate(test_population)
         ]
@@ -181,7 +193,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_with_multiprocessing(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguageAdapter]],
         num_workers: int,
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks using multiprocessing pool."""
@@ -199,7 +211,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_sequentially(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguageAdapter]],
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")

@@ -12,12 +12,14 @@ from coevolution.core.interfaces import (
     OperatorOutput,
     OperatorResult,
 )
+from coevolution.core.interfaces.language import (
+    LanguageParsingError,
+    LanguageTransformationError,
+)
 from coevolution.utils.prompts import (
     AGENT_CODER_PROGRAMMER_EDIT,
     AGENT_CODER_PROGRAMMER_INIT,
 )
-from infrastructure.code_preprocessing import CodeParsingError, extraction
-from infrastructure.code_preprocessing.exceptions import CodeTransformationError
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
@@ -56,14 +58,12 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
         return {"edit"}
 
     def _contains_starter_code(self, code: str, starter_code: str) -> bool:
-        from infrastructure.code_preprocessing import analysis
-
-        return analysis.contains_starter_code(code, starter_code)
+        return self.language_adapter.contains_starter_code(code, starter_code)
 
     # -------------------------------------------------------------------------
     # TURN 0: INITIALIZATION
     # -------------------------------------------------------------------------
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         """
         Generates the first solution AND seeds the conversation history.
@@ -94,7 +94,7 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
         self._conversation_history.append({"role": "assistant", "content": response})
 
         # 6. Extract & Return, Psuedocode will be in the first block, so take the last
-        code = extraction.extract_all_code_blocks_from_response(response)[-1]
+        code = self.language_adapter.extract_code_blocks(response)[-1]
 
         # Validation
         if not self._contains_starter_code(code, input_dto.starter_code):
@@ -106,7 +106,7 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
     # -------------------------------------------------------------------------
     # TURN N: ITERATIVE REPAIR (EDIT)
     # -------------------------------------------------------------------------
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_edit(self, input_dto: AgentCoderEditInput) -> OperatorOutput:
         # Safety: Ensure we have a session. If not, we can't edit "nothing".
         if not self._conversation_history:
@@ -140,7 +140,7 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
         self._conversation_history.append({"role": "assistant", "content": response})
 
         # 5. Extract
-        edited_code = extraction.extract_code_block_from_response(response)
+        edited_code = self._extract_code_block(response)
 
         # 6. Validation
         if not self._contains_starter_code(edited_code, input_dto.starter_code):

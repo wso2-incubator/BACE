@@ -50,6 +50,7 @@ from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from coevolution.utils import config as config_utils
 from coevolution.utils import logging as logging_utils
+from infrastructure.adapters.python import PythonLanguageAdapter
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
 
@@ -359,11 +360,16 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     )
     logger.info(f"Using worker count: {cpu_count}")
 
-    # 3. Execution System
+    # 3. Language Adapter
+    # TODO: This could be configurable based on problem metadata (e.g. language)
+    language_adapter = PythonLanguageAdapter()
+
+    # 4. Execution System
     execution_system = ExecutionSystem(
         sandbox_config=exec_sandbox_config,
         enable_multiprocessing=True,
         cpu_workers=cpu_count,
+        language_adapter=language_adapter,
     )
 
     # 4. Auxiliary Systems
@@ -379,6 +385,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # 1. Code Profile
     code_profile = create_default_code_profile(
         llm_client=llm_client,
+        language_adapter=language_adapter,
         initial_prior=code_profile_config.get("initial_prior", 0.2),
         initial_population_size=code_profile_config.get("initial_population_size", 10),
         max_population_size=code_profile_config.get("max_population_size", 15),
@@ -397,6 +404,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # 2. Unittest Profile
     unittest_profile = create_unittest_test_profile(
         llm_client=llm_client,
+        language_adapter=language_adapter,
         initial_prior=unittest_profile_config.get("initial_prior", 0.2),
         initial_population_size=unittest_profile_config.get(
             "initial_population_size", 20
@@ -421,6 +429,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # 3. Differential Profile
     differential_profile = create_differential_test_profile(
         llm_client=llm_client,
+        language_adapter=language_adapter,
         sandbox_config=differential_sandbox_config,
         initial_prior=differential_profile_config.get("initial_prior", 0.2),
         initial_population_size=differential_profile_config.get(
@@ -459,6 +468,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # 6. Orchestrator Configuration
     builder = (
         OrchestratorBuilder()
+        .with_language_adapter(language_adapter)
         .with_evolution_config(schedule)
         .with_code_profile(code_profile)
     )

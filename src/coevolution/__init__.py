@@ -36,7 +36,7 @@ Usage Patterns:
 Note: Phase 3 will refactor the core kernel for improved domain clarity.
 """
 
-# from . import adapters, core, factories, services, strategies, utils
+from . import adapters, core, factories, services, strategies, utils
 
 __all__ = [
     "core",

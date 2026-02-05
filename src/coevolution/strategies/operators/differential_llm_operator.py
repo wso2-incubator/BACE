@@ -17,12 +17,11 @@ from coevolution.core.interfaces import (
     OperatorOutput,
     OperatorResult,
 )
-from coevolution.utils.prompts import DIFFERENTIAL_INPUT_GENERATOR_PROMPT
-from infrastructure.code_preprocessing import (
-    CodeParsingError,
-    CodeTransformationError,
-    transformation,
+from coevolution.core.interfaces.language import (
+    LanguageParsingError,
+    LanguageTransformationError,
 )
+from coevolution.utils.prompts import DIFFERENTIAL_INPUT_GENERATOR_PROMPT
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
@@ -50,7 +49,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
     def supported_operations(self) -> set[str]:
         return {OPERATION_DISCOVERY, OPERATION_CROSSOVER}
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
         """
         Initially there are no differential tests to generate.
@@ -73,15 +72,8 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         """
         Build a test method from differential input-output pairs.
 
-        Uses the generic test generation system that supports both class methods
-        and standalone functions.
-
-        Note: This is not a LLM operation or a genetic operation.
+        Uses the language adapter for language-specific test generation.
         """
-        from infrastructure.code_preprocessing.test_generation import (
-            generate_pytest_test,
-        )
-
         logger.debug(
             f"Building test method from {len(io_pairs)} IO pairs for parents {code_parent_ids}"
         )
@@ -114,15 +106,15 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         # This ensures test names are unique and traceable
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
 
-        # Use the generic test generation
-        test_function = generate_pytest_test(
+        # Use the language adapter for test generation
+        test_function = self.language_adapter.generate_test_case(
             input_str, output_str, starter_code, test_number
         )
 
         logger.debug(f"Built test method with length {len(test_function)}")
         return test_function
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_generation_script(
         self, input_dto: DifferentialGenScriptInput
     ) -> OperatorOutput:
@@ -146,7 +138,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
 
         code_block = self._extract_code_block(llm_response)
         logger.debug(f"Extracted code block with length {len(code_block)}")
-        generated_script = transformation.remove_if_main_block(code_block)
+        generated_script = self.language_adapter.remove_main_block(code_block)
         generated_script += (
             f"\nprint(generate_test_inputs({input_dto.num_inputs_to_generate}))"
         )
