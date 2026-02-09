@@ -1,0 +1,13 @@
+{% macro test_method_format() %}
+<output_formatting>
+Return only the code for a single pytest test function in a python code block.
+Test function name should start with 'test_' and be unique and descriptive of the test case.
+Use plain assert statements (e.g., assert x == y).
+</output_formatting>
+{% endmacro %}
+
+{% macro code_format() %}
+<output_formatting>
+Return the solution code in a valid python code block (```python ... ```).
+</output_formatting>
+{% endmacro %}

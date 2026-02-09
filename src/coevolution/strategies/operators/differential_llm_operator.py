@@ -21,7 +21,6 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from coevolution.utils.prompts import DIFFERENTIAL_INPUT_GENERATOR_PROMPT
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
@@ -123,7 +122,8 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         logger.info(
             f"Generating differential input script for {len(input_dto.passing_test_cases)} existing tests"
         )
-        prompt = DIFFERENTIAL_INPUT_GENERATOR_PROMPT.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/differential/gen_script.j2",
             question_content=input_dto.question_content,
             code_snippet_P=input_dto.equivalent_code_snippet_1,
             code_snippet_Q=input_dto.equivalent_code_snippet_2,

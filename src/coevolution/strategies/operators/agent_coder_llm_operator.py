@@ -16,12 +16,11 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from coevolution.utils.prompts import (
-    AGENT_CODER_PROGRAMMER_EDIT,
-    AGENT_CODER_PROGRAMMER_INIT,
-)
+
+from coevolution.utils.prompt_manager import get_prompt_manager
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
+
 
 
 @dataclass(frozen=True)
@@ -77,7 +76,8 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
         self.reset_session()
 
         # 2. Construct Prompt (Same as CodeLLMOperator)
-        prompt = AGENT_CODER_PROGRAMMER_INIT.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/agent_coder/init.j2",
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
         )
@@ -120,7 +120,8 @@ class AgentCoderLLMOperator(BaseLLMOperator, IOperator):
             f"Test Case:\n{test}\n\nError Trace:\n{trace}"
             for test, trace in input_dto.failing_tests_with_trace
         )
-        prompt = AGENT_CODER_PROGRAMMER_EDIT.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/agent_coder/edit.j2",
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
             feedback=feedback,

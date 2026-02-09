@@ -1,0 +1,14 @@
+{% macro starter_code_block(starter_code) %}
+<starter_code>
+```python
+{{ starter_code }}
+```
+</starter_code>
+{% endmacro %}
+
+{% macro starter_code_note() %}
+<instruction>
+You MUST build upon the provided starter code found in the <starter_code> tag.
+Keep the function signature exactly as defined.
+</instruction>
+{% endmacro %}

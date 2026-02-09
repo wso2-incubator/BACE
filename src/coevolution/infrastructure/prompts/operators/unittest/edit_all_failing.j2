@@ -1,0 +1,38 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.tester_role() }}
+
+<problem>
+{{ question_content }}
+</problem>
+
+<current_test>
+`python
+{{ current_test_snippet }}
+`
+</current_test>
+
+<failing_code version='P'>
+{{ failing_code_snippet_P }}
+</failing_code>
+
+<error_trace version='P'>
+{{ failing_code_trace_P }}
+</error_trace>
+
+<failing_code version='Q'>
+{{ failing_code_snippet_Q }}
+</failing_code>
+
+<error_trace version='Q'>
+{{ failing_code_trace_Q }}
+</error_trace>
+
+<task>
+The <current_test> failed for both <failing_code version='P'> and <failing_code version='Q'>.
+Hence, the <current_test> could not discriminate between the two failing code versions <failing_code version='P'> and <failing_code version='Q'>.
+Your goal is to edit the <current_test> so that it can discriminate between the two failing code versions.
+You are given the error traces for both failing code versions to help you understand why they are failing.
+</task>
+{{ fmt.test_method_format() }}

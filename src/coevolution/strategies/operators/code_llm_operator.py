@@ -17,13 +17,6 @@ from coevolution.core.interfaces import (
     OperatorOutput,
     OperatorResult,
 )
-from coevolution.utils.prompts import (
-    CROSSOVER_CODE,
-    EDIT_CODE_FIX_MULTIPLE_FAILS,
-    INITIAL_CODE_POPULATION,
-    INITIAL_CODE_SINGLE_SOLUTION,
-    MUTATE_CODE,
-)
 from infrastructure.code_preprocessing.exceptions import (
     CodeParsingError,
     CodeTransformationError,
@@ -68,18 +61,19 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
         problem_description = input_dto.question_content
         starter_code = input_dto.starter_code
 
-        prompt = (
-            INITIAL_CODE_SINGLE_SOLUTION.format(
+        if population_size == 1:
+            prompt = self.prompt_manager.render_prompt(
+                "operators/code/initial_single.j2",
                 question_content=problem_description,
                 starter_code=starter_code,
             )
-            if population_size == 1
-            else INITIAL_CODE_POPULATION.format(
+        else:
+            prompt = self.prompt_manager.render_prompt(
+                "operators/code/initial_population.j2",
                 population_size=population_size,
                 question_content=problem_description,
                 starter_code=starter_code,
             )
-        )
 
         response: str = self._generate(prompt)
         code_blocks: list[str] = (
@@ -111,7 +105,8 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_crossover(self, input_dto: CodeCrossoverInput) -> OperatorOutput:
         logger.debug("Performing crossover between two parent code snippets")
-        prompt = CROSSOVER_CODE.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/code/crossover.j2",
             question_content=input_dto.question_content,
             parent1=input_dto.parent1_snippet,
             parent2=input_dto.parent2_snippet,
@@ -136,7 +131,8 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
     @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
     def _handle_mutation(self, input_dto: CodeMutationInput) -> OperatorOutput:
         logger.debug("Performing mutation on individual code snippet")
-        prompt = MUTATE_CODE.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/code/mutate.j2",
             question_content=input_dto.question_content,
             individual=input_dto.parent_snippet,
             starter_code=input_dto.starter_code,
@@ -171,7 +167,8 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             )
         feedback = "\n\n" + "=" * 80 + "\n\n".join(feedback_parts)
 
-        prompt = EDIT_CODE_FIX_MULTIPLE_FAILS.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/code/edit_multiple.j2",
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
             individual=input_dto.parent_snippet,

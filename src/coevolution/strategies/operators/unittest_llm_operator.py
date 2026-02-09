@@ -20,14 +20,7 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from coevolution.utils.prompts import (
-    CROSSOVER_TEST,
-    EDIT_ALL_FAILING_UNITTEST,
-    EDIT_ALL_PASSING_UNITTEST,
-    EDIT_DISCRIMINATING_UNITTEST,
-    INITIAL_TEST_AGENT_CODER_STYLE,
-    MUTATE_TEST,
-)
+from coevolution.utils.prompt_manager import get_prompt_manager
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 
@@ -95,7 +88,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         logger.info(
             f"Generating {population_size} initial test function snippets for question: {input_dto.question_content[:50]}..."
         )
-        prompt: str = INITIAL_TEST_AGENT_CODER_STYLE.format(
+        prompt: str = self.prompt_manager.render_prompt(
+            "operators/unittest/initial.j2",
             population_size=population_size,
             question_content=input_dto.question_content,
             starter_code=input_dto.starter_code,
@@ -132,7 +126,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
         if len(test_functions) < population_size:
             additional_needed = population_size - len(test_functions)
             logger.info(f"Generating {additional_needed} additional test functions")
-            prompt_additional = INITIAL_TEST_AGENT_CODER_STYLE.format(
+            prompt_additional = self.prompt_manager.render_prompt(
+                "operators/unittest/initial.j2",
                 population_size=additional_needed,
                 question_content=input_dto.question_content,
                 starter_code=input_dto.starter_code,
@@ -167,7 +162,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
     @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_crossover(self, input_dto: UnittestCrossoverInput) -> OperatorOutput:
         logger.debug("Performing test crossover operation")
-        prompt = CROSSOVER_TEST.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/unittest/crossover.j2",
             question_content=input_dto.question_content,
             parent1=input_dto.parent1_snippet,
             parent2=input_dto.parent2_snippet,
@@ -183,7 +179,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
     @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def _handle_mutation(self, input_dto: UnittestMutationInput) -> OperatorOutput:
         logger.debug("Performing test mutation operation")
-        prompt = MUTATE_TEST.format(
+        prompt = self.prompt_manager.render_prompt(
+            "operators/unittest/mutate.j2",
             question_content=input_dto.question_content,
             individual=input_dto.parent_snippet,
         )
@@ -207,7 +204,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
             and len(input_dto.failing_code_snippets_with_traces) > 0
         ):
             edit_operation_type = "discriminating"
-            prompt = EDIT_DISCRIMINATING_UNITTEST.format(
+            prompt = self.prompt_manager.render_prompt(
+                "operators/unittest/edit_discriminating.j2",
                 question_content=input_dto.question_content,
                 current_test_snippet=input_dto.parent_snippet,
                 passing_code_snippet=input_dto.passing_code_snippets[0],
@@ -217,7 +215,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
 
         elif len(input_dto.passing_code_snippets) == 0:
             edit_operation_type = "all-failing"
-            prompt = EDIT_ALL_FAILING_UNITTEST.format(
+            prompt = self.prompt_manager.render_prompt(
+                "operators/unittest/edit_all_failing.j2",
                 question_content=input_dto.question_content,
                 current_test_snippet=input_dto.parent_snippet,
                 failing_code_snippet_P=input_dto.failing_code_snippets_with_traces[0][
@@ -232,7 +231,8 @@ class UnittestLLMOperator(BaseLLMOperator, IOperator):
 
         elif len(input_dto.failing_code_snippets_with_traces) == 0:
             edit_operation_type = "all-passing"
-            prompt = EDIT_ALL_PASSING_UNITTEST.format(
+            prompt = self.prompt_manager.render_prompt(
+                "operators/unittest/edit_all_passing.j2",
                 question_content=input_dto.question_content,
                 current_test_snippet=input_dto.parent_snippet,
                 passing_code_snippet_P=input_dto.passing_code_snippets[0],

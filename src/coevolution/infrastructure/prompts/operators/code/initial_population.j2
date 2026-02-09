@@ -1,0 +1,19 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/starter_code.j2' as starter %}
+
+{{ roles.coder_role() }}
+
+<task>
+- Write {{ population_size }} distinct solutions to solve the problem described below.
+- Each solution should implement a different algorithmic approach or technique.
+- Each code should strictly follow the starter code structure provided in <starter_code>
+- Maintain good code qualities and adhere to coding best practices.
+- Write a concise docstring for each solution with a clear explanation of its approach and reasoning.
+- Return each solution in a separate Python code block.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+{{ starter.starter_code_block(starter_code) }}

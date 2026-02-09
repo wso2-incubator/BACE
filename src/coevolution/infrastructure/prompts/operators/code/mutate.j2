@@ -1,0 +1,31 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/starter_code.j2' as starter %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.coder_role() }}
+
+<task>
+Generate a modified version of the provided code solution.
+1. First verify the correctness of the provided solution.
+-- If any issues are found, fix them.
+-- If no issues are found: 
+	i. Maintain the same functionality.
+	ii. Explore a different algorithmic approach or implementation style.
+	iii. Improve efficiency or clarity where possible.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<candidate_solution>
+```python
+{{ individual }}
+```
+</candidate_solution>
+
+{{ starter.starter_code_block(starter_code) }}
+
+{{ starter.starter_code_note() }}
+
+{{ fmt.code_format() }}

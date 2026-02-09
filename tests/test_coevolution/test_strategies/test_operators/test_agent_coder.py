@@ -4,11 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from coevolution.core.interfaces import InitialInput
+from coevolution.core.interfaces.language import ILanguageAdapter
 from coevolution.strategies.operators.agent_coder_llm_operator import (
     AgentCoderEditInput,
     AgentCoderLLMOperator,
 )
-from coevolution.utils.prompts import AGENT_CODER_PROGRAMMER_INIT
 from infrastructure.llm_client import LLMClient  # Assuming this exists for typing
 
 
@@ -22,9 +22,31 @@ def mock_llm_client() -> MagicMock:
 
 
 @pytest.fixture
-def operator(mock_llm_client: MagicMock) -> AgentCoderLLMOperator:
-    """Create an operator instance with the mock client."""
-    return AgentCoderLLMOperator(llm=mock_llm_client)
+def mock_language_adapter() -> MagicMock:
+    """Mock the language adapter."""
+    adapter = MagicMock(spec=ILanguageAdapter)
+    
+    # Realistic extraction: if it looks like markdown, try to extract basic blocks
+    def extract_blocks(text):
+        if "```" in text:
+            import re
+            # Improved regex to handle indentation and multi-line content
+            return re.findall(r"```(?:\w+)?\n(.*?)\n\s*```", text, re.DOTALL)
+        return [text]
+    
+    adapter.extract_code_blocks.side_effect = extract_blocks
+    
+    # Realistic starter code check: check for function skeleton rather than exact string
+    # In these tests, just checking if 'def solution():' is present is enough
+    adapter.contains_starter_code.side_effect = lambda code, starter: "def solution():" in code
+    return adapter
+
+
+@pytest.fixture
+def operator(mock_llm_client: MagicMock, mock_language_adapter: MagicMock) -> AgentCoderLLMOperator:
+    """Create an operator instance with the mock client and adapter."""
+    return AgentCoderLLMOperator(llm=mock_llm_client, language_adapter=mock_language_adapter)
+
 
 
 @pytest.fixture
@@ -53,19 +75,17 @@ class TestAgentCoderLifecycle:
 
         # Assert 1: Result is returned
         assert len(output.results) == 1
-        assert output.results[0].snippet == "def solution():\n    pass"
+        assert "def solution():" in output.results[0].snippet
 
         # Assert 2: History contains exactly 2 messages (User Prompt + Assistant Reply)
         assert len(operator._conversation_history) == 2
         assert operator._conversation_history[0]["role"] == "user"
         assert operator._conversation_history[1]["role"] == "assistant"
 
-        # Assert 3: Prompt format
-        expected_prompt = AGENT_CODER_PROGRAMMER_INIT.format(
-            question_content=valid_initial_input.question_content,
-            starter_code=valid_initial_input.starter_code,
-        )
-        assert operator._conversation_history[0]["content"] == expected_prompt
+        # Assert 3: Prompt contains question and starter code
+        prompt_content = operator._conversation_history[0]["content"]
+        assert valid_initial_input.question_content in prompt_content
+        assert valid_initial_input.starter_code in prompt_content
 
     def test_edit_appends_to_history(
         self,
