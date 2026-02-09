@@ -13,8 +13,15 @@ from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 class BallerinaSandbox(ISandboxAdapter):
     """
-    A safe sandbox environment for executing Ballerina code using the bal CLI.
+    A sandbox environment for executing Ballerina code.
     """
+
+    @classmethod
+    def from_config(cls, config: SandboxConfig) -> "BallerinaSandbox":
+        """
+        Create a sandbox instance from a configuration object.
+        """
+        return cls(config=config)
 
     def __init__(self, config: SandboxConfig):
         """

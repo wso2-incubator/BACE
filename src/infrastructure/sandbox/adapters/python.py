@@ -20,6 +20,14 @@ class PythonSandbox(ISandboxAdapter):
     A safe sandbox environment for executing Python code with restrictions.
     """
 
+    @classmethod
+    def from_config(cls, config: SandboxConfig) -> "PythonSandbox":
+        """
+        Create a sandbox instance from a configuration object.
+        Backward compatibility for legacy SafeCodeSandbox.from_config.
+        """
+        return cls(config=config)
+
     def __init__(
         self,
         config: Optional[SandboxConfig] = None,
