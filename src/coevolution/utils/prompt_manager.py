@@ -9,12 +9,13 @@ class PromptManager:
     Manages loading and rendering of Jinja2 prompt templates.
     """
 
-    def __init__(self, template_dir: Optional[str] = None) -> None:
+    def __init__(self, template_dir: Optional[str] = None, language: str = "python") -> None:
         if template_dir is None:
             # Default to src/coevolution/infrastructure/prompts relative to this file
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             template_dir = os.path.join(base_dir, "infrastructure", "prompts")
 
+        self.language = language
         self.env = Environment(
             loader=FileSystemLoader(template_dir),
             autoescape=select_autoescape(),
@@ -33,6 +34,10 @@ class PromptManager:
         Returns:
             The rendered prompt string.
         """
+        # Inject language into context if not already present
+        if "language" not in kwargs:
+            kwargs["language"] = self.language
+
         template = self.env.get_template(template_path)
         return template.render(**kwargs)
 
@@ -41,10 +46,10 @@ class PromptManager:
 _default_manager: Optional[PromptManager] = None
 
 
-def get_prompt_manager() -> PromptManager:
+def get_prompt_manager(language: str = "python") -> PromptManager:
     global _default_manager
     if _default_manager is None:
-        _default_manager = PromptManager()
+        _default_manager = PromptManager(language=language)
     return _default_manager
 
 

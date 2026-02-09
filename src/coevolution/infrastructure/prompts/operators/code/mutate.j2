@@ -19,13 +19,13 @@ Generate a modified version of the provided code solution.
 </problem>
 
 <candidate_solution>
-```python
+```{{ language }}
 {{ individual }}
 ```
 </candidate_solution>
 
-{{ starter.starter_code_block(starter_code) }}
+{{ starter.starter_code_block(starter_code, language) }}
 
 {{ starter.starter_code_note() }}
 
-{{ fmt.code_format() }}
+{{ fmt.code_format(language) }}

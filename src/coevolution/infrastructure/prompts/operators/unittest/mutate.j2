@@ -9,7 +9,7 @@
 
 <base_test>
 The following is a test case candidate:
-`python
+`{{ language }}
 {{ individual }}
 `
 </base_test>
@@ -19,4 +19,4 @@ The following is a test case candidate:
 2. If any issues are found, fix them.
 3. Else if no issues are found, generate a new test case that explores different input scenarios or edge cases.
 </task>
-{{ fmt.test_method_format() }}
+{{ fmt.test_method_format(language) }}

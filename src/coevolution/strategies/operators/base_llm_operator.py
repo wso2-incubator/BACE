@@ -67,7 +67,7 @@ class BaseLLMOperator:
     def __init__(self, llm: ILanguageModel, language_adapter: ILanguageAdapter) -> None:
         self._llm = llm
         self.language_adapter = language_adapter
-        self.prompt_manager = get_prompt_manager()
+        self.prompt_manager = get_prompt_manager(language=language_adapter.language)
         logger.debug(f"Initialized {self.__class__.__name__}")
 
     @llm_retry(exception_types=(LLMGenerationError,))

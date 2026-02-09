@@ -8,13 +8,15 @@
 </problem>
 
 <current_test>
-`python
+```{{ language }}
 {{ current_test_snippet }}
-`
+```
 </current_test>
 
 <failing_code version='P'>
+```{{ language }}
 {{ failing_code_snippet_P }}
+```
 </failing_code>
 
 <error_trace version='P'>
@@ -22,7 +24,9 @@
 </error_trace>
 
 <failing_code version='Q'>
+```{{ language }}
 {{ failing_code_snippet_Q }}
+```
 </failing_code>
 
 <error_trace version='Q'>
@@ -35,4 +39,4 @@ Hence, the <current_test> could not discriminate between the two failing code ve
 Your goal is to edit the <current_test> so that it can discriminate between the two failing code versions.
 You are given the error traces for both failing code versions to help you understand why they are failing.
 </task>
-{{ fmt.test_method_format() }}
+{{ fmt.test_method_format(language) }}

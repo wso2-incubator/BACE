@@ -42,6 +42,10 @@ class BallerinaLanguageAdapter(ILanguageAdapter):
             re.MULTILINE,
         )
 
+    @property
+    def language(self) -> str:
+        return "ballerina"
+
     def extract_code_blocks(self, response: str) -> List[str]:
         """
         Extract Ballerina code blocks from LLM response.
@@ -336,6 +340,14 @@ function test{function_name.capitalize()}{test_number}() {{
             raise LanguageTransformationError(
                 f"Failed to generate test case: {e}"
             ) from e
+
+    def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
+        """
+        Compose a Ballerina script that executes the generator.
+        """
+        script = self.remove_main_block(generator_code)
+        script += f"\n\nimport ballerina/io;\n\npublic function main() {{\n    io:println(generate_test_inputs({num_inputs}));\n}}"
+        return script
 
     def remove_main_block(self, code: str) -> str:
         """

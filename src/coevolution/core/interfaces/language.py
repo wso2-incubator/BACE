@@ -27,6 +27,13 @@ class ILanguageAdapter(Protocol):
     to concrete language implementations.
     """
 
+    @property
+    def language(self) -> str:
+        """
+        Return the name of the programming language.
+        """
+        ...
+
     def extract_code_blocks(self, response: str) -> list[str]:
         """
         Extract code snippets from a raw LLM response.
@@ -96,6 +103,12 @@ class ILanguageAdapter(Protocol):
         """
         Extract structural metadata such as function names, class definitions,
         and imports.
+        """
+        ...
+
+    def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
+        """
+        Compose a script that executes the generator function and prints the result.
         """
         ...
 

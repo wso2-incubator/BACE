@@ -31,6 +31,10 @@ class PythonLanguageAdapter(ILanguageAdapter):
     def __init__(self) -> None:
         self._block_pattern = re.compile(r"```[Pp]ython\s*([\s\S]+?)\s*```")
 
+    @property
+    def language(self) -> str:
+        return "python"
+
     def extract_code_blocks(self, response: str) -> List[str]:
         """
         Extract Python code blocks from LLM response.
@@ -148,6 +152,14 @@ class PythonLanguageAdapter(ILanguageAdapter):
         Generate a pytest test case using generate_pytest_test utility.
         """
         return generate_pytest_test(input_str, output_str, starter_code, test_number)
+
+    def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
+        """
+        Compose a Python script that executes the generator.
+        """
+        script = self.remove_main_block(generator_code)
+        script += f"\n\nprint(generate_test_inputs({num_inputs}))"
+        return script
 
     def remove_main_block(self, code: str) -> str:
         """

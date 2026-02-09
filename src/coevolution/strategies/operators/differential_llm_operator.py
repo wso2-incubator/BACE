@@ -138,9 +138,8 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
 
         code_block = self._extract_code_block(llm_response)
         logger.debug(f"Extracted code block with length {len(code_block)}")
-        generated_script = self.language_adapter.remove_main_block(code_block)
-        generated_script += (
-            f"\nprint(generate_test_inputs({input_dto.num_inputs_to_generate}))"
+        generated_script = self.language_adapter.compose_generator_script(
+            code_block, input_dto.num_inputs_to_generate
         )
         logger.debug(f"Final generated script with length {len(generated_script)}")
         logger.trace(f"Generated differential input script:\n{generated_script}")
