@@ -50,7 +50,7 @@ from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from coevolution.utils import config as config_utils
 from coevolution.utils import logging as logging_utils
-from infrastructure.adapters.python import PythonLanguageAdapter
+from infrastructure.languages.python import PythonLanguageAdapter
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
 
