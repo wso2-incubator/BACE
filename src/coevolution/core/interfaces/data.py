@@ -119,6 +119,7 @@ class SandboxConfig:
     max_output_size: int = 10000
 
     # 2. Environment Settings
+    language: str = "python"
     allowed_imports: Optional[List[str]] = None
     language_executable: Optional[str] = None
     test_method_timeout: Optional[int] = None
@@ -135,7 +136,7 @@ class SandboxConfig:
         if self.max_memory_mb <= 0:
             raise ValueError(f"Memory limit must be positive, got {self.max_memory_mb}")
 
-        if self.language_executable and not os.path.exists(self.language_executable):
+        if self.language_executable and os.path.exists(self.language_executable):
             # Warning: This check might fail if the path exists on the worker
             # but not the host (e.g. Docker), but usually valid for local MP.
             # We'll skip strict existence check for flexibility, but could add it.

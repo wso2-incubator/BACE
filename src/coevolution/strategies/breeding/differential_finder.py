@@ -10,7 +10,7 @@ from typing import Any, Optional, Union
 from loguru import logger
 
 from coevolution.core.interfaces.language import ILanguageAdapter
-from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
+from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from .differential_breeding import DifferentialResult, IDifferentialFinder
 
@@ -53,7 +53,7 @@ def _worker_entry(
         # Ensure we set up logging in the child process if needed
         # No logging for now to reduce overhead
         # setup_logging(console_level="INFO", file_level="TRACE")
-        sandbox = SafeCodeSandbox.from_config(config)
+        sandbox = create_sandbox(config)
 
         # Helper to run a single snippet
         def run_snippet(snippet: str) -> Optional[str]:
@@ -123,7 +123,7 @@ class DifferentialFinder(IDifferentialFinder):
 
         # Create a local sandbox for generator execution (lightweight task)
         # or for sequential fallback.
-        self._local_sandbox = SafeCodeSandbox.from_config(sandbox_config)
+        self._local_sandbox = create_sandbox(sandbox_config)
 
     def _generate_test_inputs(self, generator_script: str) -> list[dict[str, Any]]:
         """

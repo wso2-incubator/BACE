@@ -13,7 +13,7 @@ import numpy as np
 from loguru import logger
 
 from coevolution.core.interfaces.language import ILanguageAdapter
-from infrastructure.sandbox import SafeCodeSandbox, SandboxConfig
+from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from ..core.interfaces import (
     EvaluationResult,
@@ -52,8 +52,8 @@ def _execute_atomic_interaction(
 
         setup_logging(console_level="DEBUG", file_level="TRACE")
 
-        # Create fresh sandbox instance in this worker process
-        sandbox = SafeCodeSandbox.from_config(sandbox_config)
+        # Create fresh sandbox instance in this worker process using the factory
+        sandbox = create_sandbox(sandbox_config)
 
         # Compose the complete test script using the language adapter
         script = language_adapter.compose_test_script(code_snippet, test_snippet)
@@ -105,7 +105,7 @@ class ExecutionSystem(IExecutionSystem):
 
         # Create a local sandbox instance for sequential execution
         # (multiprocessing workers will create their own)
-        self._local_sandbox = SafeCodeSandbox.from_config(sandbox_config)
+        self._local_sandbox = create_sandbox(sandbox_config)
 
     def _get_num_workers(self, num_tasks: int) -> int:
         """Determine optimal number of workers based on CPU count and task count."""

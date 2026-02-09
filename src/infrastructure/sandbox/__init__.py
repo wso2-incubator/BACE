@@ -43,6 +43,19 @@ from .utils import (
 # Alias for backward compatibility
 SafeCodeSandbox = PythonSandbox
 
+
+def create_sandbox(config: SandboxConfig) -> ISandboxAdapter:
+    """
+    Factory function to create the appropriate sandbox adapter based on config.
+    """
+    if config.language == "python":
+        return PythonSandbox(config)
+    elif config.language == "ballerina":
+        return BallerinaSandbox(config)
+    else:
+        raise ValueError(f"Unsupported sandbox language: {config.language}")
+
+
 __all__ = [
     # Core classes
     "PythonSandbox",
@@ -58,6 +71,8 @@ __all__ = [
     # Exceptions
     "CodeExecutionError",
     "CodeExecutionTimeoutError",
+    # Factory
+    "create_sandbox",
     # Utility functions
     "create_safe_test_environment",
     "create_test_executor",
