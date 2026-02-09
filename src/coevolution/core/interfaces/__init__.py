@@ -12,6 +12,8 @@ The interfaces are organized into focused modules:
 - config: Configuration dataclasses
 - base: Abstract base classes for individuals and populations
 - context: Context objects for passing state
+- language: Protocol for language-specific operations
+- sandbox: Protocol for language-specific sandbox execution
 - profiles: Profile classes bundling configurations and strategies
 - operators: Operator protocols and DTOs
 - breeding: Breeding strategy protocols
@@ -44,15 +46,24 @@ from .context import CoevolutionContext
 
 # 2. Data structures (depends on types)
 from .data import (
+    BasicExecutionResult,
     EvaluationResult,
     ExecutionResults,
     InteractionData,
     LogEntry,
     Problem,
+    SandboxConfig,
     Test,
 )
 
-# 6. Operators (depends on data, types)
+# 6. Language and Sandbox Adapters (depends on data)
+from .language import (
+    ILanguageAdapter,
+    LanguageParsingError,
+    LanguageTransformationError,
+)
+
+# 7. Operators (depends on data, types)
 from .operators import (
     BaseOperatorInput,
     InitialInput,
@@ -63,6 +74,7 @@ from .operators import (
 
 # 10. Profiles (depends on config, forward refs to breeding, selection, systems)
 from .profiles import CodeProfile, OrchestratorConfig, PublicTestProfile, TestProfile
+from .sandbox import ISandboxAdapter
 
 # 8. Selection (depends on base, config, context)
 from .selection import IEliteSelectionStrategy, IParentSelectionStrategy
@@ -98,11 +110,13 @@ __all__ = [
     "ParentDict",
     "ParentProbabilities",
     # Data
+    "BasicExecutionResult",
     "EvaluationResult",
     "ExecutionResults",
     "InteractionData",
     "LogEntry",
     "Problem",
+    "SandboxConfig",
     "Test",
     # Config
     "BayesianConfig",
@@ -139,4 +153,10 @@ __all__ = [
     "OrchestratorConfig",
     "PublicTestProfile",
     "TestProfile",
+    # Language Adapter
+    "ILanguageAdapter",
+    "LanguageParsingError",
+    "LanguageTransformationError",
+    # Sandbox Adapter
+    "ISandboxAdapter",
 ]

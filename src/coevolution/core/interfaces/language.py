@@ -3,7 +3,7 @@
 Protocol for language-specific operations.
 """
 
-from typing import Any, Dict, List, Protocol
+from typing import Any, Protocol
 
 
 class LanguageParsingError(Exception):
@@ -27,7 +27,7 @@ class ILanguageAdapter(Protocol):
     to concrete language implementations.
     """
 
-    def extract_code_blocks(self, response: str) -> List[str]:
+    def extract_code_blocks(self, response: str) -> list[str]:
         """
         Extract code snippets from a raw LLM response.
         Should handle Markdown-style code blocks for the specific language.
@@ -40,13 +40,13 @@ class ILanguageAdapter(Protocol):
         """
         ...
 
-    def extract_test_names(self, test_code: str) -> List[str]:
+    def extract_test_names(self, test_code: str) -> list[str]:
         """
         Extract the names of individual test cases from a test suite/snippet.
         """
         ...
 
-    def split_tests(self, test_code: str) -> List[str]:
+    def split_tests(self, test_code: str) -> list[str]:
         """
         Split a block of test code into individual standalone test functions/methods.
         """
@@ -92,14 +92,14 @@ class ILanguageAdapter(Protocol):
         """
         ...
 
-    def get_structural_metadata(self, code: str) -> Dict[str, Any]:
+    def get_structural_metadata(self, code: str) -> dict[str, Any]:
         """
         Extract structural metadata such as function names, class definitions,
         and imports.
         """
         ...
 
-    def parse_test_inputs(self, outputs: str) -> List[Dict[str, Any]]:
+    def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]:
         """
         Parses the raw output from a test input generator into a list of input dictionaries.
         """
