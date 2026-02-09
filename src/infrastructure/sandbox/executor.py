@@ -1,14 +1,13 @@
 """Test executor for orchestrating code execution and analysis."""
 
-from typing import List, Optional
+from typing import Any, Optional
 
 from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
-
-from .analyzer import PytestXmlAnalyzer
-from .core import SafeCodeSandbox
-from .types import BasicExecutionResult
+from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from .adapters.python import PythonSandbox
+from .types import BasicExecutionResult, SandboxConfig
 
 
 class TestExecutor:
@@ -23,36 +22,35 @@ class TestExecutor:
 
     def __init__(
         self,
-        timeout: int = 30,
-        max_memory_mb: int = 100,
-        max_output_size: int = 10000,
-        allowed_imports: Optional[List[str]] = None,
-        python_executable: Optional[str] = None,
-        test_method_timeout: Optional[int] = None,
+        sandbox_adapter: Optional[ISandboxAdapter] = None,
+        config: Optional[SandboxConfig] = None,
+        **kwargs: Any,
     ):
         """
-        Initialize test executor with sandbox configuration.
+        Initialize test executor with a sandbox adapter.
 
         Args:
-            timeout: Maximum execution time in seconds for the entire script
-            max_memory_mb: Maximum memory usage in MB
-            max_output_size: Maximum output size in characters
-            allowed_imports: List of allowed import modules
-            python_executable: Path to Python executable
-            test_method_timeout: Maximum execution time in seconds for individual test methods (None = no limit)
+            sandbox_adapter: Specialized sandbox adapter for a language
+            config: Sandbox configuration
+            **kwargs: Backward compatibility parameters (timeout, etc.)
         """
-        self.sandbox = SafeCodeSandbox(
-            timeout=timeout,
-            max_memory_mb=max_memory_mb,
-            max_output_size=max_output_size,
-            allowed_imports=allowed_imports,
-            python_executable=python_executable,
-            test_method_timeout=test_method_timeout,
-        )
-        self.analyzer = PytestXmlAnalyzer()
-        logger.debug(
-            f"Initialized TestExecutor(timeout={timeout}, max_memory_mb={max_memory_mb}, max_output_size={max_output_size}, test_method_timeout={test_method_timeout})"
-        )
+        if sandbox_adapter:
+            self.sandbox = sandbox_adapter
+        else:
+            # Fallback to default Python sandbox
+            if not config and kwargs:
+                # Map old kwargs to SandboxConfig
+                config = SandboxConfig(
+                    timeout=kwargs.get("timeout", 30),
+                    max_memory_mb=kwargs.get("max_memory_mb", 100),
+                    max_output_size=kwargs.get("max_output_size", 10000),
+                    allowed_imports=kwargs.get("allowed_imports"),
+                    language_executable=kwargs.get("python_executable"),
+                    test_method_timeout=kwargs.get("test_method_timeout"),
+                )
+            self.sandbox = PythonSandbox(config or SandboxConfig())
+
+        logger.debug(f"Initialized TestExecutor with sandbox: {type(self.sandbox).__name__}")
 
     def execute_test_script(self, test_script: str) -> EvaluationResult:
         """
@@ -74,10 +72,9 @@ class TestExecutor:
         Execute arbitrary code safely (delegates to sandbox).
 
         Args:
-            code: Python code to execute
+            code: Source code to execute
 
         Returns:
             BasicExecutionResult
         """
-        return self.sandbox.execute_code(code)
         return self.sandbox.execute_code(code)

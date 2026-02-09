@@ -3,89 +3,58 @@
 from typing import Optional
 
 from coevolution.core.interfaces.data import EvaluationResult
+from coevolution.core.interfaces.sandbox import ISandboxAdapter
 
-from .core import SafeCodeSandbox
+from .adapters.python import PythonSandbox
 from .executor import TestExecutor
+from .types import SandboxConfig
 
 
 def create_safe_test_environment(
-    test_method_timeout: Optional[int] = 30,
-    script_timeout: int = 300,  # 300 seconds (5 mins) max for entire script
-) -> SafeCodeSandbox:
+    config: Optional[SandboxConfig] = None,
+) -> ISandboxAdapter:
     """
-    Create a default safe test environment.
+    Create a default safe test environment (Python by default).
 
     Args:
-        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 30)
-        script_timeout: Maximum execution time in seconds for entire script (default: 300)
+        config: Sandbox configuration parameters
 
     Returns:
-        Configured SafeCodeSandbox instance
+        Configured ISandboxAdapter instance
     """
-    return SafeCodeSandbox(
-        timeout=script_timeout,
-        max_memory_mb=100,  # 100MB max memory
-        max_output_size=1_000_000,  # 1MB max output
-        test_method_timeout=test_method_timeout,  # 30 seconds max per test method
-        allowed_imports=[
-            "math",
-            "random",
-            "itertools",
-            "collections",
-            "functools",
-            "operator",
-            "copy",
-            "json",
-            "re",
-            "string",
-            "unittest",
-            "pytest",
-            "pytest_timeout",  # Add pytest-timeout plugin
-            "typing",
-            "dataclasses",
-            "enum",
-            "heapq",
-            "bisect",
-        ],
+    config = config or SandboxConfig(
+        timeout=300,
+        max_memory_mb=100,
+        max_output_size=1_000_000,
+        test_method_timeout=30,
     )
+    return PythonSandbox(config)
 
 
-def create_test_executor(test_method_timeout: Optional[int] = 30) -> TestExecutor:
+def create_test_executor(
+    sandbox_adapter: Optional[ISandboxAdapter] = None,
+    config: Optional[SandboxConfig] = None,
+) -> TestExecutor:
     """
-    Create a default test executor with safe configuration.
+    Create a test executor with a specific sandbox or default configuration.
 
     Args:
-        test_method_timeout: Maximum execution time in seconds for individual test methods (default: 30)
+        sandbox_adapter: Optional specialized sandbox adapter
+        config: Optional configuration for default sandbox
 
     Returns:
         Configured TestExecutor instance
     """
-    return TestExecutor(
-        timeout=180,  # 180 seconds max for entire script
-        max_memory_mb=100,  # 100MB max memory
-        max_output_size=1_000_000,  # 1MB max output
-        test_method_timeout=test_method_timeout,  # 30 seconds max per test method
-        allowed_imports=[
-            "math",
-            "random",
-            "itertools",
-            "collections",
-            "functools",
-            "operator",
-            "copy",
-            "json",
-            "re",
-            "string",
-            "unittest",
-            "pytest",
-            "pytest_timeout",  # Add pytest-timeout plugin
-            "typing",
-            "dataclasses",
-            "enum",
-            "heapq",
-            "bisect",
-        ],
-    )
+    if not sandbox_adapter:
+        config = config or SandboxConfig(
+            timeout=180,
+            max_memory_mb=100,
+            max_output_size=1_000_000,
+            test_method_timeout=30,
+        )
+        sandbox_adapter = PythonSandbox(config)
+
+    return TestExecutor(sandbox_adapter=sandbox_adapter)
 
 
 def check_test_execution_status(result: EvaluationResult) -> str:
@@ -105,5 +74,4 @@ def check_test_execution_status(result: EvaluationResult) -> str:
     elif result.status == "error":
         return f"TEST ERROR/SCRIPT ERROR. Error: {(result.error_log or '')[:100]}..."
     else:
-        return f"UNKNOWN STATUS: {result.status}"
         return f"UNKNOWN STATUS: {result.status}"

@@ -26,9 +26,11 @@ Usage:
 """
 
 from coevolution.core.interfaces.data import EvaluationResult
+from coevolution.core.interfaces.sandbox import ISandboxAdapter
 
+from .adapters.python import PythonSandbox
+from .adapters.ballerina import BallerinaSandbox
 from .analyzer import PytestXmlAnalyzer
-from .core import SafeCodeSandbox
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
 from .executor import TestExecutor
 from .types import BasicExecutionResult, SandboxConfig
@@ -38,9 +40,15 @@ from .utils import (
     create_test_executor,
 )
 
+# Alias for backward compatibility
+SafeCodeSandbox = PythonSandbox
+
 __all__ = [
     # Core classes
+    "PythonSandbox",
+    "BallerinaSandbox",
     "SafeCodeSandbox",
+    "ISandboxAdapter",
     "TestExecutor",
     "PytestXmlAnalyzer",
     # Data types
