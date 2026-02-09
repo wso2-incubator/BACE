@@ -50,7 +50,7 @@ from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from coevolution.utils import config as config_utils
 from coevolution.utils import logging as logging_utils
-from infrastructure.languages.python import PythonLanguageAdapter
+from infrastructure.languages import create_language_adapter
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
 
@@ -131,6 +131,12 @@ def run(
         "--console-level",
         help="Override console log level (DEBUG, INFO, WARNING, ERROR)",
     ),
+    language: str = typer.Option(
+        "python",
+        "--language",
+        "-l",
+        help="Target programming language for the experiment",
+    ),
     # === Dry Run ===
     dry_run: bool = typer.Option(
         False,
@@ -189,6 +195,9 @@ def run(
     # Logging overrides
     if console_level:
         overrides["logging.console_level"] = console_level
+
+    if language:
+        overrides["experiment.language"] = language
 
     # Apply overrides
     if overrides:
@@ -336,8 +345,12 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     logger.info(f"Using model: {llm_client.model}")
 
     # 2. Sandbox Configurations
+    language = config.get("experiment", {}).get("language", "python")
+    logger.info(f"Target Language: {language}")
+
     sandbox_diff_config = sandbox_config.get("differential", {})
     differential_sandbox_config = SandboxConfig(
+        language=language,
         timeout=sandbox_diff_config.get("timeout", 20),
         max_memory_mb=sandbox_diff_config.get("max_memory_mb", 100),
         max_output_size=sandbox_diff_config.get("max_output_size", 10_000_000),
@@ -345,6 +358,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
 
     sandbox_exec_config = sandbox_config.get("execution", {})
     exec_sandbox_config = SandboxConfig(
+        language=language,
         timeout=sandbox_exec_config.get("timeout", 180),
         max_memory_mb=sandbox_exec_config.get("max_memory_mb", 100),
         max_output_size=sandbox_exec_config.get("max_output_size", 10_000_000),
@@ -361,8 +375,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     logger.info(f"Using worker count: {cpu_count}")
 
     # 3. Language Adapter
-    # TODO: This could be configurable based on problem metadata (e.g. language)
-    language_adapter = PythonLanguageAdapter()
+    language_adapter = create_language_adapter(language)
 
     # 4. Execution System
     execution_system = ExecutionSystem(
