@@ -34,7 +34,7 @@ class BallerinaLanguage(ILanguage):
 
         # Pattern to extract test functions
         self._test_pattern = re.compile(
-            r"@test:Config\s*\{[^}]*\}\s*function\s+(\w+)\s*\([^)]*\)\s*\{",
+            r"@test:Config\s*(?:\{[^}]*\})?\s*function\s+(\w+)\s*\([^)]*\)\s*\{",
             re.MULTILINE,
         )
 
@@ -292,7 +292,7 @@ class BallerinaLanguage(ILanguage):
                 if function_name
                 else function_name
             )
-            test_code = f"""@test:Config {{ }}
+            test_code = f"""@test:Config
 function test{capitalized_name}{test_number}() {{
     var result = {function_name}({args});
     test:assertEquals(result, {expected_value}, msg = "Test case {test_number} failed");

@@ -15,9 +15,7 @@ def adapter() -> BallerinaLanguage:
 class TestExtractCodeBlocks:
     """Test extract_code_blocks method."""
 
-    def test_extracts_single_ballerina_block(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_extracts_single_ballerina_block(self, adapter: BallerinaLanguage) -> None:
         response = """Here's a solution:
 ```ballerina
 function add(int a, int b) returns int {
@@ -53,9 +51,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
         assert "Solution 1" in blocks[0]
         assert "Solution 2" in blocks[1]
 
-    def test_extracts_capital_ballerina_block(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_extracts_capital_ballerina_block(self, adapter: BallerinaLanguage) -> None:
         response = "```Ballerina\nfunction test() {}\n```"
         blocks = adapter.extract_code_blocks(response)
         assert len(blocks) == 1
@@ -71,9 +67,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
         assert len(blocks) == 1
         assert blocks[0] == response
 
-    def test_skips_invalid_syntax_blocks(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_skips_invalid_syntax_blocks(self, adapter: BallerinaLanguage) -> None:
         """With syntax validation disabled, all blocks are extracted."""
         response = """```ballerina
 function broken(
@@ -87,9 +81,7 @@ function valid() {
         # With syntax validation disabled, both blocks are extracted
         assert len(blocks) == 2
 
-    def test_handles_mixed_case_markdown(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_handles_mixed_case_markdown(self, adapter: BallerinaLanguage) -> None:
         response = """```Ballerina
 function first() {}
 ```
@@ -138,31 +130,27 @@ class TestExtractTestNames:
     """Test extract_test_names method."""
 
     def test_extracts_single_test_name(self, adapter: BallerinaLanguage) -> None:
-        test_code = """@test:Config { }
+        test_code = """@test:Config
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
         names = adapter.extract_test_names(test_code)
         assert names == ["testAdd"]
 
-    def test_extracts_multiple_test_names(
-        self, adapter: BallerinaLanguage
-    ) -> None:
-        test_code = """@test:Config { }
+    def test_extracts_multiple_test_names(self, adapter: BallerinaLanguage) -> None:
+        test_code = """@test:Config
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }
 
-@test:Config { }
+@test:Config
 function testSubtract() {
     test:assertEquals(subtract(5, 3), 2);
 }"""
         names = adapter.extract_test_names(test_code)
         assert names == ["testAdd", "testSubtract"]
 
-    def test_returns_empty_list_when_no_tests(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_returns_empty_list_when_no_tests(self, adapter: BallerinaLanguage) -> None:
         code = "function regular() { return 5; }"
         names = adapter.extract_test_names(code)
         assert names == []
@@ -172,7 +160,7 @@ class TestSplitTests:
     """Test split_tests method."""
 
     def test_splits_single_test(self, adapter: BallerinaLanguage) -> None:
-        test_code = """@test:Config {}
+        test_code = """@test:Config
 function testOne() {
     test:assertEquals(1, 1);
 }"""
@@ -182,12 +170,12 @@ function testOne() {
         assert "testOne" in tests[0]
 
     def test_splits_multiple_tests(self, adapter: BallerinaLanguage) -> None:
-        test_code = """@test:Config {}
+        test_code = """@test:Config
 function testOne() {
     test:assertEquals(1, 1);
 }
 
-@test:Config {}
+@test:Config
 function testTwo() {
     test:assertEquals(2, 2);
 }"""
@@ -196,15 +184,13 @@ function testTwo() {
         assert "testOne" in tests[0]
         assert "testTwo" in tests[1]
 
-    def test_returns_empty_list_when_no_tests(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_returns_empty_list_when_no_tests(self, adapter: BallerinaLanguage) -> None:
         code = "function regular() { return 5; }"
         tests = adapter.split_tests(code)
         assert tests == []
 
     def test_handles_nested_braces(self, adapter: BallerinaLanguage) -> None:
-        test_code = """@test:Config {}
+        test_code = """@test:Config
 function testComplex() {
     if (true) {
         test:assertEquals(1, 1);
@@ -218,11 +204,9 @@ function testComplex() {
 class TestComposeTestScript:
     """Test compose_test_script method."""
 
-    def test_adds_test_import_when_missing(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_adds_test_import_when_missing(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
-        test = """@test:Config { }
+        test = """@test:Config
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
@@ -231,13 +215,11 @@ function testAdd() {
         assert "function add" in script
         assert "testAdd" in script
 
-    def test_does_not_duplicate_test_import(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_does_not_duplicate_test_import(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         test = """import ballerina/test;
 
-@test:Config { }
+@test:Config
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
@@ -245,13 +227,11 @@ function testAdd() {
         # Should only have one test import
         assert script.count("import ballerina/test") == 1
 
-    def test_removes_test_import_from_code(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_removes_test_import_from_code(self, adapter: BallerinaLanguage) -> None:
         code = """import ballerina/test;
 
 function add(int a, int b) returns int { return a + b; }"""
-        test = """@test:Config { }
+        test = """@test:Config
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
@@ -312,9 +292,7 @@ class TestGenerateTestCase:
         ):
             adapter.generate_test_case("test()", "5", starter, 1)
 
-    def test_handles_different_test_numbers(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_handles_different_test_numbers(self, adapter: BallerinaLanguage) -> None:
         starter = "function multiply(int a, int b) returns int {"
         test1 = adapter.generate_test_case("multiply(2, 3)", "6", starter, 1)
         test2 = adapter.generate_test_case("multiply(4, 5)", "20", starter, 2)
@@ -443,16 +421,12 @@ public function main() {
         assert "public function main()" not in cleaned
         assert "function add" in cleaned
 
-    def test_preserves_code_without_main(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_preserves_code_without_main(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         cleaned = adapter.remove_main_block(code)
         assert "function add" in cleaned
 
-    def test_cleans_up_extra_blank_lines(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_cleans_up_extra_blank_lines(self, adapter: BallerinaLanguage) -> None:
         code = """function add() { return 1; }
 
 
@@ -466,9 +440,7 @@ public function main() { }"""
 class TestNormalizeCode:
     """Test normalize_code method."""
 
-    def test_removes_single_line_comments(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_removes_single_line_comments(self, adapter: BallerinaLanguage) -> None:
         code = """function test() {
     // This is a comment
     return 1;
@@ -477,9 +449,7 @@ class TestNormalizeCode:
         assert "// This is a comment" not in normalized
         assert "return 1;" in normalized
 
-    def test_removes_multiline_comments(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_removes_multiline_comments(self, adapter: BallerinaLanguage) -> None:
         code = """function test() {
     /* This is a
        multiline comment */
@@ -503,18 +473,14 @@ class TestNormalizeCode:
 class TestContainsStarterCode:
     """Test contains_starter_code method."""
 
-    def test_exact_match_after_normalization(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_exact_match_after_normalization(self, adapter: BallerinaLanguage) -> None:
         starter = "function add(int a, int b) returns int"
         code = """function add(int a, int b) returns int {
     return a + b;
 }"""
         assert adapter.contains_starter_code(code, starter)
 
-    def test_matches_function_signature(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_matches_function_signature(self, adapter: BallerinaLanguage) -> None:
         starter = "function multiply(int x, int y) returns int"
         code = """// Different formatting
 function multiply(int x, int y) returns int {
@@ -533,9 +499,7 @@ function multiply(int x, int y) returns int {
 class TestGetStructuralMetadata:
     """Test get_structural_metadata method."""
 
-    def test_extracts_function_metadata(
-        self, adapter: BallerinaLanguage
-    ) -> None:
+    def test_extracts_function_metadata(self, adapter: BallerinaLanguage) -> None:
         code = """public function add(int a, int b) returns int {
     return a + b;
 }
