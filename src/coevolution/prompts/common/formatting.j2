@@ -5,7 +5,7 @@ Return only the code for a single test function in a {{ language }} code block.
 Test function name should start with 'test_' and be unique and descriptive of the test case.
 Use plain assert statements (e.g., assert x == y).
 {% elif language == 'ballerina' %}
-Test function should use the '@test:Config {}' annotation.
+Test function should use the '@test:Config' annotation.
 Use the 'test:assertEquals' or 'test:assertTrue' functions for assertions.
 {% endif %}
 </output_formatting>
