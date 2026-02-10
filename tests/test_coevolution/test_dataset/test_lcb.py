@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from coevolution.adapters.lcb import (
+from coevolution.dataset.lcb import (
     Difficulty,
     LCBCodeGenerationProblem,
     LCBTest,

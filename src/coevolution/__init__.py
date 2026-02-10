@@ -23,7 +23,7 @@ Usage Patterns:
     from coevolution.factories import OrchestratorBuilder, ScheduleBuilder
     from coevolution.services import execution, bayesian, ledger
     from coevolution.strategies import operators, breeding, selection
-    from coevolution.adapters import lcb
+    from coevolution.dataset import lcb
     from coevolution import utils
 
 2. Hierarchical imports:
@@ -31,12 +31,12 @@ Usage Patterns:
     from coevolution.services.execution import ExecutionSystem
     from coevolution.services.bayesian import BayesianSystem
     from coevolution.strategies.breeding.code_breeding import CodeBreedingStrategy
-    from coevolution.adapters.lcb import load_code_generation_dataset
+    from coevolution.dataset.lcb import load_code_generation_dataset
 
 Note: Phase 3 will refactor the core kernel for improved domain clarity.
 """
 
-from . import adapters, core, factories, services, strategies, utils
+from . import core, dataset, factories, services, strategies, utils
 
 __all__ = [
     "core",

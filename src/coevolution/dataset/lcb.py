@@ -12,6 +12,7 @@ from datasets import load_dataset  # type: ignore[import-untyped]
 from loguru import logger
 
 from ..core.interfaces import Problem, Test
+from .base import DatasetAdapter
 
 
 class Platform(Enum):
@@ -167,3 +168,45 @@ def load_code_generation_dataset(
 
     logger.info(f"Loaded {len(dataset_items)} problems")
     return dataset_items
+
+
+class LCBAdapter(DatasetAdapter):
+    """
+    LiveCodeBench dataset adapter implementation.
+
+    Loads code generation problems from the LiveCodeBench dataset,
+    supporting filtering by difficulty, date range, and caching.
+    """
+
+    def load_dataset(self, config: dict[str, Any]) -> list[Problem]:
+        """
+        Load LCB problems based on the provided configuration.
+
+        Args:
+            config: Configuration dict with keys:
+                - version (str): Dataset release version (default: "release_v6")
+                - difficulty (str|None): Filter by difficulty ("easy", "medium", "hard")
+                - start_date (str|None): Filter start date (YYYY-MM-DD format)
+                - end_date (str|None): Filter end date (YYYY-MM-DD format)
+
+        Returns:
+            List of LCBCodeGenerationProblem instances.
+        """
+        # Extract config with defaults
+        version = config.get("version", "release_v6")
+        difficulty_str = config.get("difficulty")
+        start_date = config.get("start_date")
+        end_date = config.get("end_date")
+
+        # Convert difficulty string to enum if provided
+        difficulty = Difficulty(difficulty_str) if difficulty_str else None
+
+        # Use the existing load function
+        problems = load_code_generation_dataset(
+            release_version=version,
+            start_date=start_date,
+            end_date=end_date,
+            difficulty=difficulty,
+        )
+        # Cast to list[Problem] for type compatibility (LCBCodeGenerationProblem is a Problem subclass)
+        return problems  # type: ignore[return-value]

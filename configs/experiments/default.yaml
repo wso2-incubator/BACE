@@ -15,11 +15,17 @@ sandbox: "sandbox/sandbox-default.yaml"
 schedule: "schedules/alternating-10gen.yaml"
 
 # Dataset configuration
+# Option 1: Reference external dataset config file
 dataset:
-  version: "release_v6"
-  start_date: "2025-03-01"
-  end_date: "2025-05-10"
-  difficulty: "hard"
+  config_path: "datasets/lcb.yaml"
+
+# Option 2: Inline dataset configuration (alternative to config_path)
+# dataset:
+#   adapter: "lcb"
+#   version: "release_v6"
+#   difficulty: "hard"
+#   start_date: "2025-03-01"
+#   end_date: "2025-05-10"
 
 # Problem selection
 subset:

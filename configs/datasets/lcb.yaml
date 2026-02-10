@@ -1,0 +1,28 @@
+# LiveCodeBench Dataset Configuration
+# This configuration defines how to load and filter the LCB dataset
+
+# Adapter identifier (must match factory registration)
+adapter: "lcb"
+
+# Dataset version/release tag
+version: "release_v6"
+
+# Hugging Face dataset identifier
+hf_dataset_id: "livecodebench/code_generation_lite"
+
+# Local cache path for JSONL dataset
+cache_path: "data/lcb_release_v6.jsonl"
+
+# Dataset split to use (if applicable)
+split: null
+
+# Trust remote code when loading from Hugging Face
+trust_remote_code: true
+
+# Use local cache if available
+use_cache: true
+
+# Filtering options
+difficulty: "hard"  # Options: "easy", "medium", "hard", or null for all
+start_date: "2025-03-01"    # Format: "YYYY-MM-DD" or null for no filter
+end_date: "2025-05-31"      # Format: "YYYY-MM-DD" or null for no filter

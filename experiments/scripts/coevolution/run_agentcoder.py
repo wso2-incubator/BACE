@@ -16,7 +16,7 @@ import typer
 from loguru import logger
 
 import coevolution.utils.logging as logging_utils
-from coevolution.adapters.lcb import (
+from coevolution.dataset.lcb import (
     Difficulty,
     LCBCodeGenerationProblem,
     LCBDatasetTestBlockBuilder,

@@ -7,20 +7,22 @@ Allows CLI overrides for common parameters.
 
 Usage:
     # Use full experiment config
-    uv run python main.py run --config configs/experiments/default.yaml
+    uv run python main.py run --config configs/experiments/default.yam    uv run python main.py run --config configs/experiments/default.yamll
 
     # Override specific components
     uv run python main.py run --config configs/experiments/default.yaml \
         --llm configs/llm/gpt-4.yaml
 
-    # Override dataset/subset parameters
+    # Override problem subset parameters
     uv run python main.py run --config configs/experiments/default.yaml \
-        --start-index 100 --end-index 200 \
-        --difficulty easy
+        --start-index 100 --end-index 200
 
-    # Quick test
+    # Quick test with specific problems
     uv run python main.py run --config configs/experiments/quick-test.yaml \
         --problem-ids HumanEval/1 HumanEval/2
+
+Note: Dataset-specific parameters (version, difficulty, dates) are now configured
+      in configs/datasets/*.yaml instead of via CLI flags.
 """
 
 import json
@@ -32,11 +34,7 @@ import typer
 import yaml
 from loguru import logger
 
-from coevolution.adapters.lcb import (
-    Difficulty,
-    LCBCodeGenerationProblem,
-    load_code_generation_dataset,
-)
+from coevolution.dataset import get_adapter
 from coevolution.factories import (
     OrchestratorBuilder,
     ScheduleBuilder,
@@ -82,29 +80,6 @@ def run(
         None,
         "--code-profile",
         help="Override code profile config",
-    ),
-    # === Dataset Overrides ===
-    dataset_version: Optional[str] = typer.Option(
-        None,
-        "--dataset-version",
-        "-v",
-        help="Override dataset version",
-    ),
-    start_date: Optional[str] = typer.Option(
-        None,
-        "--start-date",
-        help="Override start date (YYYY-MM-DD)",
-    ),
-    end_date: Optional[str] = typer.Option(
-        None,
-        "--end-date",
-        help="Override end date (YYYY-MM-DD)",
-    ),
-    difficulty: Optional[Difficulty] = typer.Option(
-        None,
-        "--difficulty",
-        "-d",
-        help="Override difficulty filter",
     ),
     # === Subset Overrides ===
     problem_ids: Optional[list[str]] = typer.Option(
@@ -174,16 +149,6 @@ def run(
         code_profile_config = config_utils._load_yaml_file(Path(code_profile))
         overrides["code_profile"] = code_profile_config
 
-    # Dataset overrides
-    if dataset_version:
-        overrides["dataset.version"] = dataset_version
-    if start_date:
-        overrides["dataset.start_date"] = start_date
-    if end_date:
-        overrides["dataset.end_date"] = end_date
-    if difficulty:
-        overrides["dataset.difficulty"] = difficulty.value
-
     # Subset overrides
     if problem_ids is not None:
         overrides["subset.problem_ids"] = problem_ids
@@ -208,11 +173,6 @@ def run(
     # =================================================================
     # 3. VALIDATE CONFIGURATION
     # =================================================================
-    try:
-        config_utils.validate_config(experiment_config)
-    except config_utils.ConfigError as e:
-        typer.echo(f"Invalid configuration: {e}", err=True)
-        raise typer.Exit(code=1)
 
     # =================================================================
     # 4. DRY RUN MODE
@@ -511,13 +471,28 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # PHASE 3: PROBLEM LOADING & SELECTION
     # =========================================================================
 
-    # Load dataset
-    all_problems: list[LCBCodeGenerationProblem] = load_code_generation_dataset(
-        release_version=dataset_config.get("version", "release_v6"),
-        start_date=dataset_config.get("start_date"),
-        end_date=dataset_config.get("end_date"),
-        difficulty=Difficulty(dataset_config.get("difficulty", "hard")),
-    )
+    # Load dataset using adapter
+    dataset_config = config.get("dataset", {})
+
+    # Check if dataset config has been resolved or needs resolution
+    # (config system auto-resolves paths like "datasets/lcb.yaml")
+    if "adapter" not in dataset_config and "config_path" in dataset_config:
+        # Handle case where config_path wasn't auto-resolved (fallback)
+        config_path_value = dataset_config["config_path"]
+        if isinstance(config_path_value, dict):
+            # Already resolved by config system
+            dataset_config = config_path_value
+        else:
+            # Need to resolve manually
+            dataset_config_path = Path(config_path_value)
+            logger.info(f"Loading dataset config from: {dataset_config_path}")
+            dataset_config = config_utils._load_yaml_file(dataset_config_path)
+
+    adapter_name = dataset_config.get("adapter", "lcb")
+    logger.info(f"Using dataset adapter: {adapter_name}")
+
+    adapter = get_adapter(adapter_name)
+    all_problems = adapter.load_dataset(dataset_config)
 
     if not all_problems:
         logger.error("Dataset empty. Aborting run.")

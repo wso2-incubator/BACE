@@ -21,7 +21,7 @@ from typing import Optional
 import typer
 from loguru import logger
 
-from coevolution.adapters.lcb import Difficulty, load_code_generation_dataset
+from coevolution.dataset.lcb import Difficulty, load_code_generation_dataset
 
 app = typer.Typer()
 
