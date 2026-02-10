@@ -20,7 +20,6 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from coevolution.utils.prompt_manager import get_prompt_manager
 
 from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
 

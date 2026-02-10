@@ -41,7 +41,15 @@ class PromptManager:
             kwargs["language"] = self.language
 
         template = self.env.get_template(template_path)
-        return template.render(**kwargs)
+
+        try:
+            prompt = template.render(**kwargs)
+        except Exception as e:
+            raise RuntimeError(
+                f"Error rendering template '{template_path}': {e}"
+            ) from e
+
+        return prompt
 
 
 # Global instance for easy access if needed, though dependency injection is preferred
