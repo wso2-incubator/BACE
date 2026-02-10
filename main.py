@@ -471,22 +471,8 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # PHASE 3: PROBLEM LOADING & SELECTION
     # =========================================================================
 
-    # Load dataset using adapter
+    # Load dataset using adapter (config resolver inlines referenced files)
     dataset_config = config.get("dataset", {})
-
-    # Check if dataset config has been resolved or needs resolution
-    # (config system auto-resolves paths like "datasets/lcb.yaml")
-    if "adapter" not in dataset_config and "config_path" in dataset_config:
-        # Handle case where config_path wasn't auto-resolved (fallback)
-        config_path_value = dataset_config["config_path"]
-        if isinstance(config_path_value, dict):
-            # Already resolved by config system
-            dataset_config = config_path_value
-        else:
-            # Need to resolve manually
-            dataset_config_path = Path(config_path_value)
-            logger.info(f"Loading dataset config from: {dataset_config_path}")
-            dataset_config = config_utils._load_yaml_file(dataset_config_path)
 
     adapter_name = dataset_config.get("adapter", "lcb")
     logger.info(f"Using dataset adapter: {adapter_name}")

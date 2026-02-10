@@ -151,8 +151,38 @@ def _resolve_config_references(
             result[key] = _load_yaml_file(referenced_path)
 
         elif isinstance(value, dict):
-            # Recursively resolve nested dicts
-            result[key] = _resolve_config_references(value, base_dir)
+            # Special-case: allow dicts that reference another config file
+            # via a `config_path: "some/path.yaml"` entry. When present,
+            # load the referenced YAML and optionally deep-merge any other
+            # keys in the dict as overrides (override wins).
+            if (
+                "config_path" in value
+                and isinstance(value["config_path"], str)
+                and value["config_path"].endswith(".yaml")
+            ):
+                referenced_path = base_dir / value["config_path"]
+
+                if not referenced_path.exists():
+                    raise ConfigError(
+                        f"Referenced config file not found: {referenced_path} (key: {key})"
+                    )
+
+                logger.debug(f"Loading referenced config: {key} -> {referenced_path}")
+                loaded = _load_yaml_file(referenced_path)
+                # Resolve any references inside the loaded config as well
+                loaded = _resolve_config_references(loaded, base_dir)
+
+                # If there are other keys in the dict, treat them as overrides
+                overrides = {k: v for k, v in value.items() if k != "config_path"}
+                if overrides:
+                    # Resolve overrides recursively and deep-merge
+                    overrides_resolved = _resolve_config_references(overrides, base_dir)
+                    result[key] = _deep_merge(loaded, overrides_resolved)
+                else:
+                    result[key] = loaded
+            else:
+                # Recursively resolve nested dicts
+                result[key] = _resolve_config_references(value, base_dir)
 
         elif isinstance(value, list):
             # Handle lists (in case they contain dicts with references)
