@@ -76,6 +76,12 @@ def run(
         "--llm",
         help="Override LLM config (e.g., configs/llm/gpt-4.yaml)",
     ),
+    dataset: Optional[str] = typer.Option(
+        None,
+        "--dataset",
+        "-d",
+        help="Override dataset config (e.g., configs/datasets/lcb.yaml or configs/datasets/humaneval_ballerina.yaml)",
+    ),
     code_profile: Optional[str] = typer.Option(
         None,
         "--code-profile",
@@ -144,6 +150,10 @@ def run(
     if llm:
         llm_config = config_utils._load_yaml_file(Path(llm))
         overrides["llm"] = llm_config
+
+    if dataset:
+        dataset_config = config_utils._load_yaml_file(Path(dataset))
+        overrides["dataset"] = dataset_config
 
     if code_profile:
         code_profile_config = config_utils._load_yaml_file(Path(code_profile))
