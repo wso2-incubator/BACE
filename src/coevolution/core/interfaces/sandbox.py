@@ -12,7 +12,7 @@ from coevolution.core.interfaces.data import (
 )
 
 
-class ISandboxAdapter(Protocol):
+class ISandbox(Protocol):
     """
     Protocol defining the contract for language-specific sandbox execution.
 

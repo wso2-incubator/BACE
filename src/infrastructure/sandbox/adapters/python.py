@@ -1,4 +1,4 @@
-"""Python implementation of the ISandboxAdapter protocol."""
+"""Python implementation of the ISandbox protocol."""
 
 import os
 import subprocess
@@ -10,12 +10,12 @@ from typing import List, Optional
 from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
-from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.analyzer import PytestXmlAnalyzer
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
-class PythonSandbox(ISandboxAdapter):
+class PythonSandbox(ISandbox):
     """
     A safe sandbox environment for executing Python code with restrictions.
     """

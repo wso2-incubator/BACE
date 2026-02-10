@@ -3,7 +3,7 @@
 from typing import Optional
 
 from coevolution.core.interfaces.data import EvaluationResult
-from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from coevolution.core.interfaces.sandbox import ISandbox
 
 from .adapters.python import PythonSandbox
 from .executor import TestExecutor
@@ -12,7 +12,7 @@ from .types import SandboxConfig
 
 def create_safe_test_environment(
     config: Optional[SandboxConfig] = None,
-) -> ISandboxAdapter:
+) -> ISandbox:
     """
     Create a default safe test environment (Python by default).
 
@@ -20,7 +20,7 @@ def create_safe_test_environment(
         config: Sandbox configuration parameters
 
     Returns:
-        Configured ISandboxAdapter instance
+        Configured ISandbox instance
     """
     config = config or SandboxConfig(
         timeout=300,
@@ -32,7 +32,7 @@ def create_safe_test_environment(
 
 
 def create_test_executor(
-    sandbox_adapter: Optional[ISandboxAdapter] = None,
+    sandbox_adapter: Optional[ISandbox] = None,
     config: Optional[SandboxConfig] = None,
 ) -> TestExecutor:
     """

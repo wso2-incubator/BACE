@@ -1,4 +1,4 @@
-"""Ballerina implementation of the ISandboxAdapter protocol."""
+"""Ballerina implementation of the ISandbox protocol."""
 
 import subprocess
 import tempfile
@@ -6,12 +6,12 @@ import time
 from pathlib import Path
 
 from coevolution.core.interfaces.data import EvaluationResult
-from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.analyzer import PytestXmlAnalyzer
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
-class BallerinaSandbox(ISandboxAdapter):
+class BallerinaSandbox(ISandbox):
     """
     A sandbox environment for executing Ballerina code.
     """

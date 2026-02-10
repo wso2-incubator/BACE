@@ -5,7 +5,8 @@ from typing import Any, Optional
 from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
-from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from coevolution.core.interfaces.sandbox import ISandbox
+
 from .adapters.python import PythonSandbox
 from .types import BasicExecutionResult, SandboxConfig
 
@@ -22,7 +23,7 @@ class TestExecutor:
 
     def __init__(
         self,
-        sandbox_adapter: Optional[ISandboxAdapter] = None,
+        sandbox_adapter: Optional[ISandbox] = None,
         config: Optional[SandboxConfig] = None,
         **kwargs: Any,
     ):
@@ -50,7 +51,9 @@ class TestExecutor:
                 )
             self.sandbox = PythonSandbox(config or SandboxConfig())
 
-        logger.debug(f"Initialized TestExecutor with sandbox: {type(self.sandbox).__name__}")
+        logger.debug(
+            f"Initialized TestExecutor with sandbox: {type(self.sandbox).__name__}"
+        )
 
     def execute_test_script(self, test_script: str) -> EvaluationResult:
         """

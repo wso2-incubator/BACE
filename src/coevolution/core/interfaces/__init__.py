@@ -70,7 +70,7 @@ from .operators import (
 
 # 10. Profiles (depends on config, forward refs to breeding, selection, systems)
 from .profiles import CodeProfile, OrchestratorConfig, PublicTestProfile, TestProfile
-from .sandbox import ISandboxAdapter
+from .sandbox import ISandbox
 
 # 8. Selection (depends on base, config, context)
 from .selection import IEliteSelectionStrategy, IParentSelectionStrategy
@@ -154,5 +154,5 @@ __all__ = [
     "LanguageParsingError",
     "LanguageTransformationError",
     # Sandbox Adapter
-    "ISandboxAdapter",
+    "ISandbox",
 ]

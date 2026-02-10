@@ -26,10 +26,10 @@ Usage:
 """
 
 from coevolution.core.interfaces.data import EvaluationResult
-from coevolution.core.interfaces.sandbox import ISandboxAdapter
+from coevolution.core.interfaces.sandbox import ISandbox
 
-from .adapters.python import PythonSandbox
 from .adapters.ballerina import BallerinaSandbox
+from .adapters.python import PythonSandbox
 from .analyzer import PytestXmlAnalyzer
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
 from .executor import TestExecutor
@@ -44,7 +44,7 @@ from .utils import (
 SafeCodeSandbox = PythonSandbox
 
 
-def create_sandbox(config: SandboxConfig) -> ISandboxAdapter:
+def create_sandbox(config: SandboxConfig) -> ISandbox:
     """
     Factory function to create the appropriate sandbox adapter based on config.
     """
@@ -61,7 +61,7 @@ __all__ = [
     "PythonSandbox",
     "BallerinaSandbox",
     "SafeCodeSandbox",
-    "ISandboxAdapter",
+    "ISandbox",
     "TestExecutor",
     "PytestXmlAnalyzer",
     # Data types
