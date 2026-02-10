@@ -9,4 +9,4 @@ Use the factory.get_adapter() function to obtain adapter instances.
 from .base import DatasetAdapter
 from .factory import get_adapter
 
-__all__ = ["DatasetAdapter", "get_adapter", "lcb"]
+__all__ = ["DatasetAdapter", "get_adapter", "lcb", "humaneval_ballerina"]

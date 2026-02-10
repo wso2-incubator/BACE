@@ -20,5 +20,11 @@ def get_adapter(name: str) -> DatasetAdapter:
         from .lcb import LCBAdapter
 
         return LCBAdapter()
+    elif name == "humaneval_ballerina":
+        from .humaneval_ballerina import HumanEvalBallerinaAdapter
 
-    raise ValueError(f"Unknown dataset adapter: '{name}'. Available adapters: ['lcb']")
+        return HumanEvalBallerinaAdapter()
+
+    raise ValueError(
+        f"Unknown dataset adapter: '{name}'. Available adapters: ['lcb', 'humaneval_ballerina']"
+    )
