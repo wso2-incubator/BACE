@@ -18,7 +18,7 @@ class LanguageTransformationError(Exception):
     pass
 
 
-class ILanguageAdapter(Protocol):
+class ILanguage(Protocol):
     """
     Protocol defining the contract for language-specific operations.
 

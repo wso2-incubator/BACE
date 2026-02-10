@@ -1,22 +1,22 @@
-"""Tests for BallerinaLanguageAdapter."""
+"""Tests for BallerinaLanguage."""
 
 import pytest
 
 from coevolution.core.interfaces.language import LanguageTransformationError
-from infrastructure.languages.ballerina import BallerinaLanguageAdapter
+from infrastructure.languages.ballerina import BallerinaLanguage
 
 
 @pytest.fixture
-def adapter() -> BallerinaLanguageAdapter:
-    """Create BallerinaLanguageAdapter instance for testing."""
-    return BallerinaLanguageAdapter()
+def adapter() -> BallerinaLanguage:
+    """Create BallerinaLanguage instance for testing."""
+    return BallerinaLanguage()
 
 
 class TestExtractCodeBlocks:
     """Test extract_code_blocks method."""
 
     def test_extracts_single_ballerina_block(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         response = """Here's a solution:
 ```ballerina
@@ -30,7 +30,7 @@ function add(int a, int b) returns int {
         assert "return a + b" in blocks[0]
 
     def test_extracts_multiple_ballerina_blocks(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """Test extraction of multiple code blocks like in the LLM response example."""
         response = """Response with multiple blocks:
@@ -54,14 +54,14 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
         assert "Solution 2" in blocks[1]
 
     def test_extracts_capital_ballerina_block(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         response = "```Ballerina\nfunction test() {}\n```"
         blocks = adapter.extract_code_blocks(response)
         assert len(blocks) == 1
 
     def test_returns_empty_list_when_no_blocks(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """With syntax validation disabled, even plain text is treated as valid code."""
         response = "This is just text with no code blocks."
@@ -72,7 +72,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
         assert blocks[0] == response
 
     def test_skips_invalid_syntax_blocks(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """With syntax validation disabled, all blocks are extracted."""
         response = """```ballerina
@@ -88,7 +88,7 @@ function valid() {
         assert len(blocks) == 2
 
     def test_handles_mixed_case_markdown(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         response = """```Ballerina
 function first() {}
@@ -103,31 +103,31 @@ function second() {}
 class TestIsSyntaxValid:
     """Test is_syntax_valid method."""
 
-    def test_valid_simple_function(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_valid_simple_function(self, adapter: BallerinaLanguage) -> None:
         code = """function add(int a, int b) returns int {
     return a + b;
 }"""
         # Syntax validation is disabled, always returns True
         assert adapter.is_syntax_valid(code)
 
-    def test_invalid_empty_string(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_invalid_empty_string(self, adapter: BallerinaLanguage) -> None:
         # Syntax validation is disabled, always returns True (even for empty strings)
         assert adapter.is_syntax_valid("")
         assert adapter.is_syntax_valid("   ")
 
-    def test_invalid_unbalanced_braces(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_invalid_unbalanced_braces(self, adapter: BallerinaLanguage) -> None:
         code = "function test() { return;"
         # Basic check should catch unbalanced braces
         result = adapter._basic_syntax_check(code)
         assert not result
 
-    def test_invalid_unbalanced_parens(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_invalid_unbalanced_parens(self, adapter: BallerinaLanguage) -> None:
         code = "function test( { return; }"
         result = adapter._basic_syntax_check(code)
         assert not result
 
     def test_basic_syntax_check_requires_function(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "int x = 5;"
         result = adapter._basic_syntax_check(code)
@@ -137,7 +137,7 @@ class TestIsSyntaxValid:
 class TestExtractTestNames:
     """Test extract_test_names method."""
 
-    def test_extracts_single_test_name(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_extracts_single_test_name(self, adapter: BallerinaLanguage) -> None:
         test_code = """@test:Config { }
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
@@ -146,7 +146,7 @@ function testAdd() {
         assert names == ["testAdd"]
 
     def test_extracts_multiple_test_names(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         test_code = """@test:Config { }
 function testAdd() {
@@ -161,7 +161,7 @@ function testSubtract() {
         assert names == ["testAdd", "testSubtract"]
 
     def test_returns_empty_list_when_no_tests(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function regular() { return 5; }"
         names = adapter.extract_test_names(code)
@@ -171,7 +171,7 @@ function testSubtract() {
 class TestSplitTests:
     """Test split_tests method."""
 
-    def test_splits_single_test(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_splits_single_test(self, adapter: BallerinaLanguage) -> None:
         test_code = """@test:Config {}
 function testOne() {
     test:assertEquals(1, 1);
@@ -181,7 +181,7 @@ function testOne() {
         assert "@test:Config" in tests[0]
         assert "testOne" in tests[0]
 
-    def test_splits_multiple_tests(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_splits_multiple_tests(self, adapter: BallerinaLanguage) -> None:
         test_code = """@test:Config {}
 function testOne() {
     test:assertEquals(1, 1);
@@ -197,13 +197,13 @@ function testTwo() {
         assert "testTwo" in tests[1]
 
     def test_returns_empty_list_when_no_tests(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function regular() { return 5; }"
         tests = adapter.split_tests(code)
         assert tests == []
 
-    def test_handles_nested_braces(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_handles_nested_braces(self, adapter: BallerinaLanguage) -> None:
         test_code = """@test:Config {}
 function testComplex() {
     if (true) {
@@ -219,7 +219,7 @@ class TestComposeTestScript:
     """Test compose_test_script method."""
 
     def test_adds_test_import_when_missing(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         test = """@test:Config { }
@@ -232,7 +232,7 @@ function testAdd() {
         assert "testAdd" in script
 
     def test_does_not_duplicate_test_import(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         test = """import ballerina/test;
@@ -246,7 +246,7 @@ function testAdd() {
         assert script.count("import ballerina/test") == 1
 
     def test_removes_test_import_from_code(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = """import ballerina/test;
 
@@ -266,7 +266,7 @@ function testAdd() {
 class TestComposeEvaluationScript:
     """Test compose_evaluation_script method."""
 
-    def test_creates_executable_script(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_creates_executable_script(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         input_data = "add(5, 3)"
         script = adapter.compose_evaluation_script(code, input_data)
@@ -276,14 +276,14 @@ class TestComposeEvaluationScript:
         assert "io:println(result);" in script
 
     def test_raises_error_on_invalid_input_format(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         input_data = "not a function call"
         with pytest.raises(LanguageTransformationError, match="Invalid input format"):
             adapter.compose_evaluation_script(code, input_data)
 
-    def test_handles_complex_arguments(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_handles_complex_arguments(self, adapter: BallerinaLanguage) -> None:
         code = "function concat(string a, string b) returns string { return a + b; }"
         input_data = 'concat("hello", " world")'
         script = adapter.compose_evaluation_script(code, input_data)
@@ -293,7 +293,7 @@ class TestComposeEvaluationScript:
 class TestGenerateTestCase:
     """Test generate_test_case method."""
 
-    def test_generates_basic_test_case(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_generates_basic_test_case(self, adapter: BallerinaLanguage) -> None:
         starter = "function add(int a, int b) returns int {"
         input_str = "add(1, 2)"
         output_str = "3"
@@ -304,7 +304,7 @@ class TestGenerateTestCase:
         assert "test:assertEquals(result, 3" in test
 
     def test_raises_error_when_no_function_in_starter(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         starter = "int x = 5;"
         with pytest.raises(
@@ -313,7 +313,7 @@ class TestGenerateTestCase:
             adapter.generate_test_case("test()", "5", starter, 1)
 
     def test_handles_different_test_numbers(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         starter = "function multiply(int a, int b) returns int {"
         test1 = adapter.generate_test_case("multiply(2, 3)", "6", starter, 1)
@@ -326,7 +326,7 @@ class TestGenerateTestCaseWithRealDataset:
     """Test generate_test_case with real data from HumanEval Ballerina dataset."""
 
     def test_generates_public_test_cases_from_humaneval(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """Test generating test cases from HumanEval public tests."""
         # Data from humaneval-ballerina.py
@@ -349,7 +349,7 @@ class TestGenerateTestCaseWithRealDataset:
         assert "test:assertEquals(result, true" in test2
 
     def test_generates_private_test_cases_from_humaneval(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """Test generating test cases from HumanEval private tests."""
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
@@ -373,7 +373,7 @@ class TestGenerateTestCaseWithRealDataset:
         assert "test:assertEquals(result, false" in test4
 
     def test_generates_all_private_tests_from_humaneval(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """Test generating all 7 private test cases from HumanEval dataset."""
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
@@ -407,7 +407,7 @@ class TestGenerateTestCaseWithRealDataset:
         assert len(set(generated_tests)) == 7
 
     def test_generated_tests_are_valid_ballerina_syntax(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         """Verify generated test code has valid Ballerina structure."""
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
@@ -431,7 +431,7 @@ class TestGenerateTestCaseWithRealDataset:
 class TestRemoveMainBlock:
     """Test remove_main_block method."""
 
-    def test_removes_main_function(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_removes_main_function(self, adapter: BallerinaLanguage) -> None:
         code = """function add(int a, int b) returns int {
     return a + b;
 }
@@ -444,14 +444,14 @@ public function main() {
         assert "function add" in cleaned
 
     def test_preserves_code_without_main(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         cleaned = adapter.remove_main_block(code)
         assert "function add" in cleaned
 
     def test_cleans_up_extra_blank_lines(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = """function add() { return 1; }
 
@@ -467,7 +467,7 @@ class TestNormalizeCode:
     """Test normalize_code method."""
 
     def test_removes_single_line_comments(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = """function test() {
     // This is a comment
@@ -478,7 +478,7 @@ class TestNormalizeCode:
         assert "return 1;" in normalized
 
     def test_removes_multiline_comments(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = """function test() {
     /* This is a
@@ -490,7 +490,7 @@ class TestNormalizeCode:
         assert "multiline comment */" not in normalized
         assert "return 1;" in normalized
 
-    def test_normalizes_whitespace(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_normalizes_whitespace(self, adapter: BallerinaLanguage) -> None:
         code = """function   test()   {
     return    1;
         }"""
@@ -504,7 +504,7 @@ class TestContainsStarterCode:
     """Test contains_starter_code method."""
 
     def test_exact_match_after_normalization(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         starter = "function add(int a, int b) returns int"
         code = """function add(int a, int b) returns int {
@@ -513,7 +513,7 @@ class TestContainsStarterCode:
         assert adapter.contains_starter_code(code, starter)
 
     def test_matches_function_signature(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         starter = "function multiply(int x, int y) returns int"
         code = """// Different formatting
@@ -523,7 +523,7 @@ function multiply(int x, int y) returns int {
         assert adapter.contains_starter_code(code, starter)
 
     def test_returns_false_when_function_not_present(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         starter = "function divide(int a, int b) returns int"
         code = "function add(int a, int b) returns int { return a + b; }"
@@ -534,7 +534,7 @@ class TestGetStructuralMetadata:
     """Test get_structural_metadata method."""
 
     def test_extracts_function_metadata(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         code = """public function add(int a, int b) returns int {
     return a + b;
@@ -551,14 +551,14 @@ function subtract(int a, int b) returns int {
         assert metadata["functions"][1]["name"] == "subtract"
         assert metadata["functions"][1]["visibility"] == ""
 
-    def test_detects_main_function(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_detects_main_function(self, adapter: BallerinaLanguage) -> None:
         code = """public function main() {
     io:println("Hello");
 }"""
         metadata = adapter.get_structural_metadata(code)
         assert metadata["has_main"] is True
 
-    def test_extracts_imports(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_extracts_imports(self, adapter: BallerinaLanguage) -> None:
         code = """import ballerina/io;
 import ballerina/test;
 
@@ -568,7 +568,7 @@ function test() {}"""
         assert "ballerina/test" in metadata["imports"]
 
     def test_returns_empty_metadata_for_empty_code(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         metadata = adapter.get_structural_metadata("")
         assert metadata["functions"] == []
@@ -579,7 +579,7 @@ function test() {}"""
 class TestParseTestInputs:
     """Test parse_test_inputs method."""
 
-    def test_parses_structured_format(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_parses_structured_format(self, adapter: BallerinaLanguage) -> None:
         outputs = """input: add(1, 2)
 output: 3
 input: add(5, 7)
@@ -591,7 +591,7 @@ output: 12"""
         assert test_cases[1]["input"] == "add(5, 7)"
         assert test_cases[1]["output"] == "12"
 
-    def test_handles_missing_output(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_handles_missing_output(self, adapter: BallerinaLanguage) -> None:
         outputs = """input: test(1)
 input: test(2)
 output: 4"""
@@ -601,7 +601,7 @@ output: 4"""
         assert test_cases[1]["output"] == "4"
 
     def test_tries_python_literal_eval_fallback(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         outputs = '[{"input": "test(1)", "output": "1"}]'
         test_cases = adapter.parse_test_inputs(outputs)
@@ -609,7 +609,7 @@ output: 4"""
         assert test_cases[0]["input"] == "test(1)"
 
     def test_returns_empty_list_on_invalid_format(
-        self, adapter: BallerinaLanguageAdapter
+        self, adapter: BallerinaLanguage
     ) -> None:
         outputs = "This is not a valid format"
         test_cases = adapter.parse_test_inputs(outputs)
@@ -619,7 +619,7 @@ output: 4"""
 class TestLanguageProperty:
     """Test language property."""
 
-    def test_returns_ballerina(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_returns_ballerina(self, adapter: BallerinaLanguage) -> None:
         assert adapter.language == "ballerina"
 
 
@@ -627,11 +627,11 @@ class TestAdapterInitialization:
     """Test adapter initialization."""
 
     def test_initializes_successfully(self) -> None:
-        adapter = BallerinaLanguageAdapter()
+        adapter = BallerinaLanguage()
         assert adapter is not None
         assert adapter.language == "ballerina"
 
-    def test_has_required_patterns(self, adapter: BallerinaLanguageAdapter) -> None:
+    def test_has_required_patterns(self, adapter: BallerinaLanguage) -> None:
         """Verify that all required regex patterns are initialized."""
         assert hasattr(adapter, "_block_pattern")
         assert hasattr(adapter, "_function_pattern")

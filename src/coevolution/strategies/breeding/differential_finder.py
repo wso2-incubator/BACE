@@ -9,7 +9,7 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguageAdapter
+from coevolution.core.interfaces.language import ILanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from .differential_breeding import DifferentialResult, IDifferentialFinder
@@ -30,7 +30,7 @@ WorkerResult = Union[
 
 
 def _worker_entry(
-    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, ILanguageAdapter],
+    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, ILanguage],
 ) -> WorkerResult:
     """
     Stateless worker function for parallel execution.
@@ -104,7 +104,7 @@ class DifferentialFinder(IDifferentialFinder):
     def __init__(
         self,
         sandbox_config: SandboxConfig,
-        language_adapter: ILanguageAdapter,
+        language_adapter: ILanguage,
         enable_multiprocessing: bool = True,
         cpu_workers: int = 4,
     ) -> None:

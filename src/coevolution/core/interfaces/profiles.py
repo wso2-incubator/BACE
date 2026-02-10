@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from ..individual import CodeIndividual, TestIndividual
     from .breeding import IBreedingStrategy
     from .config import EvolutionConfig
-    from .language import ILanguageAdapter
+    from .language import ILanguage
     from .selection import IEliteSelectionStrategy
     from .systems import IBeliefUpdater, IExecutionSystem, LedgerFactory
 
@@ -187,4 +187,4 @@ class OrchestratorConfig:
     execution_system: "IExecutionSystem"
     bayesian_system: "IBeliefUpdater"
     ledger_factory: "LedgerFactory"
-    language_adapter: "ILanguageAdapter"
+    language_adapter: "ILanguage"

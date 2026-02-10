@@ -53,7 +53,7 @@ from ..core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
-from ..core.interfaces.language import ILanguageAdapter
+from ..core.interfaces.language import ILanguage
 from ..services.ledger import InteractionLedger
 
 
@@ -101,7 +101,7 @@ class OrchestratorBuilder:
         self._execution_system: IExecutionSystem | None = None
         self._bayesian_system: IBeliefUpdater | None = None
         self._ledger_factory: LedgerFactory = InteractionLedger  # Default factory
-        self._language_adapter: ILanguageAdapter | None = None
+        self._language_adapter: ILanguage | None = None
 
     def with_evolution_config(
         self,
@@ -230,7 +230,7 @@ class OrchestratorBuilder:
         return self
 
     def with_language_adapter(
-        self, language_adapter: ILanguageAdapter
+        self, language_adapter: ILanguage
     ) -> "OrchestratorBuilder":
         """
         Set language adapter.

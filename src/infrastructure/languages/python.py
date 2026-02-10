@@ -1,6 +1,6 @@
 # src/infrastructure/adapters/python.py
 """
-Python implementation of the ILanguageAdapter protocol.
+Python implementation of the ILanguage protocol.
 """
 
 import ast
@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from loguru import logger
 
 from coevolution.core.interfaces.language import (
-    ILanguageAdapter,
+    ILanguage,
     LanguageParsingError,
     LanguageTransformationError,
 )
@@ -23,7 +23,7 @@ from infrastructure.code_preprocessing.test_generation import generate_pytest_te
 from infrastructure.code_preprocessing.transformation import remove_if_main_block
 
 
-class PythonLanguageAdapter(ILanguageAdapter):
+class PythonLanguage(ILanguage):
     """
     Adapter for Python-specific code operations.
     """

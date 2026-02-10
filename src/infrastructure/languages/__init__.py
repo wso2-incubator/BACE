@@ -2,13 +2,13 @@
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguageAdapter
+from coevolution.core.interfaces.language import ILanguage
 
-from .ballerina import BallerinaLanguageAdapter
-from .python import PythonLanguageAdapter
+from .ballerina import BallerinaLanguage
+from .python import PythonLanguage
 
 
-def create_language_adapter(language: str = "python") -> ILanguageAdapter:
+def create_language_adapter(language: str = "python") -> ILanguage:
     """
     Factory function to create the appropriate language adapter based on the language name.
 
@@ -16,7 +16,7 @@ def create_language_adapter(language: str = "python") -> ILanguageAdapter:
         language: Name of the programming language (e.g., "python", "ballerina")
 
     Returns:
-        An instance of ILanguageAdapter for the specified language
+        An instance of ILanguage for the specified language
 
     Raises:
         ValueError: If the language is not supported
@@ -24,9 +24,9 @@ def create_language_adapter(language: str = "python") -> ILanguageAdapter:
     logger.info(f"Creating language adapter for: {language}")
     lang_lower = language.lower()
     if lang_lower == "python":
-        return PythonLanguageAdapter()
-    elif lang_lower == "ballerina":
-        return BallerinaLanguageAdapter()
+        return PythonLanguage()
+    elif language == "ballerina":
+        return BallerinaLanguage()
     else:
         raise ValueError(
             f"Unsupported language: {language}. Supported languages: python, ballerina."
@@ -35,6 +35,6 @@ def create_language_adapter(language: str = "python") -> ILanguageAdapter:
 
 __all__ = [
     "create_language_adapter",
-    "PythonLanguageAdapter",
-    "BallerinaLanguageAdapter",
+    "PythonLanguage",
+    "BallerinaLanguage",
 ]

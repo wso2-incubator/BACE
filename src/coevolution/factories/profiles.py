@@ -57,7 +57,7 @@ from ..core.interfaces import (
     PublicTestProfile,
     TestProfile,
 )
-from ..core.interfaces.language import ILanguageAdapter
+from ..core.interfaces.language import ILanguage
 from ..strategies.breeding.code_breeding import CodeBreedingStrategy
 from ..strategies.breeding.differential_breeding import DifferentialBreedingStrategy
 from ..strategies.breeding.differential_finder import DifferentialFinder
@@ -78,7 +78,7 @@ from ..strategies.selection.parent_selection import RouletteWheelParentSelection
 
 def create_default_code_profile(
     llm_client: LLMClient,
-    language_adapter: ILanguageAdapter,
+    language_adapter: ILanguage,
     initial_prior: float = 0.2,
     initial_population_size: int = 10,
     max_population_size: int = 15,
@@ -191,7 +191,7 @@ def create_default_code_profile(
 
 def create_unittest_test_profile(
     llm_client: LLMClient,
-    language_adapter: ILanguageAdapter,
+    language_adapter: ILanguage,
     initial_prior: float = 0.2,
     initial_population_size: int = 20,
     max_population_size: int = 20,
@@ -306,7 +306,7 @@ def create_unittest_test_profile(
 
 def create_differential_test_profile(
     llm_client: LLMClient,
-    language_adapter: ILanguageAdapter,
+    language_adapter: ILanguage,
     sandbox_config: SandboxConfig,
     initial_prior: float = 0.5,
     initial_population_size: int = 0,  # Bootstrap mode
@@ -469,7 +469,7 @@ def create_public_test_profile(
 
 def create_agent_coder_code_profile(
     llm_client: LLMClient,
-    language_adapter: ILanguageAdapter,
+    language_adapter: ILanguage,
     initial_prior: float = 0.2,
     llm_workers: int = 1,
     prob_assigner_strategy: str = "min",

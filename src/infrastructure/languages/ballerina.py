@@ -1,6 +1,6 @@
 # src/infrastructure/adapters/ballerina.py
 """
-Ballerina-specific implementation of ILanguageAdapter.
+Ballerina-specific implementation of ILanguage.
 
 This adapter provides language-specific operations for Ballerina code,
 including syntax validation, code extraction, test handling, and script composition.
@@ -13,13 +13,13 @@ from typing import Any, Dict, List
 from loguru import logger
 
 from coevolution.core.interfaces.language import (
-    ILanguageAdapter,
+    ILanguage,
     LanguageParsingError,
     LanguageTransformationError,
 )
 
 
-class BallerinaLanguageAdapter(ILanguageAdapter):
+class BallerinaLanguage(ILanguage):
     """Ballerina language adapter for APR operations."""
 
     def __init__(self) -> None:
@@ -38,7 +38,7 @@ class BallerinaLanguageAdapter(ILanguageAdapter):
             re.MULTILINE,
         )
 
-        logger.info("Initialized BallerinaLanguageAdapter")
+        logger.info("Initialized BallerinaLanguage")
 
     @property
     def language(self) -> str:

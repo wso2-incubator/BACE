@@ -16,7 +16,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from coevolution.core.interfaces.language import ILanguageAdapter
+from coevolution.core.interfaces.language import ILanguage
 from coevolution.utils.prompt_manager import get_prompt_manager
 
 
@@ -64,7 +64,7 @@ class BaseLLMOperator:
     prompt construction and postprocessing.
     """
 
-    def __init__(self, llm: ILanguageModel, language_adapter: ILanguageAdapter) -> None:
+    def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
         self._llm = llm
         self.language_adapter = language_adapter
         self.prompt_manager = get_prompt_manager(language=language_adapter.language)

@@ -12,7 +12,7 @@ import os
 import numpy as np
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguageAdapter
+from coevolution.core.interfaces.language import ILanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from ..core.interfaces import (
@@ -30,7 +30,7 @@ def _execute_atomic_interaction(
     code_snippet: str,
     test_snippet: str,
     sandbox_config: SandboxConfig,
-    language_adapter: ILanguageAdapter,
+    language_adapter: ILanguage,
 ) -> tuple[int, int, EvaluationResult]:
     """
     Worker function to execute a single code snippet against a single test function.
@@ -85,7 +85,7 @@ class ExecutionSystem(IExecutionSystem):
     def __init__(
         self,
         sandbox_config: "SandboxConfig",
-        language_adapter: ILanguageAdapter,
+        language_adapter: ILanguage,
         enable_multiprocessing: bool = True,
         cpu_workers: int | None = None,
     ):
@@ -193,7 +193,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_with_multiprocessing(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguageAdapter]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguage]],
         num_workers: int,
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks using multiprocessing pool."""
@@ -211,7 +211,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_sequentially(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguageAdapter]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguage]],
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")

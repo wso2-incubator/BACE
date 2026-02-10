@@ -57,11 +57,7 @@ from .data import (
 )
 
 # 6. Language and Sandbox Adapters (depends on data)
-from .language import (
-    ILanguageAdapter,
-    LanguageParsingError,
-    LanguageTransformationError,
-)
+from .language import ILanguage, LanguageParsingError, LanguageTransformationError
 
 # 7. Operators (depends on data, types)
 from .operators import (
@@ -154,7 +150,7 @@ __all__ = [
     "PublicTestProfile",
     "TestProfile",
     # Language Adapter
-    "ILanguageAdapter",
+    "ILanguage",
     "LanguageParsingError",
     "LanguageTransformationError",
     # Sandbox Adapter
