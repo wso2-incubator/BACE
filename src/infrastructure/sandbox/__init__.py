@@ -31,6 +31,7 @@ from coevolution.core.interfaces.sandbox import ISandbox
 from .adapters.ballerina import BallerinaSandbox
 from .adapters.python import PythonSandbox
 from .analyzer import PytestXmlAnalyzer
+from .ballerina_analyzer import BallerinaTestAnalyzer
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
 from .executor import TestExecutor
 from .types import BasicExecutionResult, SandboxConfig
@@ -64,6 +65,7 @@ __all__ = [
     "ISandbox",
     "TestExecutor",
     "PytestXmlAnalyzer",
+    "BallerinaTestAnalyzer",
     # Data types
     "EvaluationResult",
     "BasicExecutionResult",

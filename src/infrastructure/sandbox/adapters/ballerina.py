@@ -7,7 +7,7 @@ from pathlib import Path
 
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
-from infrastructure.sandbox.analyzer import PytestXmlAnalyzer
+from infrastructure.sandbox.ballerina_analyzer import BallerinaTestAnalyzer
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
@@ -104,9 +104,10 @@ class BallerinaSandbox(ISandbox):
             # Create Ballerina project structure
             self._setup_project(tmpdir_path)
 
-            # Ballerina tests usually go in a 'tests' directory or same dir
-            # For simplicity, we'll put the test script in the project root as it contains both code and tests
-            (tmpdir_path / "main.bal").write_text(test_script)
+            # Ballerina tests need to be in the 'tests' directory
+            tests_dir = tmpdir_path / "tests"
+            tests_dir.mkdir(exist_ok=True)
+            (tests_dir / "main_test.bal").write_text(test_script)
 
             try:
                 start_time = time.time()
@@ -134,10 +135,9 @@ class BallerinaSandbox(ISandbox):
                     return_code=result.returncode,
                 )
 
-                # TODO: Implement Ballerina-specific XML analysis if needed
-                # For now, use the fallback in PytestXmlAnalyzer which works on basic_result
-                analyzer = PytestXmlAnalyzer()
-                return analyzer.analyze_pytest_xml(None, basic_result)
+                # Use Ballerina-specific analyzer
+                analyzer = BallerinaTestAnalyzer()
+                return analyzer.analyze_test_output(basic_result)
 
             except subprocess.TimeoutExpired:
                 basic_result = BasicExecutionResult(
@@ -148,8 +148,8 @@ class BallerinaSandbox(ISandbox):
                     timeout=True,
                     return_code=-1,
                 )
-                analyzer = PytestXmlAnalyzer()
-                return analyzer.analyze_pytest_xml(None, basic_result)
+                analyzer = BallerinaTestAnalyzer()
+                return analyzer.analyze_test_output(basic_result)
 
     def _setup_project(self, project_path: Path) -> None:
         """Setup a minimal Ballerina project structure."""
