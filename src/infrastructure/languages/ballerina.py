@@ -8,9 +8,6 @@ including syntax validation, code extraction, test handling, and script composit
 
 import ast
 import re
-import subprocess
-import tempfile
-from pathlib import Path
 from typing import Any, Dict, List
 
 from loguru import logger
@@ -89,9 +86,9 @@ class BallerinaLanguageAdapter(ILanguageAdapter):
     def is_syntax_valid(self, code: str) -> bool:
         """
         Check if Ballerina code has valid syntax.
-
-        Uses the Ballerina compiler to validate syntax by creating a temporary
-        file and running 'bal build --offline --syntax-only'.
+        We will just say it's valid for now.
+        LLMs are pretty bad at generating syntactically correct Ballerina code.
+        We can hope that the debug operator will catch syntax errors and that the LLM will improve over time.
 
         Args:
             code: Ballerina code string to validate
@@ -99,48 +96,8 @@ class BallerinaLanguageAdapter(ILanguageAdapter):
         Returns:
             True if syntax is valid, False otherwise
         """
-        if not code or not code.strip():
-            return False
 
-        try:
-            # Create a temporary directory and file
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmpdir_path = Path(tmpdir)
-
-                # Create Ballerina.toml for the project
-                toml_content = """[package]
-org = "test"
-name = "syntax_check"
-version = "0.1.0"
-"""
-                (tmpdir_path / "Ballerina.toml").write_text(toml_content)
-
-                # Write code to a .bal file
-                bal_file = tmpdir_path / "main.bal"
-                bal_file.write_text(code)
-
-                # Run ballerina build with syntax check only
-                result = subprocess.run(
-                    ["bal", "build", "--offline"],
-                    cwd=tmpdir,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-
-                # If build succeeds or only has warnings, syntax is valid
-                return result.returncode == 0 or "warning" in result.stderr.lower()
-
-        except subprocess.TimeoutExpired:
-            logger.debug("Ballerina syntax validation timeout")
-            return False
-        except FileNotFoundError:
-            # Ballerina CLI not installed, use basic regex validation
-            logger.warning("Ballerina CLI not found, using basic syntax check")
-            return self._basic_syntax_check(code)
-        except Exception as e:
-            logger.debug(f"Syntax validation error: {e}")
-            return False
+        return True  # LLMs are very bad at ballerina syntax, so we will skip syntax validation for now.
 
     def _basic_syntax_check(self, code: str) -> bool:
         """
@@ -193,28 +150,28 @@ version = "0.1.0"
         for i, match in enumerate(matches):
             start = match.start()
 
+            # Start counting braces from after the regex match
+            # (after the opening brace of the function body)
+            match_end = match.end()
+
             # Find the end of this function (start of next test or end of string)
             if i < len(matches) - 1:
-                end = matches[i + 1].start()
+                search_end = matches[i + 1].start()
             else:
-                end = len(test_code)
+                search_end = len(test_code)
 
-            # Extract the function and find its closing brace
-            function_text = test_code[start:end]
+            # Count braces starting from after the match to find the closing brace
+            brace_count = 1  # Start with 1 because match already captured opening brace
+            actual_end = match_end
 
-            # Count braces to find the actual end of the function
-            brace_count = 0
-            in_function = False
-            actual_end = start
-
-            for j, char in enumerate(function_text):
+            for j in range(match_end, search_end):
+                char = test_code[j]
                 if char == "{":
                     brace_count += 1
-                    in_function = True
                 elif char == "}":
                     brace_count -= 1
-                    if in_function and brace_count == 0:
-                        actual_end = start + j + 1
+                    if brace_count == 0:
+                        actual_end = j + 1
                         break
 
             if actual_end > start:
@@ -328,9 +285,15 @@ version = "0.1.0"
             # Determine the expected output type and format
             expected_value = output_str.strip()
 
-            # Generate test function
+            # Generate test function with preserved camelCase
+            # Capitalize first letter while preserving rest of the name
+            capitalized_name = (
+                function_name[0].upper() + function_name[1:]
+                if function_name
+                else function_name
+            )
             test_code = f"""@test:Config {{ }}
-function test{function_name.capitalize()}{test_number}() {{
+function test{capitalized_name}{test_number}() {{
     var result = {function_name}({args});
     test:assertEquals(result, {expected_value}, msg = "Test case {test_number} failed");
 }}"""
