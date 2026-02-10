@@ -87,6 +87,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
                 logger.error(
                     "One of the generated code snippets does not contain starter code."
                 )
+                logger.debug(f"LLM response was:\n{response}")
                 raise ValueError(
                     "One of the generated code snippets does not contain starter code."
                 )
@@ -95,6 +96,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
             logger.error(
                 f"Generated {len(code_blocks)} code snippets, expected {population_size}."
             )
+            logger.debug(f"LLM response was:\n{response}")
             raise ValueError(
                 f"Generated {len(code_blocks)} code snippets, expected {population_size}."
             )
