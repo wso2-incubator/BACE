@@ -7,20 +7,19 @@ including syntax validation, code extraction, test handling, and script composit
 """
 
 import ast
-import logging
 import re
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+from loguru import logger
+
 from coevolution.core.interfaces.language import (
     ILanguageAdapter,
     LanguageParsingError,
     LanguageTransformationError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class BallerinaLanguageAdapter(ILanguageAdapter):
@@ -41,6 +40,8 @@ class BallerinaLanguageAdapter(ILanguageAdapter):
             r"@test:Config\s*\{[^}]*\}\s*function\s+(\w+)\s*\([^)]*\)\s*\{",
             re.MULTILINE,
         )
+
+        logger.info("Initialized BallerinaLanguageAdapter")
 
     @property
     def language(self) -> str:

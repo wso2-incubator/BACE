@@ -23,7 +23,7 @@ class BallerinaSandbox(ISandboxAdapter):
         """
         return cls(config=config)
 
-    def __init__(self, config: SandboxConfig):
+    def __init__(self, config: SandboxConfig) -> None:
         """
         Initialize the Ballerina sandbox.
 

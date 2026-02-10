@@ -30,6 +30,7 @@ class PythonLanguageAdapter(ILanguageAdapter):
 
     def __init__(self) -> None:
         self._block_pattern = re.compile(r"```[Pp]ython\s*([\s\S]+?)\s*```")
+        logger.info("Initialized Python language adapter")
 
     @property
     def language(self) -> str:

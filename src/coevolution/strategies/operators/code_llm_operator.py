@@ -77,7 +77,7 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
 
         response: str = self._generate(prompt)
         code_blocks: list[str] = (
-            self.language_adapter.extract_code_blocks(response)
+            [self._extract_code_block(response)]
             if population_size == 1
             else self._extract_all_code_blocks(response)
         )

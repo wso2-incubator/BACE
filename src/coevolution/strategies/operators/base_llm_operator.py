@@ -68,7 +68,9 @@ class BaseLLMOperator:
         self._llm = llm
         self.language_adapter = language_adapter
         self.prompt_manager = get_prompt_manager(language=language_adapter.language)
-        logger.debug(f"Initialized {self.__class__.__name__}")
+        logger.debug(
+            f"Initialized {self.__class__.__name__} with prompt manager for {language_adapter.language}"
+        )
 
     @llm_retry(exception_types=(LLMGenerationError,))
     def _generate(self, prompt: Any) -> str:
