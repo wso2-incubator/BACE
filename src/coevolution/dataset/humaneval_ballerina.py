@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from loguru import logger
@@ -30,50 +31,27 @@ class HumanEvalBallerinaAdapter(DatasetAdapter):
 
         logger.info("Loading HumanEval Ballerina dataset (placeholder implementation)")
 
-        sample_problem = Problem(
-            question_title="hasCloseElements",
-            question_id="sample-1",
-            question_content="Check if in given array of numbers, are any two numbers closer to each other than given threshold.\n// hasCloseElements([1.0, 2.0, 3.0], 0.5) returns false\n// hasCloseElements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) returns true\n\nfunction hasCloseElements(float[] numbers, float threshold) returns boolean {\n}",
-            starter_code="function hasCloseElements(float[] numbers, float threshold) returns boolean {\n}",
-            public_test_cases=[
-                Test(
-                    input="[1.0, 2.0, 3.0], 0.5",
-                    output="false",
-                ),
-                Test(
-                    input="[1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3",
-                    output="true",
-                ),
-            ],
-            private_test_cases=[
-                Test(
-                    input="[1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3",
-                    output="true",
-                ),
-                Test(
-                    input="[1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05",
-                    output="false",
-                ),
-                Test(
-                    input="[1.0, 2.0, 5.9, 4.0, 5.0], 0.95",
-                    output="true",
-                ),
-                Test(
-                    input="[1.0, 2.0, 5.9, 4.0, 5.0], 0.8",
-                    output="false",
-                ),
-                Test(
-                    input="[1.0, 2.0, 3.0, 4.0, 5.0, 2.0], 0.1",
-                    output="true",
-                ),
-                Test(
-                    input="[1.1, 2.2, 3.1, 4.1, 5.1], 1.0",
-                    output="true",
-                ),
-                Test(
-                    input="[1.1, 2.2, 3.1, 4.1, 5.1], 0.5",
-                    output="false",
-                ),
-            ],
-        )
-        return [sample_problem]
+        # Load from data/humaneval_ballerina.jsonl
+        dataset_path = "data/humaneval_ballerina.jsonl"
+        problems = []
+        with open(dataset_path, "r") as f:
+            for line in f:
+                data = json.loads(line)
+                problem = Problem(
+                    question_title=data["question_title"],
+                    question_id=data["question_id"],
+                    question_content=data["question_content"],
+                    starter_code=data["starter_code"],
+                    public_test_cases=[
+                        Test(input=test["input"], output=test["output"])
+                        for test in data.get("public_test_cases", [])
+                    ],
+                    private_test_cases=[
+                        Test(input=test["input"], output=test["output"])
+                        for test in data.get("private_test_cases", [])
+                    ],
+                )
+                problems.append(problem)
+
+        logger.info(f"Loaded {len(problems)} problems from HumanEval Ballerina dataset")
+        return problems
