@@ -18,11 +18,18 @@ from coevolution.core.interfaces import (
     OperatorResult,
 )
 from coevolution.core.interfaces.language import (
+    ILanguage,
     LanguageParsingError,
     LanguageTransformationError,
 )
+from infrastructure.languages import PythonLanguage
 
-from .base_llm_operator import BaseLLMOperator, UnsupportedOperatorInput, llm_retry
+from .base_llm_operator import (
+    BaseLLMOperator,
+    ILanguageModel,
+    UnsupportedOperatorInput,
+    llm_retry,
+)
 
 
 class DifferentialInputOutput(TypedDict):
@@ -45,8 +52,45 @@ OPERATION_DISCOVERY: str = "discovery"
 class DifferentialLLMOperator(BaseLLMOperator, IOperator):
     """Concrete LLM-based genetic operator for differential tests implementing IOperator."""
 
+    def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
+        """Initialize with LLM and language adapter.
+
+        Args:
+            llm: Language model for generation
+            language_adapter: Language adapter for code execution (Python/Ballerina/etc.)
+
+        Note:
+            Input generator scripts are always generated and executed in Python,
+            regardless of the main code's language. This is handled by self.python_adapter.
+        """
+        super().__init__(llm, language_adapter)
+        # Always use Python for input generator scripts, regardless of main code language
+        self.python_adapter = PythonLanguage()
+        logger.debug(
+            f"Initialized DifferentialLLMOperator with {language_adapter.language} for code execution "
+            "and Python for input generators"
+        )
+
     def supported_operations(self) -> set[str]:
         return {OPERATION_DISCOVERY, OPERATION_CROSSOVER}
+
+    def _extract_code_block(self, response: str) -> str:
+        """
+        Extract Python code block from LLM response.
+
+        Override base class to always extract Python blocks for generator scripts,
+        regardless of the main language adapter.
+
+        Args:
+            response: Raw text response from the LLM
+
+        Returns:
+            Extracted Python code block or the original response if no block found
+        """
+        blocks = self.python_adapter.extract_code_blocks(response)
+        if blocks:
+            return blocks[0]
+        return response
 
     @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
     def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
@@ -128,6 +172,7 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
             code_snippet_P=input_dto.equivalent_code_snippet_1,
             code_snippet_Q=input_dto.equivalent_code_snippet_2,
             current_tests="\n".join(input_dto.passing_test_cases),
+            language="python",  # differential gen script will always be generated in python
         )
 
         logger.trace(f"PROMPT:\n{prompt}")
@@ -138,7 +183,8 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
 
         code_block = self._extract_code_block(llm_response)
         logger.debug(f"Extracted code block with length {len(code_block)}")
-        generated_script = self.language_adapter.compose_generator_script(
+        # Always use Python adapter for generator scripts, not the main language adapter
+        generated_script = self.python_adapter.compose_generator_script(
             code_block, input_dto.num_inputs_to_generate
         )
         logger.debug(f"Final generated script with length {len(generated_script)}")

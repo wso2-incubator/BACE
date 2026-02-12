@@ -249,8 +249,12 @@ class PythonLanguage(ILanguage):
     def parse_test_inputs(self, outputs: str) -> List[Dict[str, Any]]:
         """
         Parses Python literal outputs using ast.literal_eval.
+
+        Falls back to restricted eval() for handling special float values
+        like inf, -inf, and nan which are valid in Python but not in ast.literal_eval.
         """
         import ast
+        import math
 
         try:
             val = ast.literal_eval(outputs)
@@ -259,6 +263,26 @@ class PythonLanguage(ILanguage):
             if isinstance(val, dict):
                 return [val]
             return []
-        except Exception as e:
+        except (ValueError, SyntaxError) as e:
             logger.debug(f"Failed to parse test inputs as literal: {e}")
-            return []
+
+            # Try with restricted eval to handle special float values (inf, nan)
+            try:
+                # Safe namespace with only special float values
+                safe_namespace = {
+                    "inf": math.inf,
+                    "nan": math.nan,
+                    "__builtins__": {},  # Disable all builtins for safety
+                }
+                val = eval(outputs, safe_namespace)
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, dict):
+                    return [val]
+                logger.debug(
+                    f"Eval succeeded but result type {type(val)} is not list or dict"
+                )
+                return []
+            except Exception as eval_error:
+                logger.debug(f"Failed to parse with restricted eval: {eval_error}")
+                return []

@@ -4,12 +4,13 @@ Uses the execution sandbox to identify differences between two code snippets.
 """
 
 import multiprocessing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Optional, Union
 
 from loguru import logger
 
 from coevolution.core.interfaces.language import ILanguage
+from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from .differential_breeding import DifferentialResult, IDifferentialFinder
@@ -120,17 +121,21 @@ class DifferentialFinder(IDifferentialFinder):
         self.language_adapter = language_adapter
         self.enable_multiprocessing = enable_multiprocessing
         self.cpu_workers = cpu_workers
+        self.python = PythonLanguage()
 
         # Create a local sandbox for generator execution (lightweight task)
         # or for sequential fallback.
         self._local_sandbox = create_sandbox(sandbox_config)
+
+        python_config = replace(sandbox_config, language="python")
+        self._python_sandbox = create_sandbox(python_config)
 
     def _generate_test_inputs(self, generator_script: str) -> list[dict[str, Any]]:
         """
         Executes the generator script to produce a list of test inputs.
         This step is always sequential as it's a single script execution.
         """
-        if not self.language_adapter.is_syntax_valid(generator_script):
+        if not self.python.is_syntax_valid(generator_script):
             logger.warning(
                 "Input generator script produced invalid Python code. No test inputs generated."
             )
@@ -138,9 +143,10 @@ class DifferentialFinder(IDifferentialFinder):
             return []
 
         # Use the local sandbox instance
-        output = self._local_sandbox.execute_code(generator_script).output.strip()
+        output = self._python_sandbox.execute_code(generator_script).output.strip()
 
-        test_inputs = self.language_adapter.parse_test_inputs(output)
+        # Always parse generator output as Python, since generators are always Python
+        test_inputs = self.python.parse_test_inputs(output)
         if not test_inputs:
             logger.warning(
                 "No test inputs generated or failed to parse generator output."
