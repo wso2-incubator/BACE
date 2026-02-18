@@ -38,3 +38,7 @@ logging:
   console_level: "DEBUG"
   file_level: "DEBUG"
   log_file_base_name: "coevolution_run"
+
+rephraser:
+  enabled: true
+  n: 10

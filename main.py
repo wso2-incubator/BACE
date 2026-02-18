@@ -48,6 +48,7 @@ from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
 from coevolution.utils import config as config_utils
 from coevolution.utils import logging as logging_utils
+from coevolution.utils.rephrasing import ProblemRephraser
 from infrastructure.languages import create_language_adapter
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
@@ -477,6 +478,16 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     orchestrator = build_orchestrator_from_config(orchestrator_config)
     logger.info("Orchestrator Engine Online.")
 
+    # Runtime rephraser configuration
+    rephraser_cfg = config.get("rephraser", {})
+    rephraser_enabled = rephraser_cfg.get("enabled", False)
+    rephraser: ProblemRephraser | None = None
+    if rephraser_enabled:
+        rephraser = ProblemRephraser(
+            llm_client,
+            n_rephrasings=rephraser_cfg.get("n", 3),
+        )
+
     # =========================================================================
     # PHASE 3: PROBLEM LOADING & SELECTION
     # =========================================================================
@@ -552,6 +563,13 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
             logging_utils.log_problem(problem)
             # Capture token count before processing this problem
             before_tokens = llm_client.total_output_tokens
+
+            # Generate runtime-only rephrasings if enabled (no caching)
+            if rephraser_enabled and rephraser is not None:
+                try:
+                    problem = rephraser.generate_rephrasings(problem)
+                except Exception as e:
+                    logger.warning(f"Problem rephrasing failed: {e}")
 
             try:
                 code_population, evolved_test_populations = orchestrator.run(problem)

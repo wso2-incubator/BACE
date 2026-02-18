@@ -160,7 +160,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         self.operator.generate_initial_snippets(
             InitialInput(
                 operation=OPERATION_INITIAL,
-                question_content=problem.question_content,
+                question_content=self.select_problem_rephrasing(problem),
                 starter_code=problem.starter_code,
                 population_size=0,
             )
@@ -368,7 +368,7 @@ class DifferentialBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
             # Create LLM input
             dto = DifferentialGenScriptInput(
                 operation=OPERATION_DISCOVERY,
-                question_content=context.problem.question_content,
+                question_content=self.select_problem_rephrasing(context.problem),
                 equivalent_code_snippet_1=task.code_a.snippet,
                 equivalent_code_snippet_2=task.code_b.snippet,
                 passing_test_cases=passing_test_cases,

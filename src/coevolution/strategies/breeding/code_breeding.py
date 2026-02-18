@@ -165,12 +165,18 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             initial_pop_size + self.init_pop_batch_size - 1
         ) // self.init_pop_batch_size
 
-        input_dto = InitialInput(
-            operation=OPERATION_INITIAL,
-            question_content=problem.question_content,
-            starter_code=problem.starter_code,
-            population_size=self.init_pop_batch_size,
-        )
+        # Prepare per-batch DTOs so each batch can use a sampled rephrasing
+        input_dtos = []
+        for _ in range(num_batches):
+            prompt_content = self.select_problem_rephrasing(problem)
+            input_dtos.append(
+                InitialInput(
+                    operation=OPERATION_INITIAL,
+                    question_content=prompt_content,
+                    starter_code=problem.starter_code,
+                    population_size=self.init_pop_batch_size,
+                )
+            )
 
         logger.info(
             f"Initializing population of size {initial_pop_size} in {num_batches} parallel batches."
@@ -179,8 +185,8 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             # Submit all batch tasks at once
             future_to_batch = {
-                executor.submit(self.operator.generate_initial_snippets, input_dto): i
-                for i in range(num_batches)
+                executor.submit(self.operator.generate_initial_snippets, dto): i
+                for i, dto in enumerate(input_dtos)
             }
 
             for future in as_completed(future_to_batch):
@@ -234,7 +240,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         # 2. Execution
         dto = CodeMutationInput(
             operation=OPERATION_MUTATION,
-            question_content=context.problem.question_content,
+            question_content=self.select_problem_rephrasing(context.problem),
             parent_snippet=parent.snippet,
             starter_code=context.problem.starter_code,
         )
@@ -281,7 +287,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         # Prepare DTO for crossover
         dto = CodeCrossoverInput(
             operation=OPERATION_CROSSOVER,
-            question_content=context.problem.question_content,
+            question_content=self.select_problem_rephrasing(context.problem),
             parent1_snippet=parent1.snippet,
             parent2_snippet=parent2.snippet,
             starter_code=context.problem.starter_code,
@@ -363,7 +369,9 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         # 4. Execution
         dto = CodeEditInput(
             operation=OPERATION_EDIT,
-            question_content=coevolution_context.problem.question_content,
+            question_content=self.select_problem_rephrasing(
+                coevolution_context.problem
+            ),
             parent_snippet=parent.snippet,
             failing_tests_with_trace=failing_tests_with_trace,
             starter_code=coevolution_context.problem.starter_code,
@@ -399,6 +407,8 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             )
 
         return offspring
+
+    # `select_problem_rephrasing` is provided by BaseBreedingStrategy
 
 
 __all__ = ["CodeBreedingStrategy"]

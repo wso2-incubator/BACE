@@ -104,6 +104,26 @@ class Problem:
     starter_code: str
     public_test_cases: list[Test]
     private_test_cases: list[Test]
+    rephrasings: list[str] | None = field(default=None, init=False)
+
+    def with_rephrasings(self, rephrasings: list[str]) -> "Problem":
+        """Return a shallow-copy of this Problem with `rephrasings` set.
+
+        Keeps other fields identical. This helper is useful for attaching
+        generated rephrasings without mutating callers' original instances.
+        """
+        # Since this dataclass is not frozen, we create a new instance to
+        # preserve functional style and avoid unintended shared-state mutation.
+        new = Problem(
+            question_title=self.question_title,
+            question_content=self.question_content,
+            question_id=self.question_id,
+            starter_code=self.starter_code,
+            public_test_cases=self.public_test_cases,
+            private_test_cases=self.private_test_cases,
+        )
+        new.rephrasings = rephrasings
+        return new
 
 
 @dataclass(frozen=True)

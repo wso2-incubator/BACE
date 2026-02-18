@@ -80,7 +80,7 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
         initial_outputs = self.operator.generate_initial_snippets(
             InitialInput(
                 operation=OPERATION_INITIAL,
-                question_content=problem.question_content,
+                question_content=self.select_problem_rephrasing(problem),
                 starter_code=problem.starter_code,
                 population_size=self.pop_config.initial_population_size,
             )
@@ -117,7 +117,7 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         dto = UnittestMutationInput(
             operation=OPERATION_MUTATION,
-            question_content=context.problem.question_content,
+            question_content=self.select_problem_rephrasing(context.problem),
             parent_snippet=parent.snippet,
         )
 
@@ -157,7 +157,7 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         dto = UnittestCrossoverInput(
             operation=OPERATION_CROSSOVER,
-            question_content=context.problem.question_content,
+            question_content=self.select_problem_rephrasing(context.problem),
             parent1_snippet=p1.snippet,
             parent2_snippet=p2.snippet,
         )
@@ -252,7 +252,7 @@ class UnittestBreedingStrategy(BaseBreedingStrategy[TestIndividual]):
 
         dto = UnittestEditInput(
             operation=OPERATION_EDIT,
-            question_content=context.problem.question_content,
+            question_content=self.select_problem_rephrasing(context.problem),
             parent_snippet=parent.snippet,
             passing_code_snippets=[ind.snippet for ind in passing_code_inds],
             failing_code_snippets_with_traces=[

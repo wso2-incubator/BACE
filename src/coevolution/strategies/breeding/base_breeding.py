@@ -10,6 +10,7 @@ from coevolution.core.interfaces import (
     CoevolutionContext,
     IBreedingStrategy,
     OperatorRatesConfig,
+    Problem,
 )
 
 
@@ -39,6 +40,27 @@ class BaseBreedingStrategy[T: BaseIndividual](IBreedingStrategy[T], ABC):
 
         # k=1 returns a list of 1 element
         return random.choices(ops, weights=weights, k=1)[0]
+
+    def select_problem_rephrasing(self, problem: Problem) -> str:
+        """Return a sampled prompt content for the given Problem.
+
+        Default policy: 80% chance to use a randomly chosen rephrasing (if available),
+        otherwise return the original `question_content`.
+        """
+        if not problem or not getattr(problem, "rephrasings", None):
+            return problem.question_content
+
+        try:
+            if random.random() < 0.8:
+                choices = list(problem.rephrasings if problem.rephrasings else []) + [
+                    problem.question_content
+                ]
+                return random.choice(choices)
+        except Exception:
+            # In case of unexpected structure, fall back to original content
+            logger.exception("Error selecting rephrasing; using original content")
+
+        return problem.question_content
 
     def _attempt_breeding(self, context: CoevolutionContext) -> list[T]:
         """
