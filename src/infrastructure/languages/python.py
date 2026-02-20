@@ -5,6 +5,7 @@ Python implementation of the ILanguage protocol.
 
 import ast
 import re
+import textwrap
 from typing import Any, Dict, List
 
 from loguru import logger
@@ -286,3 +287,76 @@ class PythonLanguage(ILanguage):
             except Exception as eval_error:
                 logger.debug(f"Failed to parse with restricted eval: {eval_error}")
                 return []
+
+    def get_docstring(self, code: str) -> str:
+        """
+        Returns the docstring of the first function or class in the code.
+
+        Priority:
+            1. Standard docstring of the Class/Function.
+            2. If it's a Class with no docstring, checks the first Method's docstring.
+            3. If no docstrings found, tries to extract # comments from the
+               Method (if class) or the definition itself.
+        """
+        try:
+            dedented_code = textwrap.dedent(code)
+            tree = ast.parse(dedented_code)
+            lines = dedented_code.splitlines()
+
+            for node in tree.body:
+                if isinstance(node, ast.FunctionDef):
+                    # CASE A: Top-level Function
+                    return ast.get_docstring(node) or self._extract_comments(
+                        node, lines
+                    )
+
+                if isinstance(node, ast.ClassDef):
+                    # CASE B: Class
+
+                    # 1. Try Class Docstring
+                    class_doc = ast.get_docstring(node)
+                    if class_doc:
+                        return class_doc
+
+                    # 2. Look inside Class for the first Method
+                    first_method = next(
+                        (n for n in node.body if isinstance(n, ast.FunctionDef)), None
+                    )
+
+                    if first_method:
+                        # 2a. Try Method Docstring
+                        method_doc = ast.get_docstring(first_method)
+                        if method_doc:
+                            return method_doc
+
+                        # 2b. Try Method Comments
+                        method_comments = self._extract_comments(first_method, lines)
+                        if method_comments:
+                            return method_comments
+
+                    # 3. Fallback: Try Class Comments
+                    return self._extract_comments(node, lines)
+
+        except Exception as e:
+            logger.debug(f"Failed to extract docstring: {e}")
+
+        return ""
+
+    def _extract_comments(self, node: ast.AST, lines: List[str]) -> str:
+        """
+        Helper to extract # comments immediately preceding a node.
+        """
+        comments = []
+        # node.lineno is 1-based. Target index is lineno - 2 (line before node)
+        lineno = getattr(node, "lineno", None)
+        if lineno is None:
+            return ""
+        for i in range(lineno - 2, -1, -1):
+            line = lines[i].strip()
+            if line.startswith("#"):
+                comments.append(line[1:].strip())
+            elif line == "":
+                continue
+            else:
+                break
+        return "\n".join(reversed(comments))
