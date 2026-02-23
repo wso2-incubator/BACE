@@ -46,11 +46,7 @@ class TransformersClient(LLMClient):
             raise LLMInputFormatError(f"Unsupported prompt type: {type(prompt)}")
 
         response: Any = self.pipe(messages, **kwargs)
-        content: Any = response[0]["generated_text"]
-
-        if not isinstance(content, str):
-            logger.error(f"Expected string content, got {type(content)}")
-            raise ValueError(f"Expected string content, got {type(content)}")
+        content: str = response[0]["generated_text"][-1]["content"]
 
         logger.debug(f"Generated {len(content)} characters")
         logger.trace(f"Response (first 200 chars): {content[:200]}...")
