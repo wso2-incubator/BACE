@@ -65,6 +65,14 @@ def create_llm_client(
         # Ollama default: token limits disabled
         limit_enabled = False if enable_token_limit is None else enable_token_limit
         client = OllamaClient(model, max_output_tokens, limit_enabled, **client_kwargs)
+    elif provider == "transformers":
+        from .transformers import TransformersClient
+
+        # Transformers default: token limits disabled
+        limit_enabled = False if enable_token_limit is None else enable_token_limit
+        client = TransformersClient(
+            model, max_output_tokens, limit_enabled, **client_kwargs
+        )
     else:
         logger.error(f"Unsupported provider: {provider}")
         raise ValueError(f"Unsupported provider: {provider}")

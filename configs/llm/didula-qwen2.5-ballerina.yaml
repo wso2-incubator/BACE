@@ -1,0 +1,9 @@
+# Qwen2.5-Coder 7B Configuration
+# Ollama-hosted model for codevolution experiments
+
+provider: "transformers"
+model: "didula-wso2/exp_23_emb_grpo_checkpoint_220_16bit_vllm"
+reasoning_effort: null  # Use model default
+
+# Token limit configuration - disabled
+max_output_tokens: null
