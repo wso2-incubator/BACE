@@ -57,9 +57,16 @@ def _execute_atomic_interaction(
 
         # Compose the complete test script using the language adapter
         script = language_adapter.compose_test_script(code_snippet, test_snippet)
+        logger.debug(
+            f"Worker (PID {os.getpid()}): Composed test script for interaction ({code_idx}, {test_idx}):\n{script}"
+        )
 
         # Execute in sandbox
         result: EvaluationResult = sandbox.execute_test_script(script)
+
+        logger.debug(
+            f"Worker (PID {os.getpid()}): Executed interaction ({code_idx}, {test_idx}) with result: {result}"
+        )
 
         return code_idx, test_idx, result
 

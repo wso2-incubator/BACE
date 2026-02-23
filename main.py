@@ -114,7 +114,7 @@ def run(
         help="Override console log level (DEBUG, INFO, WARNING, ERROR)",
     ),
     language: str = typer.Option(
-        "python",
+        None,
         "--language",
         "-l",
         help="Target programming language for the experiment",
@@ -316,7 +316,11 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     logger.info(f"Using model: {llm_client.model}")
 
     # 2. Sandbox Configurations
-    language = config.get("experiment", {}).get("language", "python")
+    # Preference order:
+    #  1) CLI argument (applied into `experiment.language` via overrides)
+    #  2) `experiment.language` in the config
+    #  3) default to "python"
+    language = config.get("experiment", {}).get("language") or "python"
     logger.info(f"Target Language: {language}")
 
     sandbox_diff_config = sandbox_config.get("differential", {})

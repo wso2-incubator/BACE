@@ -1,0 +1,24 @@
+# Standard Code Profile
+# Balanced settings for code evolution
+
+initial_prior: 0.2
+initial_population_size: 10
+max_population_size: 15
+offspring_rate: 0.3
+elitism_rate: 0.3
+
+# Operation rates (must sum to 1.0)
+mutation_rate: 0.2
+crossover_rate: 0.2
+edit_rate: 0.6
+
+# Edit operation settings
+k_failing_tests: 1  
+
+# Performance settings
+init_pop_batch_size: 2
+llm_workers: 10
+
+# Selection strategy
+diversity_enabled: true
+prob_assigner_strategy: "min"
