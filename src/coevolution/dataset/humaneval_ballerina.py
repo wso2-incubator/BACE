@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -16,23 +17,21 @@ class HumanEvalBallerinaAdapter(DatasetAdapter):
 
     def load_dataset(self, config: dict[str, Any]) -> list[Problem]:
         """
-        Load LCB problems based on the provided configuration.
+        Load HumanEval Ballerina problems based on the provided configuration.
 
         Args:
             config: Configuration dict with keys:
-                - version (str): Dataset release version (default: "release_v6")
-                - difficulty (str|None): Filter by difficulty ("easy", "medium", "hard")
-                - start_date (str|None): Filter start date (YYYY-MM-DD format)
-                - end_date (str|None): Filter end date (YYYY-MM-DD format)
-
+                - data_dir: Base directory where the dataset file is located (default: "data")
         Returns:
-            List of LCBCodeGenerationProblem instances.
+            List of HumanEvalBallerinaProblem instances.
         """
 
         logger.info("Loading HumanEval Ballerina dataset (placeholder implementation)")
 
         # Load from data/humaneval_ballerina.jsonl
-        dataset_path = "data/humaneval_ballerina.jsonl"
+        # Extract base path from config, defaulting to a sensible fallback or failing
+        base_data_dir = Path(config.get("data_dir", "data"))
+        dataset_path = base_data_dir / "humaneval_ballerina.jsonl"
         problems = []
         with open(dataset_path, "r") as f:
             for line in f:
