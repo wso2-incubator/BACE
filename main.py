@@ -387,6 +387,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
         diversity_enabled=code_profile_config.get("diversity_enabled", True),
         prob_assigner_strategy=code_profile_config.get("prob_assigner_strategy", "min"),
         k_failing_tests=code_profile_config.get("k_failing_tests", 10),
+        planning_enabled=code_profile_config.get("planning_enabled", False),
     )
 
     # 2. Unittest Profile

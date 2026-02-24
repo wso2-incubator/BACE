@@ -45,6 +45,21 @@ class CodeEditInput(BaseOperatorInput):
     starter_code: str
 
 
+@dataclass(frozen=True)
+class PlanGenerationInput(BaseOperatorInput):
+    """Input DTO for generating a human-readable algorithmic plan for a problem."""
+
+    starter_code: str
+
+
+@dataclass(frozen=True)
+class PlanToCodeInput(BaseOperatorInput):
+    """Input DTO for generating code that follows a given plan."""
+
+    plan: str
+    starter_code: str
+
+
 class CodeLLMOperator(BaseLLMOperator, IOperator):
     def supported_operations(self) -> set[str]:
         return {"mutation", "crossover", "edit"}
@@ -208,10 +223,74 @@ class CodeLLMOperator(BaseLLMOperator, IOperator):
                     type(input_dto), getattr(input_dto, "operation", None)
                 )
 
+    # -------------------------------------------------------------------------
+    # Planning-level methods
+    # These are coordination-level calls used by the breeder, not evolution
+    # operators. They are intentionally outside apply() / supported_operations().
+    # -------------------------------------------------------------------------
+
+    @llm_retry((ValueError,))
+    def generate_plan(self, input_dto: PlanGenerationInput) -> OperatorResult:
+        """Generate a human-readable algorithmic plan for a problem.
+
+        Called by the breeder before code generation when planning is enabled.
+        Returns the raw plan text — no code blocks. The plan is then stored in
+        CodeIndividual.metadata["plan"].
+
+        Args:
+            input_dto: DTO containing the problem description and starter code.
+
+        Returns:
+            OperatorResult with snippet=<plan text> and empty metadata.
+        """
+        logger.debug("Generating algorithmic plan for problem")
+        prompt = self.prompt_manager.render_prompt(
+            "operators/code/plan_generate.j2",
+            question_content=input_dto.question_content,
+            starter_code=input_dto.starter_code,
+        )
+        response = self._generate(prompt)
+        if not response or not response.strip():
+            raise ValueError("LLM returned an empty plan.")
+        return OperatorResult(snippet=response.strip(), metadata={})
+
+    @llm_retry((ValueError, CodeParsingError, CodeTransformationError))
+    def generate_code_from_plan(self, input_dto: PlanToCodeInput) -> OperatorResult:
+        """Generate a code snippet that strictly follows a given algorithmic plan.
+
+        Called by the breeder after plan generation. Returns verified code.
+        The plan is embedded in the resulting individual's metadata.
+
+        Args:
+            input_dto: DTO containing the problem, plan text, and starter code.
+
+        Returns:
+            OperatorResult with snippet=<code> and metadata={"plan": <plan text>}.
+        """
+        logger.debug("Generating code from plan")
+        prompt = self.prompt_manager.render_prompt(
+            "operators/code/plan_to_code.j2",
+            question_content=input_dto.question_content,
+            plan=input_dto.plan,
+            starter_code=input_dto.starter_code,
+        )
+        response = self._generate(prompt)
+        code = self._extract_code_block(response)
+
+        if not self._contains_starter_code(code, input_dto.starter_code):
+            logger.error("Plan-to-code result does not contain starter code structure.")
+            raise ValueError(
+                "Plan-to-code result does not contain starter code structure."
+            )
+
+        return OperatorResult(snippet=code, metadata={"plan": input_dto.plan})
+
 
 __all__ = [
     "CodeMutationInput",
     "CodeCrossoverInput",
     "CodeEditInput",
+    "PlanGenerationInput",
+    "PlanToCodeInput",
     "CodeLLMOperator",
 ]

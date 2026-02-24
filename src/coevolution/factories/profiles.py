@@ -92,6 +92,7 @@ def create_default_code_profile(
     diversity_enabled: bool = True,
     prob_assigner_strategy: str = "min",
     k_failing_tests: int = 10,
+    planning_enabled: bool = False,
 ) -> CodeProfile:
     """
     Create a standard code population profile.
@@ -118,6 +119,9 @@ def create_default_code_profile(
         llm_workers: Number of parallel LLM workers for breeding (default: 4)
         diversity_enabled: Use diversity selector vs simple top-k (default: True)
         k_failing_tests: Maximum number of failing tests to select for edit operations (default: 10)
+        planning_enabled: When True, initialization generates a plan per individual before
+            generating code from that plan (two-phase parallel init). Plans are stored in
+            each individual's metadata["plan"]. Default: False.
 
     Returns:
         CodeProfile with configured components
@@ -172,6 +176,7 @@ def create_default_code_profile(
         init_pop_batch_size=init_pop_batch_size,
         llm_workers=llm_workers,
         k_failing_tests=k_failing_tests,
+        planning_enabled=planning_enabled,
     )
 
     # Create elite selector

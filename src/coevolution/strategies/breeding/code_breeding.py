@@ -62,6 +62,8 @@ from ..operators.code_llm_operator import (
     CodeEditInput,
     CodeLLMOperator,
     CodeMutationInput,
+    PlanGenerationInput,
+    PlanToCodeInput,
 )
 from .base_breeding import BaseBreedingStrategy
 
@@ -107,6 +109,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         init_pop_batch_size: int = 2,
         llm_workers: int = 1,
         k_failing_tests: int = 10,
+        planning_enabled: bool = False,
     ) -> None:
         """
         Initialize the CodeBreedingStrategy.
@@ -120,6 +123,9 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
             init_pop_batch_size: Number of individuals to generate per batch during initialization.
             llm_workers: Maximum number of parallel workers for initialization.
             k_failing_tests: Maximum number of failing tests to select for edit operations (default: 10).
+            planning_enabled: When True, initialization generates a plan for every individual
+                before generating code from that plan (two-phase parallel init). Individuals
+                will have their plan stored in metadata["plan"]. Default: False.
         """
         self.operator = operator
         self.op_rates_config = op_rates_config
@@ -130,6 +136,7 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
         self.llm_workers = llm_workers
         self.init_pop_batch_size = init_pop_batch_size
         self.k_failing_tests = k_failing_tests
+        self.planning_enabled = planning_enabled
 
         if pop_config.initial_population_size < init_pop_batch_size:
             self.init_pop_batch_size = pop_config.initial_population_size
@@ -154,10 +161,30 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
     def initialize_individuals(self, problem: Problem) -> list[CodeIndividual]:
         """Create initial individuals using parallel execution.
 
-        Submits multiple batch generation tasks to a ThreadPoolExecutor.
+        When ``planning_enabled`` is False (default), submits multiple batch
+        generation tasks to a ThreadPoolExecutor via ``generate_initial_snippets``.
+
+        When ``planning_enabled`` is True, runs two sequential parallel phases:
+          Phase A — generate one plan per individual (all in parallel).
+          Phase B — generate one code snippet per plan (all in parallel).
+        Each resulting CodeIndividual carries ``metadata[\"plan\"]``.
         """
-        individuals: list[CodeIndividual] = []
         initial_pop_size = self.pop_config.initial_population_size
+
+        if self.planning_enabled:
+            return self._initialize_individuals_with_planning(problem, initial_pop_size)
+        else:
+            return self._initialize_individuals_standard(problem, initial_pop_size)
+
+    # ------------------------------------------------------------------
+    # Private initialization helpers
+    # ------------------------------------------------------------------
+
+    def _initialize_individuals_standard(
+        self, problem: Problem, initial_pop_size: int
+    ) -> list[CodeIndividual]:
+        """Original batched initialisation without planning."""
+        individuals: list[CodeIndividual] = []
 
         # Calculate number of batches needed
         # equivalent to math.ceil(initial_pop_size / pop_batch_size)
@@ -226,6 +253,139 @@ class CodeBreedingStrategy(BaseBreedingStrategy[CodeIndividual]):
 
         logger.debug(f"Created {len(individuals)} code individuals (Gen 0)")
         return individuals
+
+    def _initialize_individuals_with_planning(
+        self, problem: Problem, initial_pop_size: int
+    ) -> list[CodeIndividual]:
+        """Two-phase parallel initialisation with planning.
+
+        Phase A: Generate ``initial_pop_size`` plans in parallel.
+        Phase B: Generate one code snippet per plan in parallel.
+        Each CodeIndividual carries ``metadata[\"plan\"]``.
+        """
+        logger.info(
+            f"[Planning] Initializing population of size {initial_pop_size}: "
+            "Phase A (plans) then Phase B (code from plans)."
+        )
+
+        # ---- Phase A: generate plans -----------------------------------------
+        plan_dtos = [
+            PlanGenerationInput(
+                operation=OPERATION_INITIAL,
+                question_content=self.select_problem_rephrasing(problem),
+                starter_code=problem.starter_code,
+            )
+            for _ in range(initial_pop_size)
+        ]
+
+        plans: list[str] = []
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
+            futures = [
+                executor.submit(self.operator.generate_plan, dto) for dto in plan_dtos
+            ]
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    plans.append(result.snippet)
+                except Exception as e:
+                    logger.error(f"[Planning] Plan generation failed: {e}")
+
+        if not plans:
+            logger.error(
+                "[Planning] CodeBreedingStrategy: No plans generated during Phase A."
+            )
+            raise RuntimeError("Failed to generate plans for initial population.")
+
+        logger.info(f"[Planning] Phase A complete: {len(plans)} plans generated.")
+
+        # ---- Phase B: generate code from plans --------------------------------
+        code_dtos = [
+            PlanToCodeInput(
+                operation=OPERATION_INITIAL,
+                question_content=self.select_problem_rephrasing(problem),
+                plan=plan,
+                starter_code=problem.starter_code,
+            )
+            for plan in plans
+        ]
+
+        individuals: list[CodeIndividual] = []
+        with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
+            futures = [
+                executor.submit(self.operator.generate_code_from_plan, dto)
+                for dto in code_dtos
+            ]
+            for i, future in enumerate(as_completed(futures)):
+                try:
+                    result = future.result()
+                    individual = CodeIndividual(
+                        snippet=result.snippet,
+                        probability=self.pop_config.initial_prior,
+                        creation_op=OPERATION_INITIAL,
+                        generation_born=0,
+                        metadata=result.metadata,  # contains {"plan": <plan text>}
+                    )
+                    individuals.append(individual)
+                    logger.debug(
+                        f"[Planning] Code progress: {len(individuals)}/{len(plans)}"
+                    )
+                except Exception as e:
+                    logger.error(f"[Planning] Code generation from plan failed: {e}")
+
+        if not individuals:
+            logger.error(
+                "[Planning] CodeBreedingStrategy: No individuals created during Phase B."
+            )
+            raise RuntimeError("Failed to generate code individuals from plans.")
+
+        # Trim to requested population size
+        if len(individuals) > initial_pop_size:
+            individuals = individuals[:initial_pop_size]
+
+        logger.info(
+            f"[Planning] Phase B complete: {len(individuals)} individuals created (Gen 0)."
+        )
+        return individuals
+
+    # ------------------------------------------------------------------
+    # Planning helper for use by plan-level operator breed methods
+    # ------------------------------------------------------------------
+
+    def _get_or_generate_plan(
+        self, context: CoevolutionContext, individual: CodeIndividual
+    ) -> str:
+        """Return the plan associated with *individual*, generating one if absent.
+
+        Checks ``individual.metadata.get("plan")`` first.  If the individual has
+        no plan (e.g. it was created without planning enabled, or was born via a
+        standard operator), a fresh plan is generated via the operator using the
+        current problem context.
+
+        The plan is returned as a plain string and is **not** written back to the
+        individual (individuals are immutable post-construction).  Callers should
+        store the returned plan in the offspring's metadata.
+
+        Args:
+            context: Current coevolution context (supplies problem + rephrasing).
+            individual: The code individual whose plan is needed.
+
+        Returns:
+            Plan text string.
+        """
+        existing_plan: str | None = individual.metadata.get("plan")
+        if existing_plan:
+            return existing_plan
+
+        logger.debug(
+            f"No plan found on individual '{individual.id}'; generating one on demand."
+        )
+        plan_dto = PlanGenerationInput(
+            operation=OPERATION_INITIAL,
+            question_content=self.select_problem_rephrasing(context.problem),
+            starter_code=context.problem.starter_code,
+        )
+        result = self.operator.generate_plan(plan_dto)
+        return result.snippet
 
     def _breed_via_mutation(self, context: CoevolutionContext) -> list[CodeIndividual]:
         """Breed new individuals via mutation."""
