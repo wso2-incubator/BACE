@@ -1,17 +1,19 @@
 """Transformers LLM client implementation."""
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from loguru import logger
+from transformers.pipelines.text_generation import TextGenerationPipeline
 
 from .base import LLMClient
 from .exceptions import LLMInputFormatError
 
+if TYPE_CHECKING:
+    from transformers.pipelines.text_generation import TextGenerationPipeline
+
 
 class TransformersClient(LLMClient):
     """Transformers LLM client implementation."""
-
-    pipe: Callable[..., Any]
 
     def __init__(
         self,
@@ -25,7 +27,7 @@ class TransformersClient(LLMClient):
 
         # Type as Callable[..., Any] to keep mypy satisfied for the dynamic
         # pipeline object from the transformers library.
-        self.pipe = pipeline("text-generation", model=model)
+        self.pipe: TextGenerationPipeline = pipeline("text-generation", model=model)
         logger.debug(f"Initialized TransformersClient pipe with model: {model}")
 
     def generate(self, prompt: Union[str, List[Dict[str, str]]], **kwargs: Any) -> str:
@@ -45,7 +47,7 @@ class TransformersClient(LLMClient):
             logger.error(f"Unsupported prompt type: {type(prompt)}")
             raise LLMInputFormatError(f"Unsupported prompt type: {type(prompt)}")
 
-        response: Any = self.pipe(messages, **kwargs)
+        response: Any = self.pipe(messages, max_new_tokens=2048, **kwargs)
         content: str = response[0]["generated_text"][-1]["content"]
 
         logger.debug(f"Generated {len(content)} characters")
