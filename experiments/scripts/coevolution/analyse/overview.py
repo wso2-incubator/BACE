@@ -246,6 +246,17 @@ def main(
             f"{row['run_id']:<15} {row['problem_id']:<20} {solved_str:<8} {row['champion_code_ids']:<15} {row['champion_passing']:<14} {row['champion_probability']:<14.4f} {str(init_p10):<11} {str(final_p15):<12} {str(final_p10):<12}"
         )
 
+    # Overall summary statistics: total problems, passed, and pass rate
+    total_problems = len(summary_data)
+    total_passed = sum(1 for r in summary_data if r.get("solved"))
+    pass_rate = (total_passed / total_problems * 100) if total_problems else 0.0
+
+    print("\n" + "=" * 140)
+    print("SUMMARY STATS")
+    print("-" * 140)
+    print(f"Total Problems: {total_problems}")
+    print(f"Passed: {total_passed}")
+    print(f"Pass Rate: {pass_rate:.2f}%")
     print("\n" + "=" * 140)
     print("End of Report")
 
