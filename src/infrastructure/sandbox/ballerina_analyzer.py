@@ -13,6 +13,24 @@ from coevolution.core.interfaces.data import EvaluationResult
 from infrastructure.sandbox.types import BasicExecutionResult
 
 
+def truncate_preserve_tail(s: str | None, max_len: int) -> str:
+    """Truncate a string preserving head and tail with a snip marker.
+
+    If `s` is shorter than `max_len`, return it unchanged. Otherwise return
+    first half + marker + last half so callers keep both the beginning and
+    the end of long logs.
+    """
+    if not s:
+        return ""
+    if max_len <= 0:
+        return ""
+    if len(s) <= max_len:
+        return s
+    head = max_len // 2
+    tail = max_len - head
+    return s[:head] + "\n...<snip>...\n" + s[-tail:]
+
+
 class BallerinaTestAnalyzer:
     """
     Analyzer for Ballerina test output.
@@ -50,7 +68,10 @@ class BallerinaTestAnalyzer:
         if basic_result.timeout:
             return EvaluationResult(
                 status="error",
-                error_log=f"Test execution timed out after {basic_result.execution_time}s",
+                error_log=truncate_preserve_tail(
+                    f"Test execution timed out after {basic_result.execution_time}s",
+                    4000,
+                ),
                 execution_time=basic_result.execution_time,
             )
 
@@ -58,13 +79,19 @@ class BallerinaTestAnalyzer:
         if "No tests found" in output:
             return EvaluationResult(
                 status="error",
-                error_log="No tests found. Ensure test functions are annotated with @test:Config and located in the tests/ directory.",
+                error_log=truncate_preserve_tail(
+                    "No tests found. Ensure test functions are annotated with @test:Config and located in the tests/ directory.",
+                    4000,
+                ),
                 execution_time=basic_result.execution_time,
             )
 
         # Parse test results
         status = self._determine_status(output, basic_result)
         error_log = self._extract_error_details(output, stderr, basic_result)
+
+        # Always truncate the final error_log to avoid returning huge logs
+        error_log = truncate_preserve_tail(error_log, 4000) if error_log else error_log
 
         return EvaluationResult(
             status=status,
@@ -266,31 +293,51 @@ class BallerinaTestAnalyzer:
             Formatted compilation errors or empty string if none found
         """
         # Check both output and stderr for compilation errors
-        combined = output + "\n" + stderr
+        combined = (output or "") + "\n" + (stderr or "")
 
-        if "ERROR" not in combined or "compilation contains errors" not in combined:
+        # Use a case-insensitive search for the word 'error' or explicit compilation marker
+        if not (
+            re.search(r"\berror\b", combined, re.I)
+            or "compilation contains errors" in combined.lower()
+        ):
             return ""
 
-        error_lines = []
-        for line in combined.split("\n"):
-            # Extract ERROR lines with file location and message
-            if line.strip().startswith("ERROR"):
-                error_lines.append(line.strip())
+        lines = combined.split("\n")
+        match_indexes: list[int] = []
 
-        if not error_lines:
+        file_line_pat = re.compile(r"\S+\.[A-Za-z0-9_]+:\d+")
+
+        for i, line in enumerate(lines):
+            if re.search(r"\berror\b", line, re.I) or file_line_pat.search(line):
+                match_indexes.append(i)
+
+        if not match_indexes:
             return ""
 
-        # Format compilation errors nicely
+        # Gather small context windows around each match and deduplicate
+        blocks: list[str] = []
+        seen = set()
+        for idx in match_indexes:
+            start = max(0, idx - 3)
+            end = min(len(lines), idx + 4)
+            block = "\n".join(lines[start:end]).strip()
+            if not block or block in seen:
+                continue
+            seen.add(block)
+            blocks.append(block)
+
+        if not blocks:
+            return ""
+
         formatted_errors = "Compilation errors:\n"
-        for error_line in error_lines:
-            # Extract file, line, and message from format: ERROR [file:(line,col)] message
-            error_pattern = r"ERROR\s+\[([^\]]+)\]\s+(.+)"
-            match = re.match(error_pattern, error_line)
-            if match:
-                location = match.group(1)
-                message = match.group(2)
-                formatted_errors += f"  [{location}] {message}\n"
-            else:
-                formatted_errors += f"  {error_line}\n"
+        for block in blocks:
+            # Indent block for readability
+            indented = "\n".join("  " + l for l in block.split("\n"))
+            formatted_errors += indented + "\n  ---\n"
+
+        # Truncate overly long formatted error text to keep logs readable
+        MAX_CHARS = 4000
+        if len(formatted_errors) > MAX_CHARS:
+            formatted_errors = formatted_errors[:MAX_CHARS] + "\n...<truncated>..."
 
         return formatted_errors.rstrip()

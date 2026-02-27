@@ -5,9 +5,14 @@ import tempfile
 import time
 from pathlib import Path
 
+from loguru import logger
+
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
-from infrastructure.sandbox.ballerina_analyzer import BallerinaTestAnalyzer
+from infrastructure.sandbox.ballerina_analyzer import (
+    BallerinaTestAnalyzer,
+    truncate_preserve_tail,
+)
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
@@ -121,15 +126,24 @@ class BallerinaSandbox(ISandbox):
                 )
                 execution_time = time.time() - start_time
 
-                # Ballerina test results might be printed to stdout/stderr
-                # We also need to check if it generates a JUnit XML file
-                # By default 'bal test' might not generate JUnit XML unless configured
-                # For now, we'll analyze the output as a basic result
+                # Truncate stdout/stderr to avoid propagating huge raw logs
+                logger.debug(
+                    "bal test produced stdout_len=%d stderr_len=%d",
+                    len(result.stdout or ""),
+                    len(result.stderr or ""),
+                )
+
+                stdout = truncate_preserve_tail(
+                    result.stdout, self.config.max_output_size
+                )
+                stderr = truncate_preserve_tail(
+                    result.stderr, self.config.max_output_size
+                )
 
                 basic_result = BasicExecutionResult(
                     success=result.returncode == 0,
-                    output=result.stdout,
-                    error=result.stderr,
+                    output=stdout,
+                    error=stderr,
                     execution_time=execution_time,
                     timeout=False,
                     return_code=result.returncode,
