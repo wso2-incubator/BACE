@@ -1,20 +1,15 @@
 """
-Integration test for the coevolution orchestrator with mock implementations.
+Mock coevolution run using simple mock implementations of all components.
 
-This script tests the complete coevolution algorithm using simple mock
-implementations of all components. It's useful for verifying the architecture
-and understanding the algorithm flow without requiring LLM API calls.
+Useful for verifying the architecture and understanding the algorithm flow
+without requiring LLM API calls or a real execution environment.
 
-Can be run either with pytest:
-    pytest tests/integration/test_orchestrator_integration.py -v
-
-Or as a standalone script:
-    python tests/integration/test_orchestrator_integration.py
+Run from the workspace root:
+    python mock_run.py
 """
 
 from typing import Any
 
-import pytest
 from loguru import logger
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
@@ -35,10 +30,8 @@ from coevolution.core.mock import (
     MockBeliefUpdater,
     MockBreedingStrategy,
     MockCodeOperator,
-    MockDatasetTestBlockBuilder,
     MockEliteSelector,
     MockExecutionSystem,
-    MockTestBlockRebuilder,
     MockTestOperator,
     get_mock_problem,
     mock_ledger_factory,
@@ -46,6 +39,7 @@ from coevolution.core.mock import (
 from coevolution.core.orchestrator import Orchestrator
 from coevolution.core.population import CodePopulation, TestPopulation
 from coevolution.utils import logging as logging_utils
+from infrastructure.languages import PythonLanguage
 
 
 def create_profiles(
@@ -204,12 +198,6 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
     # Create execution system
     execution_system = MockExecutionSystem()
 
-    # Create test-specific components
-    test_block_rebuilder = MockTestBlockRebuilder()
-
-    # Create dataset test block builder
-    dataset_test_block_builder = MockDatasetTestBlockBuilder()
-
     # Mock sandbox (not used in mock implementation)
     sandbox = None
 
@@ -222,35 +210,8 @@ def create_mock_components(problem: Problem) -> dict[str, Any]:
         "test_elite_selectors": test_elite_selectors,
         "execution_system": execution_system,
         "bayesian_system": bayesian_system,
-        "test_block_rebuilder": test_block_rebuilder,
-        "dataset_test_block_builder": dataset_test_block_builder,
         "sandbox": sandbox,
     }
-
-
-@pytest.fixture
-def mock_problem() -> Problem:
-    """Fixture to provide a mock problem for testing."""
-    return get_mock_problem()
-
-
-@pytest.fixture
-def configurations() -> tuple[
-    EvolutionConfig,
-    PopulationConfig,
-    OperatorRatesConfig,
-    dict[str, PopulationConfig],
-    dict[str, OperatorRatesConfig],
-    BayesianConfig,
-]:
-    """Fixture to provide test configurations."""
-    return create_configurations()
-
-
-@pytest.fixture
-def mock_components(mock_problem: Problem) -> dict[str, Any]:
-    """Fixture to provide mock components."""
-    return create_mock_components(mock_problem)
 
 
 def log_results(
@@ -287,10 +248,6 @@ def log_results(
                 f"Best {test_type.upper()} Test Individual: {best_test.id} (prob={best_test.probability:.4f})"
             )
 
-    # Note: get_pareto_front() requires observation_matrix, which is not available in this context
-    # pareto_front = test_population.get_pareto_front(observation_matrix)
-    # logger.info(f"Pareto Front Size: {len(pareto_front)}")
-
     # Display generation history
     logging_utils.log_section_header("INFO", "GENERATION DISTRIBUTION")
     gen_counts: dict[int, int] = {}
@@ -313,106 +270,8 @@ def log_results(
             logger.info(f"  Generation {gen}: {gen_counts[gen]} individuals")
 
 
-def test_orchestrator_full_run(
-    mock_problem: Problem,
-    configurations: tuple[
-        EvolutionConfig,
-        PopulationConfig,
-        OperatorRatesConfig,
-        dict[str, PopulationConfig],
-        dict[str, OperatorRatesConfig],
-        BayesianConfig,
-    ],
-    mock_components: dict[str, Any],
-) -> None:
-    """
-    Test the complete orchestrator run with mock components.
-
-    This integration test verifies that:
-    - The orchestrator runs without errors for the configured generations
-    - Both code and test populations are created and evolved
-    - Final populations contain individuals
-    - Best individuals can be identified
-    """
-    # Setup logging for test
-    logging_utils.setup_logging(
-        console_level="INFO",  # Less verbose for pytest
-        file_level="DEBUG",
-        log_file_base_name="test_mock_coevolution",
-    )
-
-    # Unpack configurations
-    (
-        evo_config,
-        code_pop_config,
-        code_op_rates,  # Not used - kept for backward compat with fixture
-        test_pop_configs,
-        test_op_rates_configs,  # Not used - kept for backward compat with fixture
-        bayesian_config,
-    ) = configurations
-
-    # Create profiles from configurations and components
-    code_profile, evolved_test_profiles, public_test_profile = create_profiles(
-        code_pop_config=code_pop_config,
-        test_pop_configs=test_pop_configs,
-        bayesian_config=bayesian_config,
-        components=mock_components,
-    )
-
-    # Create orchestrator using profiles
-    orchestrator = Orchestrator(
-        evo_config=evo_config,
-        code_profile=code_profile,
-        evolved_test_profiles=evolved_test_profiles,
-        public_test_profile=public_test_profile,
-        execution_system=mock_components["execution_system"],
-        bayesian_system=mock_components["bayesian_system"],
-        ledger_factory=mock_ledger_factory,
-    )
-
-    # Run coevolution - orchestrator is stateless, problem passed at runtime
-    with logger.contextualize(run_id="test_run", problem_id=mock_problem.question_id):
-        code_population, evolved_test_pops = orchestrator.run(mock_problem)
-
-    # Assertions to verify the run was successful
-    assert code_population is not None, "Code population should not be None"
-    assert evolved_test_pops is not None, "Evolved test populations should not be None"
-    assert "unittest" in evolved_test_pops, (
-        "unittest population should be in evolved_test_pops"
-    )
-
-    test_population = evolved_test_pops["unittest"]
-
-    # Verify populations have individuals
-    assert code_population.size > 0, "Code population should have individuals"
-    assert test_population.size > 0, "Test population should have individuals"
-
-    # Verify best individuals can be retrieved
-    best_code = code_population.get_best_individual()
-    best_test = test_population.get_best_individual()
-    assert best_code is not None, "Should have a best code individual"
-    assert best_test is not None, "Should have a best test individual"
-
-    # Verify probability calculations
-    avg_code_prob = code_population.compute_average_probability()
-    avg_test_prob = test_population.compute_average_probability()
-    assert 0.0 <= avg_code_prob <= 1.0, "Average code probability should be in [0, 1]"
-    assert 0.0 <= avg_test_prob <= 1.0, "Average test probability should be in [0, 1]"
-
-    # Note: Pareto front verification requires observation_matrix
-    # pareto_front = test_population.get_pareto_front(observation_matrix)
-    # assert len(pareto_front) > 0, "Should have a non-empty Pareto front"
-
-    # Verify population size constraints
-    assert code_population.size <= code_pop_config.max_population_size, (
-        f"Code population size {code_population.size} should not exceed max {code_pop_config.max_population_size}"
-    )
-
-    logger.info("✓ All integration test assertions passed!")
-
-
 def main() -> None:
-    """Main entry point for the mock coevolution integration test."""
+    """Main entry point for the mock coevolution run."""
 
     # Setup logging
     logging_utils.setup_logging(
@@ -421,9 +280,7 @@ def main() -> None:
         log_file_base_name="mock_coevolution",
     )
 
-    logging_utils.log_section_header(
-        "INFO", "MOCK COEVOLUTION ORCHESTRATOR INTEGRATION TEST"
-    )
+    logging_utils.log_section_header("INFO", "MOCK COEVOLUTION ORCHESTRATOR RUN")
 
     # Step 1: Get mock problem
     logger.info("Loading mock problem...")
@@ -448,7 +305,6 @@ def main() -> None:
     logger.info(
         f"Code Population: {code_pop_config.initial_population_size} → {code_pop_config.max_population_size} individuals"
     )
-    # Log test population configs
     for test_type, test_config in test_pop_configs.items():
         logger.info(
             f"{test_type.upper()} Test Population: {test_config.initial_population_size} individuals"
@@ -478,6 +334,7 @@ def main() -> None:
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
         ledger_factory=mock_ledger_factory,
+        language_adapter=PythonLanguage(),
     )
 
     # Step 6: Run coevolution
@@ -487,11 +344,11 @@ def main() -> None:
         with logger.contextualize(run_id="mock_run", problem_id=problem.question_id):
             code_population, test_populations = orchestrator.run(problem)
 
-        # Step 6: Display results
+        # Step 7: Display results
         log_results(code_population, test_populations)
 
         logger.info("\n" + "=" * 80)
-        logger.info("INTEGRATION TEST COMPLETED SUCCESSFULLY!")
+        logger.info("MOCK RUN COMPLETED SUCCESSFULLY!")
         logger.info("=" * 80)
 
     except Exception as e:
