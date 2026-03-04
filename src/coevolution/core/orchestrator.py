@@ -634,7 +634,7 @@ class Orchestrator:
 
     def _create_initial_code_population(self, problem: Problem) -> CodePopulation:
         """
-        Uses the injected breeding strategy to create the initial code population
+        Uses the injected initializer to create the initial code population.
 
         Args:
             problem: The problem to solve
@@ -642,9 +642,7 @@ class Orchestrator:
         logger.info("Creating all initial populations...")
 
         # --- 1. Code Population ---
-        code_individuals = self.code_profile.breeding_strategy.initialize_individuals(
-            problem,
-        )
+        code_individuals = self.code_profile.initializer.initialize(problem)
 
         code_population = CodePopulation(code_individuals, generation=0)
         logger.info(f"Created {code_population!r}")
@@ -654,7 +652,7 @@ class Orchestrator:
         self, test_type: str, problem: Problem
     ) -> TestPopulation:
         """
-        Uses the injected breeding strategy to create the initial test population for a specific type.
+        Uses the injected initializer to create the initial test population for a specific type.
 
         Args:
             test_type: The type of test population to create (e.g., "unittest", "differential")
@@ -662,9 +660,7 @@ class Orchestrator:
         """
         test_profile = self.evolved_test_profiles[test_type]
 
-        test_individuals = test_profile.breeding_strategy.initialize_individuals(
-            problem,
-        )
+        test_individuals = test_profile.initializer.initialize(problem)
 
         test_population = TestPopulation(
             individuals=test_individuals,
@@ -812,11 +808,7 @@ class Orchestrator:
         context: CoevolutionContext,
         num_elites: int = 0,
     ) -> list[CodeIndividual]:
-        """
-        Helper to breed code offspring using the injected code breeding strategy.
-
-        The breeding strategy handles parallelization internally.
-        """
+        """Helper to breed code offspring using the Breeder."""
         num_code_offspring = min(
             int(
                 self.code_profile.population_config.max_population_size
@@ -825,10 +817,7 @@ class Orchestrator:
             self.code_profile.population_config.max_population_size - num_elites,
         )
 
-        # Breeding strategy handles parallelization and returns exact count
-        code_offspring = self.code_profile.breeding_strategy.breed(
-            context, num_code_offspring
-        )
+        code_offspring = self.code_profile.breeder.breed(context, num_code_offspring)
 
         logger.debug(f"Successfully bred {len(code_offspring)} code offspring")
         return code_offspring
@@ -839,26 +828,14 @@ class Orchestrator:
         test_type: str,
         num_elites: int = 0,
     ) -> list[TestIndividual]:
-        """
-        Helper to breed test offspring using the injected test breeding strategy for a specific type.
-
-        Args:
-            context: Complete coevolution context
-            test_type: The type of test population to breed (e.g., "unittest", "differential")
-            num_elites: Number of elites (to calculate how many offspring to generate)
-
-        The breeding strategy handles parallelization internally.
-        """
+        """Helper to breed test offspring using the Breeder for a specific type."""
         test_profile = self.evolved_test_profiles[test_type]
 
         num_test_offspring = (
             test_profile.population_config.max_population_size - num_elites
         )
 
-        # Breeding strategy handles parallelization and returns exact count
-        test_offsprings = test_profile.breeding_strategy.breed(
-            context, num_test_offspring
-        )
+        test_offsprings = test_profile.breeder.breed(context, num_test_offspring)
 
         logger.debug(f"Successfully bred {len(test_offsprings)} test offspring")
         return test_offsprings

@@ -1,12 +1,25 @@
 # coevolution/core/interfaces/operators.py
 """
-Operator protocols and related DTOs for genetic operations.
+Operator protocol for genetic operations.
+
+Operators are self-contained units of evolutionary work.
+Each operator owns its own parent selection, LLM call, probability
+assignment, and individual construction. The Breeder only routes to them.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
+from .base import BaseIndividual
 from .types import Operation
+
+if TYPE_CHECKING:
+    from .context import CoevolutionContext
+
+
+# ---------------------------------------------------------------------------
+# DTOs — kept for use by concrete operator internals
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -36,74 +49,52 @@ class OperatorResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-# The Output is just a list of these results
 @dataclass(frozen=True)
 class OperatorOutput:
     results: list[OperatorResult]
 
 
-class IOperator(Protocol):
+# ---------------------------------------------------------------------------
+# IOperator Protocol
+# ---------------------------------------------------------------------------
+
+
+class IOperator[T: BaseIndividual](Protocol):
     """
-    Protocol for genetic operators that transform code/test strings.
+    A self-contained unit of evolutionary work.
 
-    Operators are "stateless workers" that handle pure string transformation.
-    They are strictly decoupled from Domain Objects (Individuals, Populations).
-    The Breeding Strategy handles the wrapping/unwrapping of Individual objects.
+    Owns:
+    - Context/parent selection (via injected selectors at construction)
+    - LLM transformation (via injected LLM at construction)
+    - Probability assignment and individual construction (via injected
+      factory/assigner at construction)
 
-    Capabilities:
-    1. Generate initial snippets (Generation 0)
-    2. Apply genetic operations to existing snippets (Generation 1+)
+    The Breeder calls only execute() and operation_name().
     """
 
-    def generate_initial_snippets(
-        self,
-        input_dto: InitialInput,
-    ) -> OperatorOutput:
+    def execute(self, context: "CoevolutionContext") -> list[T]:
         """
-        Generate the initial batch of code or test snippets.
+        End-to-end operation:
+          1. Selects context from CoevolutionContext (parents, failing tests, etc.)
+          2. Calls LLM / performs transformation
+          3. Assigns probabilities and wraps results into Individual objects
 
-        Args:
-            input_dto: DTO containing generation parameters (`InitialInput`).
-
-        Returns:
-            OperatorOutput: A container with the generated snippets and metadata.
-
-        Note: Previously returned a tuple with context_code (test class scaffold),
-        but with pytest standalone functions, TestPopulation now builds its own
-        test block through simple concatenation of imports + test functions.
-
-        Empty State Behavior (size=0):
-            If population_size is 0, should return an empty OperatorOutput (results=[]).
+        Raises:
+            OperatorContextError: If context is insufficient for this operation
+                (e.g. no failing tests available for EDIT). The Breeder will
+                catch this and retry with a different sampled operator.
         """
         ...
 
-    def supported_operations(self) -> set[Operation]:
-        """
-        Return the set of operations this operator can handle.
-
-        Used to validate that the Breeding Strategy's configuration only
-        requests operations that this operator actually supports.
-
-        Returns:
-            Set of operation names (strings).
-            Example: {"mutation", "crossover", "edit", "det"}
-        """
+    def operation_name(self) -> str:
+        """The name of the operation this instance handles (e.g. 'mutation')."""
         ...
 
-    def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
-        """
-        Apply a genetic operation to input strings.
 
-        The operator does not need to know about 'Individuals', 'Populations',
-        or 'ObservationMatrices'. It receives exactly what it needs via the DTO.
-
-        Args:
-            input_dto: A strongly-typed DTO (e.g., MutationInput, EditInput)
-                       containing the operation name, parent snippets, and
-                       any required context (like error traces).
-
-        Returns:
-            OperatorOutput containing the generated offspring snippets and metadata.
-            The Strategy is responsible for wrapping these into new Individuals.
-        """
-        ...
+__all__ = [
+    "BaseOperatorInput",
+    "InitialInput",
+    "IOperator",
+    "OperatorOutput",
+    "OperatorResult",
+]

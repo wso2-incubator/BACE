@@ -2,11 +2,7 @@
 """
 Core interfaces for the coevolution framework.
 
-This module defines the protocol-based architecture for the coevolution system.
-It provides both fine-grained and grouped interfaces to support different
-implementation strategies.
-
-The interfaces are organized into focused modules:
+Organized into focused modules:
 - types: Type aliases, enums, and constants
 - data: Domain data structures and DTOs
 - config: Configuration dataclasses
@@ -15,12 +11,11 @@ The interfaces are organized into focused modules:
 - language: Protocol for language-specific operations
 - sandbox: Protocol for language-specific sandbox execution
 - profiles: Profile classes bundling configurations and strategies
-- operators: Operator protocols and DTOs
-- breeding: Breeding strategy protocols
+- operators: Operator protocol and DTOs
+- breeding: IProbabilityAssigner, IIndividualFactory
+- initializer: IPopulationInitializer
 - selection: Selection strategy protocols
 - systems: System-level protocols
-
-All symbols are re-exported at the package level for backward compatibility.
 """
 
 # Import in dependency order to avoid circular imports
@@ -28,7 +23,7 @@ All symbols are re-exported at the package level for backward compatibility.
 # 4. Base classes (depends on types, data)
 from .base import BaseIndividual, BasePopulation
 
-# 7. Breeding (depends on base, context, data, types)
+# 7. Breeding helpers (depends on base, types)
 from .breeding import IBreedingStrategy, IIndividualFactory, IProbabilityAssigner
 
 # 3. Configuration (depends on types)
@@ -55,6 +50,9 @@ from .data import (
     SandboxConfig,
     Test,
 )
+
+# 8. Initializer (depends on base, data)
+from .initializer import IPopulationInitializer
 
 # 6. Language and Sandbox Adapters (depends on data)
 from .language import ILanguage, LanguageParsingError, LanguageTransformationError
@@ -132,10 +130,11 @@ __all__ = [
     "InitialInput",
     "OperatorOutput",
     "OperatorResult",
-    # Breeding
-    "IBreedingStrategy",
+    # Breeding helpers
     "IIndividualFactory",
     "IProbabilityAssigner",
+    # Initializer
+    "IPopulationInitializer",
     # Selection
     "IEliteSelectionStrategy",
     "IParentSelectionStrategy",
