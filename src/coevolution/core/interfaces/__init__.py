@@ -3,78 +3,20 @@
 Core interfaces for the coevolution framework.
 
 Organized into focused modules:
-- types: Type aliases, enums, and constants
-- data: Domain data structures and DTOs
-- config: Configuration dataclasses
-- base: Abstract base classes for individuals and populations
-- context: Context objects for passing state
-- language: Protocol for language-specific operations
-- sandbox: Protocol for language-specific sandbox execution
-- profiles: Profile classes bundling configurations and strategies
-- operators: Operator protocol and DTOs
-- breeding: IProbabilityAssigner, IIndividualFactory
+- types:       Type aliases, enums, and constants
+- data:        Domain data structures
+- config:      Configuration dataclasses
+- base:        Abstract base classes for individuals and populations
+- context:     Context objects for passing state
+- operators:   IOperator protocol
 - initializer: IPopulationInitializer
-- selection: Selection strategy protocols
-- systems: System-level protocols
+- probability: IProbabilityAssigner
+- selection:   Selection strategy protocols
+- language:    Protocol for language-specific operations
+- sandbox:     Protocol for sandbox execution
+- profiles:    Profile classes bundling configs and strategies
+- systems:     System-level protocols
 """
-
-# Import in dependency order to avoid circular imports
-
-# 4. Base classes (depends on types, data)
-from .base import BaseIndividual, BasePopulation
-
-# 7. Breeding helpers (depends on base, types)
-from .breeding import IBreedingStrategy, IIndividualFactory, IProbabilityAssigner
-
-# 3. Configuration (depends on types)
-from .config import (
-    BayesianConfig,
-    EvolutionConfig,
-    EvolutionPhase,
-    EvolutionSchedule,
-    OperatorRatesConfig,
-    PopulationConfig,
-)
-
-# 5. Context (depends on data, forward refs to population)
-from .context import CoevolutionContext
-
-# 2. Data structures (depends on types)
-from .data import (
-    BasicExecutionResult,
-    EvaluationResult,
-    ExecutionResults,
-    InteractionData,
-    LogEntry,
-    Problem,
-    SandboxConfig,
-    Test,
-)
-
-# 8. Initializer (depends on base, data)
-from .initializer import IPopulationInitializer
-
-# 6. Language and Sandbox Adapters (depends on data)
-from .language import ILanguage, LanguageParsingError, LanguageTransformationError
-
-# 7. Operators (depends on data, types)
-from .operators import (
-    BaseOperatorInput,
-    InitialInput,
-    IOperator,
-    OperatorOutput,
-    OperatorResult,
-)
-
-# 10. Profiles (depends on config, forward refs to breeding, selection, systems)
-from .profiles import CodeProfile, OrchestratorConfig, PublicTestProfile, TestProfile
-from .sandbox import ISandbox
-
-# 8. Selection (depends on base, config, context)
-from .selection import IEliteSelectionStrategy, IParentSelectionStrategy
-
-# 9. Systems (depends on config, data, forward refs to population)
-from .systems import IBeliefUpdater, IExecutionSystem, IInteractionLedger, LedgerFactory
 
 # 1. Types and constants (no dependencies)
 from .types import (
@@ -90,9 +32,62 @@ from .types import (
     ParentProbabilities,
 )
 
+# 2. Data structures (depends on types)
+from .data import (
+    BasicExecutionResult,
+    EvaluationResult,
+    ExecutionResults,
+    InteractionData,
+    LogEntry,
+    Problem,
+    SandboxConfig,
+    Test,
+)
+
+# 3. Configuration (depends on types)
+from .config import (
+    BayesianConfig,
+    EvolutionConfig,
+    EvolutionPhase,
+    EvolutionSchedule,
+    OperatorRatesConfig,
+    PopulationConfig,
+)
+
+# 4. Base classes (depends on types, data)
+from .base import BaseIndividual, BasePopulation
+
+# 5. Context (depends on data, forward refs to population)
+from .context import CoevolutionContext
+
+# 6. Operators (depends on base, context)
+from .operators import IOperator
+
+# 6b. Breeder interface (depends on base, context)
+from .breeder import IBreeder
+
+# 7. Probability (depends on types)
+from .probability import IProbabilityAssigner
+
+# 8. Initializer (depends on base, data)
+from .initializer import IPopulationInitializer
+
+# 9. Selection (depends on base, config, context)
+from .selection import IEliteSelectionStrategy, IParentSelectionStrategy
+
+# 10. Language and Sandbox Adapters (depends on data)
+from .language import ILanguage, LanguageParsingError, LanguageTransformationError
+from .sandbox import ISandbox
+
+# 11. Profiles (depends on config, forward refs to selection, systems)
+from .profiles import CodeProfile, OrchestratorConfig, PublicTestProfile, TestProfile
+
+# 12. Systems (depends on config, data, forward refs to population)
+from .systems import IBeliefUpdater, IExecutionSystem, IInteractionLedger, LedgerFactory
+
+
 __all__ = [
     # Types
-    "ExecutionResults",
     "InteractionKey",
     "LifecycleEvent",
     "Operation",
@@ -125,33 +120,30 @@ __all__ = [
     # Context
     "CoevolutionContext",
     # Operators
-    "BaseOperatorInput",
     "IOperator",
-    "InitialInput",
-    "OperatorOutput",
-    "OperatorResult",
-    # Breeding helpers
-    "IIndividualFactory",
+    # Breeder
+    "IBreeder",
+    # Probability
     "IProbabilityAssigner",
     # Initializer
     "IPopulationInitializer",
     # Selection
     "IEliteSelectionStrategy",
     "IParentSelectionStrategy",
-    # Systems
-    "IBeliefUpdater",
-    "IExecutionSystem",
-    "IInteractionLedger",
-    "LedgerFactory",
+    # Language
+    "ILanguage",
+    "LanguageParsingError",
+    "LanguageTransformationError",
+    # Sandbox
+    "ISandbox",
     # Profiles
     "CodeProfile",
     "OrchestratorConfig",
     "PublicTestProfile",
     "TestProfile",
-    # Language Adapter
-    "ILanguage",
-    "LanguageParsingError",
-    "LanguageTransformationError",
-    # Sandbox Adapter
-    "ISandbox",
+    # Systems
+    "IBeliefUpdater",
+    "IExecutionSystem",
+    "IInteractionLedger",
+    "LedgerFactory",
 ]

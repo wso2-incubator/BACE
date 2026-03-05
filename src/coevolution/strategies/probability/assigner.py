@@ -6,9 +6,9 @@ strategies for assigning correctness probabilities to newly created offspring
 based on their parents' probabilities and the genetic operation used.
 
 Available Strategies:
-    - MeanProbabilityAssigner: Inherits average of parent probabilities
-    - MaxProbabilityAssigner: Inherits maximum of parent probabilities (optimistic)
-    - MinProbabilityAssigner: Inherits minimum of parent probabilities (pessimistic)
+    - mean: Inherits average of parent probabilities
+    - max: Inherits maximum of parent probabilities (optimistic)
+    - min: Inherits minimum of parent probabilities (pessimistic)
 """
 
 from enum import Enum
@@ -26,57 +26,32 @@ from coevolution.core.interfaces import (
 
 
 class AssignmentStrategy(str, Enum):
-    """
-    Enumeration of available probability assignment strategies.
-
-    These strategies determine how offspring inherit probability from their parents.
-    """
+    """Enumeration of available probability assignment strategies."""
 
     MEAN = "mean"  # Average of parent probabilities
-    MAX = "max"  # Maximum of parent probabilities (optimistic)
-    MIN = "min"  # Minimum of parent probabilities (pessimistic)
-    INIT = "init"  # Use initial prior (for completeness, not used here)
+    MAX = "max"    # Maximum of parent probabilities (optimistic)
+    MIN = "min"    # Minimum of parent probabilities (pessimistic)
+    INIT = "init"  # Always return initial_prior (rarely needed directly)
 
 
 class ProbabilityAssigner(IProbabilityAssigner):
     """
     Configurable probability assigner supporting multiple inheritance strategies.
 
-    This class assigns correctness probabilities to new offspring based on:
-    1. The genetic operation that created them (crossover, mutation, edit, etc.)
-    2. Their parent(s)' probabilities
-    3. A configurable assignment strategy
+    initial_prior is owned by the assigner: it is set once at construction and
+    used internally whenever the OPERATION_INITIAL case or the INIT strategy
+    is encountered. Callers do NOT pass initial_prior to assign_probability().
 
-    The strategy determines how parents' probabilities are combined:
-    - MEAN: Simple average (balanced, default)
-    - MAX: Most optimistic parent (exploration-focused)
-    - MIN: Most pessimistic parent (conservative)
-    - INIT: Use initial prior (for completeness, not used here)
     Args:
-        strategy: Assignment strategy to use (enum or string)
-
-    Example:
-        >>> # Conservative strategy (inherits min of parents)
-        >>> assigner = ProbabilityAssigner(AssignmentStrategy.MIN)
-        >>>
-        >>> # Optimistic strategy with max
-        >>> assigner = ProbabilityAssigner("max")
+        strategy: Assignment strategy to use ('mean', 'max', 'min', 'init').
+        initial_prior: Default prior for Gen-0 individuals (owned here).
     """
 
     def __init__(
         self,
         strategy: Union[AssignmentStrategy, str] = AssignmentStrategy.MIN,
+        initial_prior: float = 0.2,
     ) -> None:
-        """
-        Initialize the probability assigner.
-
-        Args:
-            strategy: Assignment strategy (enum or string name)
-
-        Raises:
-            ValueError: If strategy is invalid
-        """
-        # Convert string to enum if necessary
         if isinstance(strategy, str):
             try:
                 self.strategy = AssignmentStrategy(strategy.lower())
@@ -88,11 +63,13 @@ class ProbabilityAssigner(IProbabilityAssigner):
         else:
             self.strategy = strategy
 
+        self.initial_prior = initial_prior
+
         logger.debug(
-            f"Initialized ProbabilityAssigner with strategy={self.strategy.value}"
+            f"Initialized ProbabilityAssigner "
+            f"strategy={self.strategy.value}, initial_prior={initial_prior:.4f}"
         )
 
-        # Dispatch table for assignment strategies
         self._strategy_methods = {
             AssignmentStrategy.MEAN: self._assign_mean,
             AssignmentStrategy.MAX: self._assign_max,
@@ -104,130 +81,78 @@ class ProbabilityAssigner(IProbabilityAssigner):
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
         """
         Calculate the probability for a new offspring.
 
-        For initial population members (OPERATION_INITIAL), returns the initial_prior.
-        For offspring created by genetic operations, applies the configured strategy
-        to combine parent probabilities.
+        For OPERATION_INITIAL returns self.initial_prior.
+        For genetic ops applies the configured strategy, clamped to >= initial_prior.
 
         Args:
-            operation: The operation that created the offspring
-            parent_probs: List of parent probability values (may be empty)
-            initial_prior: Default prior probability for initial population
+            operation: The operation that created the offspring.
+            parent_probs: List of parent probability values (may be empty for initial).
 
         Returns:
-            Assigned probability for the offspring
+            Assigned probability for the offspring.
 
         Raises:
-            ValueError: If parent_probs is empty for non-initial operations
+            ValueError: If parent_probs is empty for non-initial operations.
         """
-        # Initial population members get the prior
         if operation == OPERATION_INITIAL:
-            logger.trace(f"Assigning initial prior: {initial_prior:.4f}")
-            return initial_prior
+            logger.trace(f"Assigning initial prior: {self.initial_prior:.4f}")
+            return self.initial_prior
 
-        # Validate we have parent probabilities for genetic operations
         if not parent_probs:
-            msg = f"Cannot assign probability for {operation}: no parent probabilities provided"
+            msg = f"Cannot assign probability for '{operation}': no parent probabilities provided"
             logger.error(msg)
             raise ValueError(msg)
 
-        # Apply the configured strategy
         strategy_func = self._strategy_methods[self.strategy]
-        assigned_prob = strategy_func(operation, parent_probs, initial_prior)
+        assigned_prob = strategy_func(operation, parent_probs)
 
-        if assigned_prob < initial_prior:
+        if assigned_prob < self.initial_prior:
             logger.debug(
-                f"Assigned probability {assigned_prob:.4f} is less than initial prior {initial_prior:.4f}, assigning initial prior instead."
+                f"Assigned {assigned_prob:.4f} < initial_prior {self.initial_prior:.4f}; "
+                "clamping to initial_prior."
             )
-            return initial_prior
+            return self.initial_prior
 
         logger.trace(
-            f"Assigned probability {assigned_prob:.4f} for {operation} "
-            f"(strategy={self.strategy.value}, parent_probs={parent_probs})"
+            f"Assigned {assigned_prob:.4f} for '{operation}' "
+            f"(strategy={self.strategy.value}, parents={parent_probs})"
         )
-
         return assigned_prob
 
     # --- Strategy Implementations ---
+
     def _assign_init(
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
-        """
-        Assign the initial prior probability.
-        This strategy simply returns the initial prior probability,
-        regardless of parent probabilities or operation type.
-        """
-        return initial_prior
+        """Always return the initial prior, regardless of parents."""
+        return self.initial_prior
 
     def _assign_mean(
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
-        """
-        Assign the mean (average) of parent probabilities.
-
-        This is a balanced strategy that treats all parents equally.
-        Works well for both crossover (2 parents) and mutation (1 parent).
-
-        Args:
-            operation: The genetic operation (unused in this strategy)
-            parent_probs: Parent probability values
-            initial_prior: Default prior (unused in this strategy)
-
-        Returns:
-            Mean of parent probabilities
-        """
+        """Balanced: inherits the average of parent probabilities."""
         return float(np.mean(parent_probs))
 
     def _assign_max(
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
-        """
-        Assign the maximum of parent probabilities (optimistic strategy).
-
-        This strategy assumes offspring inherit the best traits from their parents.
-        Encourages exploration by being optimistic about genetic combinations.
-
-        Args:
-            operation: The genetic operation (unused in this strategy)
-            parent_probs: Parent probability values
-            initial_prior: Default prior (unused in this strategy)
-
-        Returns:
-            Maximum of parent probabilities
-        """
+        """Optimistic: inherits the maximum of parent probabilities."""
         return float(np.max(parent_probs))
 
     def _assign_min(
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
-        """
-        Assign the minimum of parent probabilities (pessimistic strategy).
-
-        This is a conservative strategy assuming offspring can only be as good
-        as the worst parent. Useful for maintaining high-quality populations.
-
-        Args:
-            operation: The genetic operation (unused in this strategy)
-            parent_probs: Parent probability values
-            initial_prior: Default prior (unused in this strategy)
-
-        Returns:
-            Minimum of parent probabilities if >= initial_prior, else initial_prior
-        """
+        """Conservative: inherits the minimum of parent probabilities."""
         return float(np.min(parent_probs))

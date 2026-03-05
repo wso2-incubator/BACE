@@ -40,6 +40,7 @@ from . import core, dataset, factories, services, strategies, utils
 
 __all__ = [
     "core",
+    "dataset",
     "factories",
     "services",
     "strategies",

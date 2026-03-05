@@ -13,7 +13,7 @@ from coevolution.core.interfaces.language import ILanguage
 from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
-from .differential_breeding import DifferentialResult, IDifferentialFinder
+from ..operators.differential_operators import DifferentialResult, IDifferentialFinder
 
 
 @dataclass

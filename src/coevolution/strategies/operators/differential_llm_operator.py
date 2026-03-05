@@ -1,22 +1,24 @@
-"""Unittest operator implementation and DTOs.
+"""LLM service for differential test discovery.
 
-Contains `UnittestLLMOperator` and the DTOs used for unittest-based
-test generation and manipulation.
+DifferentialLLMOperator is a plain LLM service (not an IOperator).
+It is injected into DifferentialDiscoveryOperator and provides two services:
+
+1. generate_script(dto) — ask the LLM to write a Python input-generator script
+   that surfaces divergences between two equivalent code snippets.
+
+2. get_test_method_from_io(...) — convert a (input, expected_output) pair into
+   a pytest-style test function using the language adapter.
+
+Input generator scripts are always Python regardless of the target language.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from loguru import logger
 
-from coevolution.core.interfaces import (
-    OPERATION_CROSSOVER,
-    BaseOperatorInput,
-    InitialInput,
-    IOperator,
-    OperatorOutput,
-    OperatorResult,
-)
 from coevolution.core.interfaces.language import (
     ILanguage,
     LanguageParsingError,
@@ -24,12 +26,9 @@ from coevolution.core.interfaces.language import (
 )
 from infrastructure.languages import PythonLanguage
 
-from .base_llm_operator import (
-    BaseLLMOperator,
-    ILanguageModel,
-    UnsupportedOperatorInput,
-    llm_retry,
-)
+from .base_llm_service import BaseLLMService, ILanguageModel, LLMGenerationError, llm_retry
+
+OPERATION_DISCOVERY: str = "discovery"
 
 
 class DifferentialInputOutput(TypedDict):
@@ -38,72 +37,65 @@ class DifferentialInputOutput(TypedDict):
 
 
 @dataclass(frozen=True)
-class DifferentialGenScriptInput(BaseOperatorInput):
+class DifferentialGenScriptInput:
+    """Input for the script-generation LLM call."""
+    question_content: str
     equivalent_code_snippet_1: str
     equivalent_code_snippet_2: str
     passing_test_cases: list[str]
-    num_inputs_to_generate: int
+    num_inputs_to_generate: int = 100
 
 
-# New Operation Constant
-OPERATION_DISCOVERY: str = "discovery"
+class DifferentialLLMOperator(BaseLLMService):
+    """LLM service for differential test generation.
 
-
-class DifferentialLLMOperator(BaseLLMOperator, IOperator):
-    """Concrete LLM-based genetic operator for differential tests implementing IOperator."""
+    This is NOT an IOperator — it is an internal service used by
+    DifferentialDiscoveryOperator.
+    """
 
     def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
-        """Initialize with LLM and language adapter.
-
-        Args:
-            llm: Language model for generation
-            language_adapter: Language adapter for code execution (Python/Ballerina/etc.)
-
-        Note:
-            Input generator scripts are always generated and executed in Python,
-            regardless of the main code's language. This is handled by self.python_adapter.
-        """
         super().__init__(llm, language_adapter)
-        # Always use Python for input generator scripts, regardless of main code language
+        # Input generator scripts are always Python regardless of main code language
         self.python_adapter = PythonLanguage()
         logger.debug(
-            f"Initialized DifferentialLLMOperator with {language_adapter.language} for code execution "
-            "and Python for input generators"
+            f"DifferentialLLMOperator: code={language_adapter.language}, "
+            "generator-script=Python"
         )
 
-    def supported_operations(self) -> set[str]:
-        return {OPERATION_DISCOVERY, OPERATION_CROSSOVER}
+    def _extract_python_code_block(self, response: str) -> str:
+        """Extract a Python code block from the LLM response."""
+        blocks = self.python_adapter.extract_code_blocks(response)
+        return blocks[0] if blocks else response
 
-    def _extract_code_block(self, response: str) -> str:
-        """
-        Extract Python code block from LLM response.
+    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    def generate_script(self, dto: DifferentialGenScriptInput) -> str:
+        """Ask the LLM to write a Python input-generator script.
 
-        Override base class to always extract Python blocks for generator scripts,
-        regardless of the main language adapter.
-
-        Args:
-            response: Raw text response from the LLM
+        The script, when executed, will generate inputs that expose divergences
+        between the two equivalent code snippets.
 
         Returns:
-            Extracted Python code block or the original response if no block found
+            A ready-to-run Python generator script string.
         """
-        blocks = self.python_adapter.extract_code_blocks(response)
-        if blocks:
-            return blocks[0]
-        return response
+        logger.info(
+            f"Generating differential script for {len(dto.passing_test_cases)} existing tests"
+        )
+        prompt = self.prompt_manager.render_prompt(
+            "operators/differential/gen_script.j2",
+            question_content=dto.question_content,
+            code_snippet_P=dto.equivalent_code_snippet_1,
+            code_snippet_Q=dto.equivalent_code_snippet_2,
+            current_tests="\n".join(dto.passing_test_cases),
+            language="python",
+        )
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
-    def generate_initial_snippets(self, input_dto: InitialInput) -> OperatorOutput:
-        """
-        Initially there are no differential tests to generate.
-
-        Note: Previously returned test class block, but with pytest standalone
-        functions, TestPopulation builds its own test block.
-        """
-
-        logger.debug("Generating empty initial output for differential tests")
-        result = OperatorOutput(results=[])
-        return result
+        response = self._generate(prompt)
+        code_block = self._extract_python_code_block(response)
+        script = self.python_adapter.compose_generator_script(
+            code_block, dto.num_inputs_to_generate
+        )
+        logger.debug(f"Generated script ({len(script)} chars)")
+        return script
 
     def get_test_method_from_io(
         self,
@@ -112,107 +104,36 @@ class DifferentialLLMOperator(BaseLLMOperator, IOperator):
         code_parent_ids: list[str],
         io_index: int,
     ) -> str:
+        """Convert a divergence IO pair into a pytest-style test function.
+
+        Args:
+            starter_code: The function signature to test.
+            io_pairs: Exactly one (input, expected_output) pair.
+            code_parent_ids: IDs of the winner and loser code individuals.
+            io_index: Index within the current divergence batch (for unique naming).
+
+        Returns:
+            A pytest function string.
         """
-        Build a test method from differential input-output pairs.
-
-        Uses the language adapter for language-specific test generation.
-        """
-        logger.debug(
-            f"Building test method from {len(io_pairs)} IO pairs for parents {code_parent_ids}"
-        )
-
-        # Handle empty IO pairs
-        if len(io_pairs) == 0:
-            logger.error("Cannot build test method from empty IO pairs list")
-            raise ValueError("IO pairs list cannot be empty")
-
-        # Combine all IO pairs into a single test
-        # For differential tests, we typically have one IO pair per test to isolate divergences
+        if not io_pairs:
+            raise ValueError("io_pairs cannot be empty")
         if len(io_pairs) != 1:
-            logger.warning(
-                f"Expected 1 IO pair for differential test, got {len(io_pairs)}. Using first pair only."
-            )
+            logger.warning(f"Expected 1 IO pair, got {len(io_pairs)}; using first")
 
         io_pair = io_pairs[0]
-        input_data = io_pair["inputdata"]
-        expected_output = io_pair["output"]
-
-        # Convert input dict to newline-separated string format
-        # e.g., {"x": 5, "y": 3} -> "5\n3"
-        input_lines = [str(v) for v in input_data.values()]
+        input_lines = [str(v) for v in io_pair["inputdata"].values()]
         input_str = "\n".join(input_lines)
-
-        # Convert output to string
-        output_str = str(expected_output)
-
-        # Generate unique test number from parent IDs and index
-        # This ensures test names are unique and traceable
+        output_str = str(io_pair["output"])
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
 
-        # Use the language adapter for test generation
-        test_function = self.language_adapter.generate_test_case(
+        return self.language_adapter.generate_test_case(
             input_str, output_str, starter_code, test_number
         )
-
-        logger.debug(f"Built test method with length {len(test_function)}")
-        return test_function
-
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError))
-    def _handle_generation_script(
-        self, input_dto: DifferentialGenScriptInput
-    ) -> OperatorOutput:
-        """Generate a script to generate inputs to differentiate between two equivalent code snippets."""
-
-        logger.info(
-            f"Generating differential input script for {len(input_dto.passing_test_cases)} existing tests"
-        )
-        prompt = self.prompt_manager.render_prompt(
-            "operators/differential/gen_script.j2",
-            question_content=input_dto.question_content,
-            code_snippet_P=input_dto.equivalent_code_snippet_1,
-            code_snippet_Q=input_dto.equivalent_code_snippet_2,
-            current_tests="\n".join(input_dto.passing_test_cases),
-            language="python",  # differential gen script will always be generated in python
-        )
-
-        logger.trace(f"PROMPT:\n{prompt}")
-        logger.debug(f"Generated prompt with length {len(prompt)}")
-
-        llm_response = self._llm.generate(prompt)
-        logger.debug(f"Received LLM response with length {len(llm_response)}")
-
-        code_block = self._extract_code_block(llm_response)
-        logger.debug(f"Extracted code block with length {len(code_block)}")
-        # Always use Python adapter for generator scripts, not the main language adapter
-        generated_script = self.python_adapter.compose_generator_script(
-            code_block, input_dto.num_inputs_to_generate
-        )
-        logger.debug(f"Final generated script with length {len(generated_script)}")
-        logger.trace(f"Generated differential input script:\n{generated_script}")
-        result = OperatorOutput(results=[OperatorResult(snippet=generated_script)])
-        logger.info("Successfully generated differential input script")
-        return result
-
-    def apply(self, input_dto: BaseOperatorInput) -> OperatorOutput:
-        operation = getattr(input_dto, "operation", "unknown")
-        logger.info(
-            f"Applying differential operator for operation '{operation}' with input type {type(input_dto).__name__}"
-        )
-        match input_dto:
-            case DifferentialGenScriptInput():
-                result = self._handle_generation_script(input_dto)
-            case _:
-                logger.error(
-                    f"Unsupported operation input: {type(input_dto)} for operation {operation}"
-                )
-                raise UnsupportedOperatorInput(
-                    type(input_dto), getattr(input_dto, "operation", None)
-                )
-        return result
 
 
 __all__ = [
     "DifferentialInputOutput",
     "DifferentialGenScriptInput",
     "DifferentialLLMOperator",
+    "OPERATION_DISCOVERY",
 ]

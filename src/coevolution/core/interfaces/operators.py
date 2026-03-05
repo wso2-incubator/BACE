@@ -1,62 +1,17 @@
 # coevolution/core/interfaces/operators.py
 """
-Operator protocol for genetic operations.
+IOperator protocol — the single interface all genetic operators implement.
 
-Operators are self-contained units of evolutionary work.
-Each operator owns its own parent selection, LLM call, probability
-assignment, and individual construction. The Breeder only routes to them.
+Operators are self-contained units of evolutionary work. The Breeder only
+calls execute(context) and operation_name().
 """
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from .base import BaseIndividual
-from .types import Operation
 
 if TYPE_CHECKING:
     from .context import CoevolutionContext
-
-
-# ---------------------------------------------------------------------------
-# DTOs — kept for use by concrete operator internals
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class BaseOperatorInput:
-    """Base class for all operator inputs."""
-
-    operation: Operation
-    question_content: str
-
-
-@dataclass(frozen=True)
-class InitialInput(BaseOperatorInput):
-    """Input DTO for initial population generation.
-
-    Fields:
-        population_size: Number of individuals to generate.
-        starter_code: Optional starter code scaffold (may be empty for tests).
-    """
-
-    population_size: int
-    starter_code: str
-
-
-@dataclass(frozen=True)
-class OperatorResult:
-    snippet: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class OperatorOutput:
-    results: list[OperatorResult]
-
-
-# ---------------------------------------------------------------------------
-# IOperator Protocol
-# ---------------------------------------------------------------------------
 
 
 class IOperator[T: BaseIndividual](Protocol):
@@ -66,8 +21,7 @@ class IOperator[T: BaseIndividual](Protocol):
     Owns:
     - Context/parent selection (via injected selectors at construction)
     - LLM transformation (via injected LLM at construction)
-    - Probability assignment and individual construction (via injected
-      factory/assigner at construction)
+    - Probability assignment and individual construction
 
     The Breeder calls only execute() and operation_name().
     """
@@ -91,10 +45,4 @@ class IOperator[T: BaseIndividual](Protocol):
         ...
 
 
-__all__ = [
-    "BaseOperatorInput",
-    "InitialInput",
-    "IOperator",
-    "OperatorOutput",
-    "OperatorResult",
-]
+__all__ = ["IOperator"]

@@ -10,14 +10,12 @@ from .config import BayesianConfig, PopulationConfig
 
 if TYPE_CHECKING:
     from ..individual import CodeIndividual, TestIndividual
+    from .breeder import IBreeder
     from .config import EvolutionConfig
     from .initializer import IPopulationInitializer
     from .language import ILanguage
     from .selection import IEliteSelectionStrategy
     from .systems import IBeliefUpdater, IExecutionSystem, LedgerFactory
-
-    # Breeder lives outside interfaces to avoid circular imports
-    from coevolution.strategies.breeding.breeder import Breeder
 
 
 @dataclass(frozen=True)
@@ -41,7 +39,7 @@ class CodeProfile:
     """
 
     population_config: PopulationConfig
-    breeder: "Breeder[CodeIndividual]"
+    breeder: "IBreeder[CodeIndividual]"
     initializer: "IPopulationInitializer[CodeIndividual]"
     elite_selector: "IEliteSelectionStrategy[CodeIndividual]"
 
@@ -69,7 +67,7 @@ class TestProfile:
     """
 
     population_config: PopulationConfig
-    breeder: "Breeder[TestIndividual]"
+    breeder: "IBreeder[TestIndividual]"
     initializer: "IPopulationInitializer[TestIndividual]"
     elite_selector: "IEliteSelectionStrategy[TestIndividual]"
     bayesian_config: BayesianConfig

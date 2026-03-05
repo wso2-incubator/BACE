@@ -1,49 +1,11 @@
 """
 Profile factory functions for creating pre-configured population profiles.
 
-This module provides factory functions for common coevolution scenarios:
-- Code population with LLM-based breeding
-- Unittest test population for discrimination-driven evolution
-- Differential test population for divergence discovery
-- Public test population for ground-truth anchoring
-
-Each factory encapsulates the complete setup for a population type,
-including operator configuration, breeding strategies, selection mechanisms,
-and Bayesian parameters.
-
-Example Usage:
-    >>> from coevolution.factories import (
-    ...     create_default_code_profile,
-    ...     create_unittest_test_profile,
-    ...     create_public_test_profile
-    ... )
-    >>>
-    >>> # Create profiles with custom parameters
-    >>> code_profile = create_default_code_profile(
-    ...     llm_client=my_llm,
-    ...     sandbox=my_sandbox,
-    ...     initial_population_size=10,
-    ...     max_population_size=15,
-    ...     mutation_rate=0.3,
-    ...     crossover_rate=0.2,
-    ...     edit_rate=0.5
-    ... )
-    >>>
-    >>> unittest_profile = create_unittest_test_profile(
-    ...     llm_client=my_llm,
-    ...     alpha=0.01,
-    ...     beta=0.3
-    ... )
-    >>>
-    >>> public_profile = create_public_test_profile(alpha=0.001)
+Each factory returns a fully-wired Profile using the new Breeder + self-sufficient
+operator architecture. Old breeding strategy files are still present and will be
+removed in Phase D after this has been verified.
 """
 
-from coevolution.strategies.breeding.agent_coder_breeding import (
-    AgentCoderBreedingStrategy,
-)
-from coevolution.strategies.operators.agent_coder_llm_operator import (
-    AgentCoderLLMOperator,
-)
 from infrastructure.llm_client import LLMClient
 from infrastructure.sandbox.types import SandboxConfig
 
@@ -52,19 +14,28 @@ from ..core.interfaces import (
     BayesianConfig,
     CodeProfile,
     IEliteSelectionStrategy,
-    OperatorRatesConfig,
     PopulationConfig,
     PublicTestProfile,
     TestProfile,
 )
 from ..core.interfaces.language import ILanguage
-from ..strategies.breeding.code_breeding import CodeBreedingStrategy
-from ..strategies.breeding.differential_breeding import DifferentialBreedingStrategy
-from ..strategies.breeding.differential_finder import DifferentialFinder
-from ..strategies.breeding.unittest_breeding import UnittestBreedingStrategy
-from ..strategies.operators.code_llm_operator import CodeLLMOperator
-from ..strategies.operators.differential_llm_operator import DifferentialLLMOperator
-from ..strategies.operators.unittest_llm_operator import UnittestLLMOperator
+from ..strategies.breeding.breeder import Breeder, RegisteredOperator
+from ..strategies.operators.agent_coder_operators import (
+    AgentCoderEditOperator,
+    AgentCoderInitializer,
+)
+from ..strategies.operators.code_operators import (
+    CodeCrossoverOperator,
+    CodeEditOperator,
+    CodeInitializer,
+    CodeMutationOperator,
+)
+from ..strategies.operators.unittest_operators import (
+    UnittestCrossoverOperator,
+    UnittestEditOperator,
+    UnittestInitializer,
+    UnittestMutationOperator,
+)
 from ..strategies.probability.assigner import ProbabilityAssigner
 from ..strategies.selection.elite import (
     CodeDiversityEliteSelector,
@@ -72,7 +43,6 @@ from ..strategies.selection.elite import (
     TopKEliteSelector,
 )
 from ..strategies.selection.failing_test_selection import FailingTestSelector
-from ..strategies.selection.functionally_eq_selection import FunctionallyEqSelector
 from ..strategies.selection.parent_selection import RouletteWheelParentSelection
 
 
@@ -94,50 +64,14 @@ def create_default_code_profile(
     k_failing_tests: int = 10,
     planning_enabled: bool = False,
 ) -> CodeProfile:
-    """
-    Create a standard code population profile.
-
-    This factory encapsulates the complete code evolution setup:
-    - Variable-size population (can grow from initial to max size)
-    - LLM-based operator supporting mutation, crossover, edit
-    - Diversity-aware or simple top-k elite selection
-    - Roulette wheel parent selection
-    - Probability assigner for offspring
-
-    Args:
-        llm_client: LLM client for code generation
-        sandbox: Sandbox for code execution (used by FailingTestSelector)
-        initial_prior: Initial probability for new code (default: 0.5)
-        initial_population_size: Starting population size (default: 10)
-        max_population_size: Maximum allowed size (default: 20)
-        offspring_rate: Fraction of capacity to fill each generation (default: 0.8)
-        elitism_rate: Fraction of population to preserve as elites (default: 0.3)
-        mutation_rate: Probability of mutation operation (default: 0.2)
-        crossover_rate: Probability of crossover operation (default: 0.2)
-        edit_rate: Probability of edit operation (default: 0.6)
-        init_pop_batch_size: Number of individuals to generate per batch during initialization (default: 2)
-        llm_workers: Number of parallel LLM workers for breeding (default: 4)
-        diversity_enabled: Use diversity selector vs simple top-k (default: True)
-        k_failing_tests: Maximum number of failing tests to select for edit operations (default: 10)
-        planning_enabled: When True, initialization generates a plan per individual before
-            generating code from that plan (two-phase parallel init). Plans are stored in
-            each individual's metadata["plan"]. Default: False.
-
-    Returns:
-        CodeProfile with configured components
-
-    Raises:
-        ValueError: If rates don't sum to 1.0 or parameters are invalid
-    """
-    # Validate rates sum to 1.0
+    """Create a standard code population profile."""
     total_rate = mutation_rate + crossover_rate + edit_rate
-    if not (0.99 <= total_rate <= 1.01):  # Allow small floating point error
+    if not (0.99 <= total_rate <= 1.01):
         raise ValueError(
             f"Operation rates must sum to 1.0, got {total_rate:.4f} "
             f"(mutation={mutation_rate}, crossover={crossover_rate}, edit={edit_rate})"
         )
 
-    # Create population config
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -147,49 +81,47 @@ def create_default_code_profile(
         diversity_selection=diversity_enabled,
     )
 
-    # Create operator
-    code_operator = CodeLLMOperator(llm=llm_client, language_adapter=language_adapter)
-
-    # Create operator rates config
-    operator_rates = OperatorRatesConfig(
-        operation_rates={
-            "mutation": mutation_rate,
-            "crossover": crossover_rate,
-            "edit": edit_rate,
-        }
-    )
-
-    # Create breeding strategy components
     parent_selector: RouletteWheelParentSelection[CodeIndividual] = (
         RouletteWheelParentSelection()
     )
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
+    )
 
-    # Create breeding strategy
-    breeding_strategy = CodeBreedingStrategy(
-        operator=code_operator,
-        op_rates_config=operator_rates,
-        pop_config=population_config,
-        probability_assigner=prob_assigner,
-        parent_selector=parent_selector,
+    mutation_op = CodeMutationOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    crossover_op = CodeCrossoverOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    edit_op = CodeEditOperator(
+        llm_client, language_adapter, parent_selector, prob_assigner,
         failing_test_selector=FailingTestSelector,
-        init_pop_batch_size=init_pop_batch_size,
-        llm_workers=llm_workers,
         k_failing_tests=k_failing_tests,
+    )
+
+    breeder: Breeder[CodeIndividual] = Breeder(
+        registered_operators=[
+            RegisteredOperator(weight=mutation_rate, operator=mutation_op),
+            RegisteredOperator(weight=crossover_rate, operator=crossover_op),
+            RegisteredOperator(weight=edit_rate, operator=edit_op),
+        ],
+        llm_workers=llm_workers,
+    )
+
+    initializer = CodeInitializer(
+        llm=llm_client,
+        language_adapter=language_adapter,
+        pop_config=population_config,
+        init_batch_size=init_pop_batch_size,
+        llm_workers=llm_workers,
         planning_enabled=planning_enabled,
     )
 
-    # Create elite selector
-    if diversity_enabled:
-        elite_selector: IEliteSelectionStrategy[CodeIndividual] = (
-            CodeDiversityEliteSelector()
-        )
-    else:
-        elite_selector = TopKEliteSelector()
+    elite_selector: IEliteSelectionStrategy[CodeIndividual] = (
+        CodeDiversityEliteSelector() if diversity_enabled else TopKEliteSelector()
+    )
 
     return CodeProfile(
         population_config=population_config,
-        breeding_strategy=breeding_strategy,
+        breeder=breeder,
+        initializer=initializer,
         elite_selector=elite_selector,
     )
 
@@ -213,42 +145,11 @@ def create_unittest_test_profile(
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
 ) -> TestProfile:
-    """
-    Create a unittest test population profile.
-
-    This factory configures discrimination-driven unittest evolution:
-    - Fixed-size population
-    - LLM-based operator with mutation, crossover, edit
-    - Edit operation uses passing vs failing code pairs for discrimination
-    - Diversity-aware elite selection (Pareto-like)
-    - Moderate reliability Bayesian parameters
-
-    Args:
-        llm_client: LLM client for test generation
-        initial_prior: Initial probability for new tests (default: 0.5)
-        initial_population_size: Fixed population size (default: 20)
-        elitism_rate: Fraction to preserve as elites (default: 0.4)
-        mutation_rate: Probability of mutation (default: 0.3)
-        crossover_rate: Probability of crossover (default: 0.2)
-        edit_rate: Probability of edit (default: 0.5)
-        alpha: P(pass | code correct, test incorrect) (default: 0.01)
-        beta: P(pass | code incorrect, test correct) (default: 0.3)
-        gamma: P(pass | both incorrect) (default: 0.3)
-        learning_rate: Belief update learning rate (default: 0.05)
-        llm_workers: Number of parallel LLM workers for breeding (default: 1)
-
-    Returns:
-        TestProfile with configured components
-
-    Raises:
-        ValueError: If rates don't sum to 1.0 or parameters are invalid
-    """
-    # Validate rates
+    """Create a unittest test population profile."""
     total_rate = mutation_rate + crossover_rate + edit_rate
     if not (0.99 <= total_rate <= 1.01):
         raise ValueError(f"Operation rates must sum to 1.0, got {total_rate:.4f}")
 
-    # Create population config (fixed-size)
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -258,52 +159,45 @@ def create_unittest_test_profile(
         diversity_selection=diversity_enabled,
     )
 
-    # Create operator
-    test_operator = UnittestLLMOperator(
-        llm=llm_client, language_adapter=language_adapter
-    )
-
-    # Create operator rates config
-    operator_rates = OperatorRatesConfig(
-        operation_rates={
-            "mutation": mutation_rate,
-            "crossover": crossover_rate,
-            "edit": edit_rate,
-        }
-    )
-
-    # Create breeding strategy components
     parent_selector: RouletteWheelParentSelection[TestIndividual] = (
         RouletteWheelParentSelection()
     )
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
+    )
 
-    # Create breeding strategy
-    breeding_strategy = UnittestBreedingStrategy(
-        operator=test_operator,
-        op_rates_config=operator_rates,
-        pop_config=population_config,
-        probability_assigner=prob_assigner,
-        parent_selector=parent_selector,
+    mutation_op = UnittestMutationOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    crossover_op = UnittestCrossoverOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    edit_op = UnittestEditOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+
+    breeder: Breeder[TestIndividual] = Breeder(
+        registered_operators=[
+            RegisteredOperator(weight=mutation_rate, operator=mutation_op),
+            RegisteredOperator(weight=crossover_rate, operator=crossover_op),
+            RegisteredOperator(weight=edit_rate, operator=edit_op),
+        ],
         llm_workers=llm_workers,
     )
 
-    # Create elite selector (diversity-aware for tests)
+    initializer = UnittestInitializer(
+        llm=llm_client,
+        language_adapter=language_adapter,
+        pop_config=population_config,
+        llm_workers=llm_workers,
+    )
+
     elite_selector: TestDiversityEliteSelector[TestIndividual] = (
         TestDiversityEliteSelector(test_population_key="unittest")
     )
 
-    # Create Bayesian config
     bayesian_config = BayesianConfig(
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        learning_rate=learning_rate,
+        alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
     )
 
     return TestProfile(
         population_config=population_config,
-        breeding_strategy=breeding_strategy,
+        breeder=breeder,
+        initializer=initializer,
         elite_selector=elite_selector,
         bayesian_config=bayesian_config,
     )
@@ -314,7 +208,7 @@ def create_differential_test_profile(
     language_adapter: ILanguage,
     sandbox_config: SandboxConfig,
     initial_prior: float = 0.5,
-    initial_population_size: int = 0,  # Bootstrap mode
+    initial_population_size: int = 0,
     max_population_size: int = 20,
     offspring_rate: float = 1.0,
     elitism_rate: float = 0.3,
@@ -330,46 +224,15 @@ def create_differential_test_profile(
     max_pairs_per_group: int = 5,
     num_passing_tests_to_sample: int = 5,
 ) -> TestProfile:
-    """
-    Create a differential test population profile.
+    """Create a differential test population profile."""
+    from ..strategies.breeding.differential_finder import DifferentialFinder
+    from ..strategies.operators.differential_llm_operator import DifferentialLLMOperator
+    from ..strategies.operators.differential_operators import (
+        DifferentialDiscoveryOperator,
+        DifferentialInitializer,
+    )
+    from ..strategies.selection.functionally_eq_selection import FunctionallyEqSelector
 
-    This factory configures DET (Differential Evolution Testing):
-    - Starts empty, grows via discovery
-    - Discovery operation finds divergent code pairs
-    - Crossover combines existing differential tests
-    - Lower reliability than unittests (higher alpha)
-
-    Args:
-        llm_client: LLM client for differential test generation
-        sandbox: Sandbox for code execution (used by FunctionallyEquivalentCodeSelector)
-        initial_prior: Initial probability for new tests (default: 0.5)
-        initial_population_size: Starting size, usually 0 (default: 0)
-        max_population_size: Maximum allowed size (default: 20)
-        offspring_rate: Fraction of capacity to fill (default: 1.0 for aggressive growth)
-        elitism_rate: Fraction to preserve (default: 0.3)
-        discovery_rate: Probability of discovery operation (default: 0.7)
-        crossover_rate: Probability of crossover (default: 0.3)
-        alpha: P(pass | code correct, test incorrect) (default: 0.05, less reliable than unittest)
-        beta: P(pass | code incorrect, test correct) (default: 0.3)
-        gamma: P(pass | both incorrect) (default: 0.3)
-        learning_rate: Belief update learning rate (default: 0.05)
-        llm_workers: Number of parallel LLM workers for script generation (default: 4)
-        cpu_workers: Number of parallel CPU workers for sandbox execution (default: 8)
-        max_pairs_per_group: Maximum pairs to try per functional group (default: 5)
-        num_passing_tests_to_sample: Number of passing test cases to randomly sample for differential input generation (default: 5)
-
-    Returns:
-        TestProfile with configured components
-
-    Raises:
-        ValueError: If rates don't sum to 1.0 or parameters are invalid
-    """
-    # Validate rates
-    total_rate = discovery_rate
-    if not (0.99 <= total_rate <= 1.01):
-        raise ValueError(f"Operation rates must sum to 1.0, got {total_rate:.4f}")
-
-    # Create population config (variable-size, bootstrap mode)
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -379,24 +242,17 @@ def create_differential_test_profile(
         diversity_selection=diversity_enabled,
     )
 
-    # Create operator
-    differential_operator = DifferentialLLMOperator(
-        llm=llm_client, language_adapter=language_adapter
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
     )
-
-    # Create operator rates config
-    operator_rates = OperatorRatesConfig(
-        operation_rates={
-            "discovery": discovery_rate,
-        }
-    )
-
-    # Create breeding strategy components
     parent_selector: RouletteWheelParentSelection[TestIndividual] = (
         RouletteWheelParentSelection()
     )
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
 
+    # LLM service (script generation + test-from-IO)
+    llm_service = DifferentialLLMOperator(llm=llm_client, language_adapter=language_adapter)
+
+    # Sandbox
     differential_finder = DifferentialFinder(
         language_adapter=language_adapter,
         sandbox_config=sandbox_config,
@@ -404,36 +260,43 @@ def create_differential_test_profile(
         cpu_workers=cpu_workers,
     )
 
-    # Create breeding strategy
-    breeding_strategy = DifferentialBreedingStrategy(
-        operator=differential_operator,
-        op_rates_config=operator_rates,
-        pop_config=population_config,
-        probability_assigner=prob_assigner,
+    discovery_op = DifferentialDiscoveryOperator(
+        llm=llm_client,
+        language_adapter=language_adapter,
         parent_selector=parent_selector,
-        functionally_equivalent_code_selector=FunctionallyEqSelector(),
+        prob_assigner=prob_assigner,
+        llm_service=llm_service,
         differential_finder=differential_finder,
-        llm_workers=llm_workers,
+        func_eq_selector=FunctionallyEqSelector(),
         max_pairs_per_group=max_pairs_per_group,
         num_passing_tests_to_sample=num_passing_tests_to_sample,
+        llm_workers=llm_workers,
     )
 
-    # Create elite selector (diversity-aware for differential tests)
+    breeder: Breeder[TestIndividual] = Breeder(
+        registered_operators=[
+            RegisteredOperator(weight=discovery_rate, operator=discovery_op)
+        ],
+        llm_workers=1,  # Phase 2 parallelism is handled internally by the operator
+    )
+
+    initializer = DifferentialInitializer(
+        llm=llm_client,
+        language_adapter=language_adapter,
+        pop_config=population_config,
+    )
+
     elite_selector: TestDiversityEliteSelector[TestIndividual] = (
         TestDiversityEliteSelector(test_population_key="differential")
     )
-
-    # Create Bayesian config
     bayesian_config = BayesianConfig(
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        learning_rate=learning_rate,
+        alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
     )
 
     return TestProfile(
         population_config=population_config,
-        breeding_strategy=breeding_strategy,
+        breeder=breeder,
+        initializer=initializer,
         elite_selector=elite_selector,
         bayesian_config=bayesian_config,
     )
@@ -445,31 +308,12 @@ def create_public_test_profile(
     gamma: float = 0.1,
     learning_rate: float = 0.05,
 ) -> PublicTestProfile:
-    """
-    Create a public/ground-truth test profile.
-
-    This factory configures fixed tests from the dataset:
-    - Very high reliability (low alpha = 0.001)
-    - Used for anchoring code beliefs
-    - No breeding or selection (fixed population)
-
-    Args:
-        alpha: P(pass | code correct, test incorrect) (default: 0.001, very reliable)
-        beta: P(pass | code incorrect, test correct) (default: 0.1)
-        gamma: P(pass | both incorrect) (default: 0.1)
-        learning_rate: Belief update learning rate (default: 0.05)
-
-    Returns:
-        PublicTestProfile with Bayesian configuration
-    """
-    bayesian_config = BayesianConfig(
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        learning_rate=learning_rate,
+    """Create a public/ground-truth test profile (fixed tests, no evolution)."""
+    return PublicTestProfile(
+        bayesian_config=BayesianConfig(
+            alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
+        )
     )
-
-    return PublicTestProfile(bayesian_config=bayesian_config)
 
 
 def create_agent_coder_code_profile(
@@ -479,61 +323,51 @@ def create_agent_coder_code_profile(
     llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
 ) -> CodeProfile:
+    """Create an AgentCoder (iterative repair) code profile.
+
+    Fixed population of 1, edit-only, stateful conversation history.
     """
-    Create an 'AgentCoder' style code profile (Iterative Repair).
-
-    This factory configures a single-agent evolution loop:
-    - Fixed Population Size = 1 (Linear Evolution)
-    - Stateful LLM Operator (maintains conversation history)
-    - Edit-only evolution (No mutation/crossover)
-    - Elitism = 0 (Offspring always replaces parent if valid)
-
-    Args:
-        llm_client: LLM client for code generation.
-        initial_prior: Initial probability for new code (default: 0.2).
-        llm_workers: Number of parallel workers for initialization (default: 1).
-        prob_assigner_strategy: Strategy for assigning probabilities (default: "min").
-
-    Returns:
-        CodeProfile configured for AgentCoder.
-    """
-    # 1. Enforce Linear Constraints
-    # AgentCoder works by modifying a single file iteratively.
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=1,
         max_population_size=1,
-        offspring_rate=1.0,  # 1 offspring replaces 1 parent
-        elitism_rate=0.0,  # No elitism, we rely on the loop
-        diversity_selection=False,  # Diversity irrelevant for size 1
+        offspring_rate=1.0,
+        elitism_rate=0.0,
+        diversity_selection=False,
     )
 
-    # 2. Create Stateful Operator
-    # Note: The Orchestrator MUST manage the lifecycle (reset_session) of this operator.
-    agent_operator = AgentCoderLLMOperator(
-        llm=llm_client, language_adapter=language_adapter
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
+    )
+    # AgentCoder never selects parents from a population (pop size is always 1)
+    parent_selector: RouletteWheelParentSelection[CodeIndividual] = (
+        RouletteWheelParentSelection()
     )
 
-    # 3. Configure Operations (Edit Only)
-    operator_rates = OperatorRatesConfig(operation_rates={"edit": 1.0})
+    edit_op = AgentCoderEditOperator(
+        llm=llm_client,
+        language_adapter=language_adapter,
+        parent_selector=parent_selector,
+        prob_assigner=prob_assigner,
+    )
 
-    # 4. Helpers
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy)
-
-    # 5. Create Strategy
-    breeding_strategy = AgentCoderBreedingStrategy(
-        operator=agent_operator,
-        op_rates_config=operator_rates,
-        pop_config=population_config,
-        probability_assigner=prob_assigner,
+    breeder: Breeder[CodeIndividual] = Breeder(
+        registered_operators=[RegisteredOperator(weight=1.0, operator=edit_op)],
         llm_workers=llm_workers,
     )
 
-    # 6. Selector (TopK is sufficient/fastest for size 1)
+    initializer = AgentCoderInitializer(
+        llm=llm_client,
+        language_adapter=language_adapter,
+        pop_config=population_config,
+        edit_operator=edit_op,  # shares conversation history
+    )
+
     elite_selector: IEliteSelectionStrategy[CodeIndividual] = TopKEliteSelector()
 
     return CodeProfile(
         population_config=population_config,
-        breeding_strategy=breeding_strategy,
+        breeder=breeder,
+        initializer=initializer,
         elite_selector=elite_selector,
     )

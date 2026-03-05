@@ -332,7 +332,7 @@ class BallerinaTestAnalyzer:
         formatted_errors = "Compilation errors:\n"
         for block in blocks:
             # Indent block for readability
-            indented = "\n".join("  " + l for l in block.split("\n"))
+            indented = "\n".join("  " + line for line in block.split("\n"))
             formatted_errors += indented + "\n  ---\n"
 
         # Truncate overly long formatted error text to keep logs readable

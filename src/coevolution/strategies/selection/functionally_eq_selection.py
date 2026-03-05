@@ -1,7 +1,7 @@
 import numpy as np
 from loguru import logger
 
-from ..breeding.differential_breeding import (
+from ..operators.differential_operators import (
     FunctionallyEquivGroup,
     IFunctionallyEquivalentCodeSelector,
 )

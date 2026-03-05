@@ -1,6 +1,6 @@
 # /path/to/your/project/mock.py
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 import numpy as np
 from loguru import logger
@@ -23,15 +23,10 @@ from .interfaces import (
     IEliteSelectionStrategy,
     IExecutionSystem,
     IInteractionLedger,
-    InitialInput,
     InteractionData,
-    IOperator,
     IParentSelectionStrategy,
-    IPopulationInitializer,
     IProbabilityAssigner,
     Operation,
-    OperatorOutput,
-    OperatorResult,
     ParentProbabilities,
     PopulationConfig,
     Problem,
@@ -290,17 +285,18 @@ MockSelectionStrategy = MockParentSelectionStrategy
 class MockProbabilityAssigner(IProbabilityAssigner):
     """Mocks the assignment of probabilities to new offspring."""
 
+    initial_prior: float
+
+    def __init__(self, initial_prior: float = 0.5) -> None:
+        self.initial_prior = initial_prior
+
     def assign_probability(
         self,
         operation: Operation,
         parent_probs: ParentProbabilities,
-        initial_prior: float,
     ) -> float:
-        if operation == OPERATION_INITIAL:
-            return initial_prior
-        if not parent_probs:
-            return initial_prior
-        # New individuals inherit the mean probability of their parents
+        if operation == OPERATION_INITIAL or not parent_probs:
+            return self.initial_prior
         return float(np.mean(parent_probs))
 
 

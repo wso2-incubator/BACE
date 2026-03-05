@@ -1,10 +1,12 @@
-"""Shared base classes and helpers for LLM-backed operators.
+"""Shared base classes and helpers for LLM-backed evolutionary operators.
 
 This module contains protocol definitions, retry decorator factory,
-and the `BaseLLMOperator` class which handles LLM invocation and basic
-extraction helpers. Concrete operators import these utilities.
+and the `BaseLLMService` class which handles LLM invocation and basic
+extraction helpers. It also provides `BaseEvolutionaryOperator` and 
+`BaseLLMInitializer` to unify dependency injection for concrete operators.
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Callable, Protocol, Tuple, Type
 
 from loguru import logger
@@ -16,7 +18,14 @@ from tenacity import (
     wait_exponential,
 )
 
+from coevolution.core.interfaces.base import BaseIndividual
+from coevolution.core.interfaces.config import PopulationConfig
+from coevolution.core.interfaces.context import CoevolutionContext
 from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.operators import IOperator
+from coevolution.core.interfaces.probability import IProbabilityAssigner
+from coevolution.core.interfaces.selection import IParentSelectionStrategy
+from coevolution.core.interfaces.initializer import IPopulationInitializer
 from coevolution.utils.prompt_manager import get_prompt_manager
 
 
@@ -44,24 +53,19 @@ class LLMGenerationError(Exception):
 
 
 class UnsupportedOperatorInput(Exception):
-    """Raised when an operator receives an input DTO it doesn't support.
-
-    Message includes the input type and (if available) the declared operation.
-    """
+    """Raised when an operator receives an input it doesn't support."""
 
     def __init__(self, input_type: type, operation: str | None = None) -> None:
         op_part = f" for operation '{operation}'" if operation else ""
         super().__init__(
             f"Unsupported operator input type: {getattr(input_type, '__name__', str(input_type))}{op_part}. "
-            "The operation might not be supported by this operator."
         )
 
 
-class BaseLLMOperator:
-    """Abstract base class providing LLM orchestration for genetic operators.
+class BaseLLMService:
+    """Abstract base service providing LLM orchestration.
 
-    Concrete operators should subclass this and implement specific
-    prompt construction and postprocessing.
+    Handles prompt rendering tools, LLM calls, retries, and code block extraction.
     """
 
     def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
@@ -109,10 +113,62 @@ class BaseLLMOperator:
         return response
 
 
+class BaseEvolutionaryOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
+    """
+    Base class for all genetic operators (Mutation, Crossover, Edit).
+
+    Combines LLM generation capabilities with standard evolutionary dependencies:
+    parent selection and probability assignment. Concrete classes implement `execute()`.
+    """
+
+    def __init__(
+        self,
+        llm: ILanguageModel,
+        language_adapter: ILanguage,
+        parent_selector: IParentSelectionStrategy[T],
+        prob_assigner: IProbabilityAssigner,
+    ) -> None:
+        super().__init__(llm, language_adapter)
+        self.parent_selector = parent_selector
+        self.prob_assigner = prob_assigner
+
+    @abstractmethod
+    def operation_name(self) -> str:
+        ...
+
+    @abstractmethod
+    def execute(self, context: CoevolutionContext) -> list[T]:
+        ...
+
+
+class BaseLLMInitializer[T: BaseIndividual](BaseLLMService, IPopulationInitializer[T], ABC):
+    """
+    Base class for all population initializers (Gen 0 creators).
+
+    Combines LLM generation capabilities with a population configuration.
+    Concrete classes implement `initialize()`.
+    """
+
+    def __init__(
+        self,
+        llm: ILanguageModel,
+        language_adapter: ILanguage,
+        pop_config: PopulationConfig,
+    ) -> None:
+        super().__init__(llm, language_adapter)
+        self.pop_config = pop_config
+
+    @abstractmethod
+    def initialize(self, problem: Any) -> list[T]:
+        ...
+
+
 __all__ = [
     "ILanguageModel",
     "llm_retry",
     "LLMGenerationError",
     "UnsupportedOperatorInput",
-    "BaseLLMOperator",
+    "BaseLLMService",
+    "BaseEvolutionaryOperator",
+    "BaseLLMInitializer",
 ]
