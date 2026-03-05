@@ -1,15 +1,8 @@
-"""LLM service for differential test discovery.
+"""DifferentialLLMOperator — LLM service for differential test discovery.
 
-DifferentialLLMOperator is a plain LLM service (not an IOperator).
-It is injected into DifferentialDiscoveryOperator and provides two services:
-
-1. generate_script(dto) — ask the LLM to write a Python input-generator script
-   that surfaces divergences between two equivalent code snippets.
-
-2. get_test_method_from_io(...) — convert a (input, expected_output) pair into
-   a pytest-style test function using the language adapter.
-
-Input generator scripts are always Python regardless of the target language.
+This is NOT an IOperator. It is an internal service injected into
+DifferentialDiscoveryOperator. Moved from strategies/operators/ to this
+population-centric location.
 """
 
 from __future__ import annotations
@@ -26,9 +19,12 @@ from coevolution.core.interfaces.language import (
 )
 from infrastructure.languages import PythonLanguage
 
-from .base_llm_service import BaseLLMService, ILanguageModel, LLMGenerationError, llm_retry
-
-OPERATION_DISCOVERY: str = "discovery"
+from coevolution.strategies.llm_base import (
+    BaseLLMService,
+    ILanguageModel,
+    LLMGenerationError,
+    llm_retry,
+)
 
 
 class DifferentialInputOutput(TypedDict):
@@ -69,14 +65,7 @@ class DifferentialLLMOperator(BaseLLMService):
 
     @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
     def generate_script(self, dto: DifferentialGenScriptInput) -> str:
-        """Ask the LLM to write a Python input-generator script.
-
-        The script, when executed, will generate inputs that expose divergences
-        between the two equivalent code snippets.
-
-        Returns:
-            A ready-to-run Python generator script string.
-        """
+        """Ask the LLM to write a Python input-generator script."""
         logger.info(
             f"Generating differential script for {len(dto.passing_test_cases)} existing tests"
         )
@@ -104,17 +93,7 @@ class DifferentialLLMOperator(BaseLLMService):
         code_parent_ids: list[str],
         io_index: int,
     ) -> str:
-        """Convert a divergence IO pair into a pytest-style test function.
-
-        Args:
-            starter_code: The function signature to test.
-            io_pairs: Exactly one (input, expected_output) pair.
-            code_parent_ids: IDs of the winner and loser code individuals.
-            io_index: Index within the current divergence batch (for unique naming).
-
-        Returns:
-            A pytest function string.
-        """
+        """Convert a divergence IO pair into a pytest-style test function."""
         if not io_pairs:
             raise ValueError("io_pairs cannot be empty")
         if len(io_pairs) != 1:
@@ -135,5 +114,4 @@ __all__ = [
     "DifferentialInputOutput",
     "DifferentialGenScriptInput",
     "DifferentialLLMOperator",
-    "OPERATION_DISCOVERY",
 ]

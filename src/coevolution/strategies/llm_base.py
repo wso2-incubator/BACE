@@ -2,8 +2,9 @@
 
 This module contains protocol definitions, retry decorator factory,
 and the `BaseLLMService` class which handles LLM invocation and basic
-extraction helpers. It also provides `BaseEvolutionaryOperator` and 
-`BaseLLMInitializer` to unify dependency injection for concrete operators.
+extraction helpers. It also provides `BaseLLMOperator` (the LLM-backed
+extension of IOperator) and `BaseLLMInitializer` to unify dependency
+injection for concrete operators.
 """
 
 from abc import ABC, abstractmethod
@@ -113,12 +114,13 @@ class BaseLLMService:
         return response
 
 
-class BaseEvolutionaryOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
+class BaseLLMOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
     """
-    Base class for all genetic operators (Mutation, Crossover, Edit).
+    Base class for all LLM-backed genetic operators (Mutation, Crossover, Edit).
 
-    Combines LLM generation capabilities with standard evolutionary dependencies:
-    parent selection and probability assignment. Concrete classes implement `execute()`.
+    Extends IOperator with LLM generation capabilities and standard evolutionary
+    dependencies: parent selection and probability assignment.
+    Concrete classes implement `execute()`.
     """
 
     def __init__(
@@ -169,6 +171,6 @@ __all__ = [
     "LLMGenerationError",
     "UnsupportedOperatorInput",
     "BaseLLMService",
-    "BaseEvolutionaryOperator",
+    "BaseLLMOperator",
     "BaseLLMInitializer",
 ]

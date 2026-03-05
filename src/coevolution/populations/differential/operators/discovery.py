@@ -1,91 +1,33 @@
-"""Concrete Differential Test Operator.
-
-DifferentialDiscoveryOperator is a self-sufficient IOperator that runs
-the full 3-phase discovery pipeline in a single execute() call:
-
-  Phase 1 (CPU)   — select unexplored functionally-equivalent code pairs
-  Phase 2 (I/O)   — generate an input-generator script per pair via LLM
-  Phase 3 (CPU)   — run scripts through the sandbox, collect divergences,
-                    and convert them to TestIndividuals
-
-One call to execute() may return 0..N TestIndividuals depending on how many
-divergences are found.  The Breeder accumulates across calls until it reaches
-num_offsprings; because execute() typically returns several tests at once the
-Breeder will often satisfy its quota in fewer calls than for code/unittest.
-
-The explored-pairs cache lives on the operator instance between generations.
-The Breeder/Orchestrator should call reset_explored_pairs() between problems.
-"""
+"""DifferentialDiscoveryOperator — full 3-phase differential pipeline."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from random import sample
-from typing import Any, Optional, Protocol, cast
+from typing import Optional, cast
 
 from loguru import logger
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
-from coevolution.core.interfaces import (
-    CoevolutionContext,
-    Problem,
-)
+from coevolution.core.interfaces import CoevolutionContext
 from coevolution.core.interfaces.language import ILanguage
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
 
-from .base_llm_service import (
-    BaseEvolutionaryOperator,
-    BaseLLMInitializer,
-    ILanguageModel,
+from coevolution.strategies.llm_base import BaseLLMOperator, ILanguageModel
+from ..types import (
+    OPERATION_DISCOVERY,
+    DifferentialResult,
+    FunctionallyEquivGroup,
+    IDifferentialFinder,
+    IFunctionallyEquivalentCodeSelector,
 )
-from .differential_llm_operator import (
+from .llm_operator import (
     DifferentialGenScriptInput,
     DifferentialInputOutput,
     DifferentialLLMOperator,
 )
-
-OPERATION_DISCOVERY: str = "discovery"
-
-
-# ---------------------------------------------------------------------------
-# Shared data types (moved here from differential_breeding.py)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class FunctionallyEquivGroup:
-    """A cluster of code individuals that behave identically on current tests."""
-    code_individuals: list[CodeIndividual]
-    passing_test_individuals: dict[str, list[TestIndividual]]
-
-
-class IFunctionallyEquivalentCodeSelector(Protocol):
-    """Protocol for finding groups of code that behave identically."""
-    def select_functionally_equivalent_codes(
-        self,
-        coevolution_context: CoevolutionContext,
-    ) -> list[FunctionallyEquivGroup]: ...
-
-
-@dataclass(frozen=True)
-class DifferentialResult:
-    """A single input where two code snippets produced different output."""
-    input_data: dict[str, Any]
-    output_a: Any
-    output_b: Any
-
-
-class IDifferentialFinder(Protocol):
-    """Protocol for the execution sandbox."""
-    def find_differential(
-        self,
-        code_a_snippet: str,
-        code_b_snippet: str,
-        input_generator_script: str,
-        limit: int = 10,
-    ) -> list[DifferentialResult]: ...
 
 
 @dataclass
@@ -101,12 +43,7 @@ class _DiscoveryContext:
     generator_script: str
 
 
-# ---------------------------------------------------------------------------
-# Operator
-# ---------------------------------------------------------------------------
-
-
-class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
+class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
     """Self-sufficient operator for differential test discovery.
 
     On each execute() call runs the full 3-phase pipeline and returns
@@ -150,18 +87,13 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         logger.info("DifferentialDiscoveryOperator: explored-pairs cache reset")
 
     def execute(self, context: CoevolutionContext) -> list[TestIndividual]:
-        """Run the full 3-phase differential discovery pipeline.
-
-        Returns 0..N TestIndividuals per call. The Breeder accumulates
-        across calls until its num_offsprings target is reached.
-        """
+        """Run the full 3-phase differential discovery pipeline."""
         # Phase 1: candidate pair selection
         candidates = self._select_candidates(context)
         if not candidates:
             logger.warning("No unexplored pairs found for differential discovery")
             return []
 
-        # Process up to max_pairs_per_group candidates per call
         selected = candidates[: self.max_pairs_per_group]
         logger.info(f"Phase 1: selected {len(selected)} pairs for this execution cycle")
 
@@ -172,10 +104,8 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
             return []
 
         # Phase 3: run divergence finding
-        # Output naturally bounded by max_pairs_per_group × divergence_limit × 2 scenarios
         offspring = self._batch_find_divergences(context, discovery_ctxs)
         logger.info(f"Phase 3: produced {len(offspring)} test individuals")
-
         return offspring
 
     # ------------------------------------------------------------------
@@ -187,12 +117,10 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         logger.info(f"Found {len(groups)} functionally equivalent code groups")
 
         candidates_by_group: list[list[_DiscoveryTask]] = []
-
         for group in groups:
             inds = group.code_individuals
             if len(inds) < 2:
                 continue
-
             sorted_inds = sorted(inds, key=lambda x: x.id)
             group_pairs: list[_DiscoveryTask] = [
                 _DiscoveryTask(code_a=sorted_inds[i], code_b=sorted_inds[j], group=group)
@@ -200,7 +128,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
                 for j in range(i + 1, len(sorted_inds))
                 if not self._is_pair_explored(sorted_inds[i], sorted_inds[j])
             ]
-
             if group_pairs:
                 group_pairs.sort(
                     key=lambda t: t.code_a.probability + t.code_b.probability,
@@ -216,11 +143,10 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
                     interleaved.append(group_list.pop(0))
                 if not group_list:
                     candidates_by_group.remove(group_list)
-
         return interleaved
 
     # ------------------------------------------------------------------
-    # Phase 2: Script generation (I/O-bound, parallel)
+    # Phase 2: Script generation
     # ------------------------------------------------------------------
 
     def _generate_single_script(
@@ -235,7 +161,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
             passing = sample(
                 all_snippets, min(len(all_snippets), self.num_passing_tests_to_sample)
             )
-
             dto = DifferentialGenScriptInput(
                 equivalent_code_snippet_1=task.code_a.snippet,
                 equivalent_code_snippet_2=task.code_b.snippet,
@@ -254,7 +179,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         self, context: CoevolutionContext, tasks: list[_DiscoveryTask]
     ) -> list[_DiscoveryContext]:
         results: list[_DiscoveryContext] = []
-
         with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             future_to_task = {
                 executor.submit(self._generate_single_script, context, task): task
@@ -269,11 +193,10 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
                         results.append(ctx)
                 except Exception as e:
                     logger.error(f"Script generation task failed: {e}")
-
         return results
 
     # ------------------------------------------------------------------
-    # Phase 3: Divergence finding (CPU-bound, sequential — finder handles internal parallelism)
+    # Phase 3: Divergence finding
     # ------------------------------------------------------------------
 
     def _batch_find_divergences(
@@ -282,7 +205,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         discovery_ctxs: list[_DiscoveryContext],
     ) -> list[TestIndividual]:
         offspring: list[TestIndividual] = []
-
         for ctx in discovery_ctxs:
             task = ctx.task
             try:
@@ -296,7 +218,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
                     logger.debug(f"No divergences for pair ({task.code_a.id}, {task.code_b.id})")
                     continue
 
-                # Probability: inherit from existing differential test parents if any
                 parent_probs = [
                     ind.probability
                     for tests in task.group.passing_test_individuals.values()
@@ -317,7 +238,6 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
                 )
             except Exception as e:
                 logger.error(f"Divergence finding failed for {task.code_a.id} vs {task.code_b.id}: {e}")
-
         return offspring
 
     # ------------------------------------------------------------------
@@ -331,11 +251,7 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         divergences: list[DifferentialResult],
         probability: float,
     ) -> list[TestIndividual]:
-        """Create two competing TestIndividuals per divergence (one per hypothesis).
-
-        Scenario A: code_a's outputs are correct.
-        Scenario B: code_b's outputs are correct.
-        """
+        """Create two competing TestIndividuals per divergence (one per hypothesis)."""
         code_a, code_b = task.code_a, task.code_b
         results: list[TestIndividual] = []
 
@@ -377,25 +293,4 @@ class DifferentialDiscoveryOperator(BaseEvolutionaryOperator[TestIndividual]):
         return tuple(sorted((a.id, b.id))) in self._explored_pairs_cache
 
 
-# ---------------------------------------------------------------------------
-# Initializer (differential always starts empty)
-# ---------------------------------------------------------------------------
-
-
-class DifferentialInitializer(BaseLLMInitializer[TestIndividual]):
-    """Differential tests start empty — Gen 0 is always []."""
-
-    def initialize(self, problem: Problem) -> list[TestIndividual]:
-        logger.debug("DifferentialInitializer: starting with empty population")
-        return []
-
-
-__all__ = [
-    "DifferentialDiscoveryOperator",
-    "DifferentialInitializer",
-    "FunctionallyEquivGroup",
-    "IFunctionallyEquivalentCodeSelector",
-    "DifferentialResult",
-    "IDifferentialFinder",
-    "OPERATION_DISCOVERY",
-]
+__all__ = ["DifferentialDiscoveryOperator"]
