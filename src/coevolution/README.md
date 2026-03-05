@@ -7,14 +7,15 @@ This module implements Bayesian coevolution algorithms with various selection st
 ```
 coevolution/
 ├── __init__.py          # Main module interface
-├── orchestrator.py      # Main algorithm coordinator
-├── bayesian.py          # Bayesian belief updating logic
-├── evaluation.py        # Observation matrix generation
-├── operators.py         # LLM-based genetic operators
-├── population.py        # Population management
-├── selection.py         # Selection strategies for evolutionary algorithms
-├── config.py            # Configuration parameters
-├── README.md           # This file
+├── core/                # Core interfaces, state, and foundational entities
+├── populations/         # Population implementations (code, unittest, differential, agent_coder)
+├── strategies/          # Shared evolutionary algorithms (breeding, probability, selection)
+├── factories/           # Builders and wiring logic (Orchestrator, Profiles)
+├── dataset/             # Benchmark problem definitions and loading
+├── services/            # Supporting services (Feedback, Testing)
+├── prompts/             # Prompt templates for LLM interactions
+├── utils/               # Helper utilities
+└── README.md            # This file
 ```
 
 ## Quick Start

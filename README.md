@@ -43,7 +43,10 @@ See [configs/README.md](configs/README.md) for details and examples on composing
 
 ## Project Structure (high level)
 
-- **Source:** `src/` — core modules and implementations. See [src/coevolution/README.md](src/coevolution/README.md) for the coevolution module details.
+- **Source:** `src/` — core modules and implementations.
+  - `src/coevolution/populations/` — Population types (code, unittest, differential, agent_coder) and their specialized LLM operators.
+  - `src/coevolution/strategies/` — Shared infrastructure (breeding, selection, probability).
+  - See [src/coevolution/README.md](src/coevolution/README.md) for deeper details.
 - **Configs:** `configs/` — modular YAML files used by `main.py`.
 - **Data:** `data/` — datasets, generations, and evaluation outputs.
 - **Scripts & experiments:** `experiments/` and `scripts/` — helpers and notebooks for running experiments and analyses.
