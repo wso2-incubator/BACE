@@ -22,11 +22,11 @@ from tenacity import (
 from coevolution.core.interfaces.base import BaseIndividual
 from coevolution.core.interfaces.config import PopulationConfig
 from coevolution.core.interfaces.context import CoevolutionContext
+from coevolution.core.interfaces.initializer import IPopulationInitializer
 from coevolution.core.interfaces.language import ILanguage
 from coevolution.core.interfaces.operators import IOperator
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
-from coevolution.core.interfaces.initializer import IPopulationInitializer
 from coevolution.utils.prompt_manager import get_prompt_manager
 
 
@@ -51,16 +51,6 @@ class ILanguageModel(Protocol):
 
 class LLMGenerationError(Exception):
     """Raised when LLM fails to generate output."""
-
-
-class UnsupportedOperatorInput(Exception):
-    """Raised when an operator receives an input it doesn't support."""
-
-    def __init__(self, input_type: type, operation: str | None = None) -> None:
-        op_part = f" for operation '{operation}'" if operation else ""
-        super().__init__(
-            f"Unsupported operator input type: {getattr(input_type, '__name__', str(input_type))}{op_part}. "
-        )
 
 
 class BaseLLMService:
@@ -135,15 +125,15 @@ class BaseLLMOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
         self.prob_assigner = prob_assigner
 
     @abstractmethod
-    def operation_name(self) -> str:
-        ...
+    def operation_name(self) -> str: ...
 
     @abstractmethod
-    def execute(self, context: CoevolutionContext) -> list[T]:
-        ...
+    def execute(self, context: CoevolutionContext) -> list[T]: ...
 
 
-class BaseLLMInitializer[T: BaseIndividual](BaseLLMService, IPopulationInitializer[T], ABC):
+class BaseLLMInitializer[T: BaseIndividual](
+    BaseLLMService, IPopulationInitializer[T], ABC
+):
     """
     Base class for all population initializers (Gen 0 creators).
 
@@ -161,15 +151,13 @@ class BaseLLMInitializer[T: BaseIndividual](BaseLLMService, IPopulationInitializ
         self.pop_config = pop_config
 
     @abstractmethod
-    def initialize(self, problem: Any) -> list[T]:
-        ...
+    def initialize(self, problem: Any) -> list[T]: ...
 
 
 __all__ = [
     "ILanguageModel",
     "llm_retry",
     "LLMGenerationError",
-    "UnsupportedOperatorInput",
     "BaseLLMService",
     "BaseLLMOperator",
     "BaseLLMInitializer",

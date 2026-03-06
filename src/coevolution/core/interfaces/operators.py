@@ -32,11 +32,6 @@ class IOperator[T: BaseIndividual](Protocol):
           1. Selects context from CoevolutionContext (parents, failing tests, etc.)
           2. Calls LLM / performs transformation
           3. Assigns probabilities and wraps results into Individual objects
-
-        Raises:
-            OperatorContextError: If context is insufficient for this operation
-                (e.g. no failing tests available for EDIT). The Breeder will
-                catch this and retry with a different sampled operator.
         """
         ...
 

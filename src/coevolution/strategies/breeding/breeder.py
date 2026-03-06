@@ -21,14 +21,6 @@ if TYPE_CHECKING:
     from coevolution.core.interfaces.operators import IOperator
 
 
-class OperatorContextError(Exception):
-    """
-    Raised by an operator when context is insufficient to perform the operation.
-    e.g. no failing tests available for an EDIT operation.
-    The Breeder catches this and retries with a different sampled operation.
-    """
-
-
 @dataclass
 class RegisteredOperator[T: BaseIndividual]:
     """Pairs an operator with its sampling weight."""
@@ -109,8 +101,6 @@ class Breeder[T: BaseIndividual]:
                         consecutive_failures = 0
                     else:
                         consecutive_failures += 1
-                except OperatorContextError:
-                    consecutive_failures += 1
                 except Exception as e:
                     logger.warning(f"Operator failed: {e}")
                     consecutive_failures += 1
@@ -147,8 +137,6 @@ class Breeder[T: BaseIndividual]:
                                 for f in futures:
                                     f.cancel()
                                 break
-                    except OperatorContextError:
-                        pass
                     except Exception as e:
                         logger.warning(f"Operator failed: {e}")
 
@@ -160,4 +148,4 @@ class Breeder[T: BaseIndividual]:
         return offspring[:num_offsprings]
 
 
-__all__ = ["Breeder", "RegisteredOperator", "OperatorContextError"]
+__all__ = ["Breeder", "RegisteredOperator"]
