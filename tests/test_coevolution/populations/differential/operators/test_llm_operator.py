@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,6 +10,7 @@ from coevolution.populations.differential.operators.llm_operator import (
     DifferentialInputOutput,
     DifferentialLLMOperator,
 )
+from coevolution.strategies.llm_base import ILanguageModel
 
 
 @pytest.fixture
@@ -24,6 +26,13 @@ def mock_language() -> MagicMock:
     """Returns a mock language adapter."""
     lang = MagicMock(spec=ILanguage)
     lang.language = "python"
+    # Return a string that satisfies the "f(" check if it's there
+    lang.generate_test_case.side_effect = (
+        lambda input_str,
+        output_str,
+        starter_code,
+        test_number: f"def test_case_{test_number}():\n    assert f({input_str}) == {output_str}"
+    )
     lang.extract_code_blocks.side_effect = (
         lambda x: [x]
         if "```python" not in x
