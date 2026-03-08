@@ -21,7 +21,6 @@ from coevolution.core.interfaces import (
     EvolutionSchedule,
     IEliteSelectionStrategy,
     PopulationConfig,
-    Problem,
     PublicTestProfile,
     TestProfile,
 )
@@ -301,7 +300,7 @@ def main() -> None:
         execution_system=components["execution_system"],
         bayesian_system=components["bayesian_system"],
         ledger_factory=mock_ledger_factory,
-        language_adapter=PythonLanguage(),
+        composer=PythonLanguage().composer,
     )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION RUN")
