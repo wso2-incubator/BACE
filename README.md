@@ -63,4 +63,8 @@ See [configs/README.md](configs/README.md) for details and examples on composing
 - Coevolution implementation and API: [src/coevolution/README.md](src/coevolution/README.md)
 - Config documentation: [configs/README.md](configs/README.md)
 
-If you'd like, I can also add a short example workflow or a minimal example config.
+### Developer Guides
+
+- [How to Add a Language](src/infrastructure/languages/HOW_TO_ADD_A_LANGUAGE.md)
+- [How to Add an Operator](src/coevolution/populations/ADDING_AN_OPERATOR.md)
+- [How to Add a Population](src/coevolution/populations/ADDING_A_POPULATION.md)
