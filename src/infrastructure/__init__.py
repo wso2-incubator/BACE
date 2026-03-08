@@ -2,7 +2,7 @@
 Common utilities shared across all APR projects.
 
 This module provides shared functionality including:
-- Code Preprocessing: For parsing, analyzing, transforming, and building test code
+- Languages: Python and Ballerina language adapters (via infrastructure.languages)
 - LLMClient: Unified interface for different LLM providers
 - SafeCodeSandbox: Safe execution environment for generated code
 - Enhanced typing: EvaluationResult, BasicExecutionResult
@@ -10,31 +10,20 @@ This module provides shared functionality including:
 - LLM Factory: Factory functions for creating LLM instances
 - Coevolution: Bayesian coevolution algorithms with selection strategies
 
-Usage (Hierarchical Imports):
-    # Code preprocessing - use submodules
-    from infrastructure.code_preprocessing.parsers import extract_code_block_from_response
-    from infrastructure.code_preprocessing.analyzers import parse_code_structure
-    from infrastructure.code_preprocessing.builders import build_test_script_for_humaneval
-    from infrastructure.code_preprocessing import CodeParsingError  # Exceptions available directly
-
-    # Coevolution - use submodules (now at root)
-    from coevolution.config import CoevolutionConfig
-    from coevolution.bayesian import initialize_prior_beliefs
-    from coevolution.operators import CodeOperator, TestOperator
-
-    # Other utilities available directly
+Usage:
+    from infrastructure.languages import PythonLanguage, BallerinaLanguage
     from infrastructure import LLMClient, SafeCodeSandbox
     from infrastructure.config import BaseConfig, ExperimentConfig
+    from coevolution.core.interfaces import LanguageParsingError, LanguageTransformationError
 """
 
+from coevolution.core.exceptions import (
+    LanguageError,
+    LanguageParsingError,
+    LanguageTransformationError,
+)
 from coevolution.core.interfaces.data import EvaluationResult
 
-# Only re-export exceptions from code_preprocessing for convenience
-from .code_preprocessing import (
-    CodeParsingError,
-    CodeProcessingError,
-    CodeTransformationError,
-)
 from .llm_client import LLMClient
 from .sandbox import (
     BasicExecutionResult,
@@ -50,10 +39,10 @@ from .sandbox import (
 )
 
 __all__ = [
-    # Code Preprocessing - Exceptions only
-    "CodeProcessingError",
-    "CodeParsingError",
-    "CodeTransformationError",
+    # Language-agnostic exceptions (moved from code_preprocessing)
+    "LanguageError",
+    "LanguageParsingError",
+    "LanguageTransformationError",
     # Core utilities
     "LLMClient",
     "SafeCodeSandbox",

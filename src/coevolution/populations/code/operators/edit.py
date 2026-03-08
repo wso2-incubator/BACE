@@ -10,21 +10,19 @@ from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import (
     OPERATION_EDIT,
     CoevolutionContext,
+    LanguageParsingError,
+    LanguageTransformationError,
 )
 from coevolution.core.interfaces.language import ILanguage
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
-from infrastructure.code_preprocessing.exceptions import (
-    CodeParsingError,
-    CodeTransformationError,
-)
-
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     ILanguageModel,
     LLMGenerationError,
     llm_retry,
 )
+
 from ._helpers import _CodeLLMHelpers
 
 type TestPopulationType = str
@@ -60,7 +58,14 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
     def operation_name(self) -> str:
         return OPERATION_EDIT
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
         code_pop = context.code_population
         problem = context.problem
@@ -118,4 +123,5 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         ]
 
 
+__all__ = ["CodeEditOperator", "IFailingTestSelector"]
 __all__ = ["CodeEditOperator", "IFailingTestSelector"]

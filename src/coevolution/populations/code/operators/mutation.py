@@ -8,17 +8,15 @@ from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import (
     OPERATION_MUTATION,
     CoevolutionContext,
+    LanguageParsingError,
+    LanguageTransformationError,
 )
-from infrastructure.code_preprocessing.exceptions import (
-    CodeParsingError,
-    CodeTransformationError,
-)
-
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     LLMGenerationError,
     llm_retry,
 )
+
 from ._helpers import _CodeLLMHelpers
 
 
@@ -28,7 +26,14 @@ class CodeMutationOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
     def operation_name(self) -> str:
         return OPERATION_MUTATION
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
         code_pop = context.code_population
         problem = context.problem
@@ -47,7 +52,9 @@ class CodeMutationOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         )
         response = self._generate(prompt)
         mutated_code = self._extract_code_block(response)
-        mutated_code = self._validated_code(mutated_code, problem.starter_code, "mutation")
+        mutated_code = self._validated_code(
+            mutated_code, problem.starter_code, "mutation"
+        )
 
         probability = self.prob_assigner.assign_probability(
             OPERATION_MUTATION, [parent.probability]
@@ -63,4 +70,5 @@ class CodeMutationOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         ]
 
 
+__all__ = ["CodeMutationOperator"]
 __all__ = ["CodeMutationOperator"]

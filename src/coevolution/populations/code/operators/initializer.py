@@ -10,21 +10,19 @@ from loguru import logger
 from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import (
     OPERATION_INITIAL,
+    LanguageParsingError,
+    LanguageTransformationError,
     PopulationConfig,
     Problem,
 )
 from coevolution.core.interfaces.language import ILanguage
-from infrastructure.code_preprocessing.exceptions import (
-    CodeParsingError,
-    CodeTransformationError,
-)
-
 from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
     LLMGenerationError,
     llm_retry,
 )
+
 from ._helpers import _CodeLLMHelpers
 
 
@@ -83,12 +81,19 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 for b in blocks:
                     self._validated_code(b, problem.starter_code, "initial")
                 if len(blocks) != batch_size:
-                    raise ValueError(f"Expected {batch_size} code blocks, got {len(blocks)}")
+                    raise ValueError(
+                        f"Expected {batch_size} code blocks, got {len(blocks)}"
+                    )
                 return blocks
 
-        logger.info(f"CodeInitializer: initializing {target} individuals in {num_batches} batches")
+        logger.info(
+            f"CodeInitializer: initializing {target} individuals in {num_batches} batches"
+        )
         with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
-            futures = [executor.submit(_generate_batch, self.init_batch_size) for _ in range(num_batches)]
+            futures = [
+                executor.submit(_generate_batch, self.init_batch_size)
+                for _ in range(num_batches)
+            ]
             for future in as_completed(futures):
                 try:
                     snippets = future.result()
@@ -108,10 +113,19 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
             raise RuntimeError("CodeInitializer: failed to generate any individuals")
         return individuals[:target]
 
-    def _init_with_planning(self, problem: Problem, target: int) -> list[CodeIndividual]:
+    def _init_with_planning(
+        self, problem: Problem, target: int
+    ) -> list[CodeIndividual]:
         """Two-phase: plan per individual, then code from plan."""
 
-        @llm_retry((ValueError, CodeParsingError, CodeTransformationError, LLMGenerationError))
+        @llm_retry(
+            (
+                ValueError,
+                LanguageParsingError,
+                LanguageTransformationError,
+                LLMGenerationError,
+            )
+        )
         def _make_plan() -> str:
             prompt = self.prompt_manager.render_prompt(
                 "operators/code/plan_generate.j2",
@@ -120,7 +134,14 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
             )
             return self._generate(prompt).strip()
 
-        @llm_retry((ValueError, CodeParsingError, CodeTransformationError, LLMGenerationError))
+        @llm_retry(
+            (
+                ValueError,
+                LanguageParsingError,
+                LanguageTransformationError,
+                LLMGenerationError,
+            )
+        )
         def _code_from_plan(plan: str) -> tuple[str, str]:
             prompt = self.prompt_manager.render_prompt(
                 "operators/code/plan_to_code.j2",
@@ -168,4 +189,5 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
         return individuals[:target]
 
 
+__all__ = ["CodeInitializer"]
 __all__ = ["CodeInitializer"]

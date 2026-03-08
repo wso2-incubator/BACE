@@ -8,17 +8,15 @@ from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import (
     OPERATION_CROSSOVER,
     CoevolutionContext,
+    LanguageParsingError,
+    LanguageTransformationError,
 )
-from infrastructure.code_preprocessing.exceptions import (
-    CodeParsingError,
-    CodeTransformationError,
-)
-
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     LLMGenerationError,
     llm_retry,
 )
+
 from ._helpers import _CodeLLMHelpers
 
 
@@ -28,7 +26,14 @@ class CodeCrossoverOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
     def operation_name(self) -> str:
         return OPERATION_CROSSOVER
 
-    @llm_retry((ValueError, CodeParsingError, CodeTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
         code_pop = context.code_population
         problem = context.problem
@@ -64,4 +69,5 @@ class CodeCrossoverOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         ]
 
 
+__all__ = ["CodeCrossoverOperator"]
 __all__ = ["CodeCrossoverOperator"]

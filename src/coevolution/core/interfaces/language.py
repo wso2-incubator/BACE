@@ -5,17 +5,19 @@ Protocol for language-specific operations.
 
 from typing import Any, Protocol
 
+from coevolution.core.exceptions import (
+    LanguageError,
+    LanguageParsingError,
+    LanguageTransformationError,
+)
 
-class LanguageParsingError(Exception):
-    """Raised when code cannot be parsed by the language toolchain."""
-
-    pass
-
-
-class LanguageTransformationError(Exception):
-    """Raised when code transformation or composition fails."""
-
-    pass
+# Re-export so existing callers that import from this module are unaffected.
+__all__ = [
+    "ILanguage",
+    "LanguageError",
+    "LanguageParsingError",
+    "LanguageTransformationError",
+]
 
 
 class ILanguage(Protocol):
@@ -113,6 +115,10 @@ class ILanguage(Protocol):
         ...
 
     def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]:
+        """
+        Parses the raw output from a test input generator into a list of input dictionaries.
+        """
+        ...
         """
         Parses the raw output from a test input generator into a list of input dictionaries.
         """
