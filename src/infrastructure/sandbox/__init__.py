@@ -28,8 +28,7 @@ Usage:
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
 
-from .adapters.ballerina import BallerinaSandbox
-from .adapters.python import PythonSandbox
+from .adapters.generic import SubprocessSandbox
 from .analyzer import PytestXmlAnalyzer
 from .ballerina_analyzer import BallerinaTestAnalyzer
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
@@ -42,25 +41,19 @@ from .utils import (
 )
 
 # Alias for backward compatibility
-SafeCodeSandbox = PythonSandbox
+SafeCodeSandbox = SubprocessSandbox
 
 
 def create_sandbox(config: SandboxConfig) -> ISandbox:
     """
-    Factory function to create the appropriate sandbox adapter based on config.
+    Factory function to create a generic subprocess sandbox adapter.
     """
-    if config.language == "python":
-        return PythonSandbox(config)
-    elif config.language == "ballerina":
-        return BallerinaSandbox(config)
-    else:
-        raise ValueError(f"Unsupported sandbox language: {config.language}")
+    return SubprocessSandbox(config)
 
 
 __all__ = [
     # Core classes
-    "PythonSandbox",
-    "BallerinaSandbox",
+    "SubprocessSandbox",
     "SafeCodeSandbox",
     "ISandbox",
     "TestExecutor",

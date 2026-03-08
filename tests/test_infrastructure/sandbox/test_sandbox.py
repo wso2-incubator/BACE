@@ -14,12 +14,14 @@ from infrastructure.sandbox import (
 )
 
 
-class TestSafeCodeSandbox:
-    """Test cases for SafeCodeSandbox."""
+class TestTestExecutorWrapper:
+    """Test cases for the high-level TestExecutor."""
 
     def setup_method(self) -> None:
         """Set up test fixtures."""
-        self.sandbox = SafeCodeSandbox()
+        from infrastructure.sandbox.types import SandboxConfig
+        config = SandboxConfig(timeout=30)
+        self.executor = TestExecutor(config=config)
 
     def test_basic_execution(self) -> None:
         """Test basic code execution via execute_code."""
@@ -30,7 +32,7 @@ def add(a, b):
 result = add(2, 3)
 print(result)
 """
-        result = self.sandbox.execute_code(code)
+        result = self.executor.execute_code(code)
         assert result.success
         assert "5" in result.output
         assert result.error is None or result.error == ""
@@ -42,7 +44,7 @@ print(result)
 def broken_function(
     print("This has a syntax error")
 """
-        result = self.sandbox.execute_code(code)
+        result = self.executor.execute_code(code)
         assert not result.success
         assert "SyntaxError" in result.error or "syntax" in result.error.lower()
 
@@ -52,8 +54,10 @@ def broken_function(
 while True:
     pass
 """
-        sandbox = SafeCodeSandbox(timeout=1)  # 1 second timeout
-        result = sandbox.execute_code(code)
+        from infrastructure.sandbox.types import SandboxConfig
+        config = SandboxConfig(timeout=1)
+        executor = TestExecutor(config=config)
+        result = executor.execute_code(code)
         assert not result.success
         assert result.timeout is True
 
@@ -63,7 +67,7 @@ while True:
 def test_addition():
     assert 2 + 2 == 4
 """
-        result = self.sandbox.execute_test_script(test_script)
+        result = self.executor.execute_test_script(test_script)
         assert isinstance(result, EvaluationResult)
         assert result.status == "passed"
         assert result.execution_time >= 0
@@ -74,7 +78,7 @@ def test_addition():
 def test_failing():
     assert 1 + 1 == 3
 """
-        result = self.sandbox.execute_test_script(test_script)
+        result = self.executor.execute_test_script(test_script)
         assert result.status == "failed"
         assert result.error_log is not None
         assert "AssertionError" in result.error_log
@@ -85,9 +89,7 @@ def test_failing():
 def test_error():
     raise ValueError("Something went wrong")
 """
-        result = self.sandbox.execute_test_script(test_script)
-        # In pytest, caught exceptions are generally "failed" in JUnit XML if it's an assertion or "error" if it's outside.
-        # But our analyzer maps it.
+        result = self.executor.execute_test_script(test_script)
         assert result.status in ["failed", "error"]
         assert result.error_log is not None
         assert "ValueError: Something went wrong" in result.error_log
@@ -98,7 +100,7 @@ def test_error():
 def test_broken(:
     pass
 """
-        result = self.sandbox.execute_test_script(test_script)
+        result = self.executor.execute_test_script(test_script)
         assert result.status == "error"
         assert result.error_log is not None
         assert (
@@ -113,7 +115,7 @@ import nonexistent_module_xyz
 def test_something():
     pass
 """
-        result = self.sandbox.execute_test_script(test_script)
+        result = self.executor.execute_test_script(test_script)
         assert result.status == "error"
         assert result.error_log is not None
         assert "no module named" in result.error_log.lower()
@@ -125,10 +127,10 @@ import time
 def test_slow():
     time.sleep(5)
 """
-        # Set a short test method timeout
-        sandbox = SafeCodeSandbox(timeout=10, test_method_timeout=2)
-        result = sandbox.execute_test_script(test_script)
-        # Use simple error status as different environments might report it differently (pytest timeout vs our own)
+        from infrastructure.sandbox.types import SandboxConfig
+        config = SandboxConfig(timeout=10, test_method_timeout=2)
+        executor = TestExecutor(config=config)
+        result = executor.execute_test_script(test_script)
         assert result.status == "error" or result.status == "failed"
         assert result.error_log is not None
         assert (

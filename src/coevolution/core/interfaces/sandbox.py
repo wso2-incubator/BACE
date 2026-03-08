@@ -30,26 +30,15 @@ class ISandbox(Protocol):
         """
         ...
 
-    def execute_code(self, code: str) -> BasicExecutionResult:
+    def execute_command(self, cmd: list[str], cwd: str | None = None) -> BasicExecutionResult:
         """
-        Execute arbitrary code safely and return basic execution result.
+        Execute an arbitrary command safely in the sandbox.
 
         Args:
-            code: Source code to execute
+            cmd: Command arguments list (e.g., ["python3", "-c", "print(1)"])
+            cwd: Optional working directory for the command
 
         Returns:
             BasicExecutionResult with success status, output, errors, and timing
-        """
-        ...
-
-    def execute_test_script(self, test_script: str) -> EvaluationResult:
-        """
-        Execute a test script and return detailed test analysis.
-
-        Args:
-            test_script: Complete test script with tests and implementation
-
-        Returns:
-            EvaluationResult with detailed test results, pass/fail counts, and analysis
         """
         ...

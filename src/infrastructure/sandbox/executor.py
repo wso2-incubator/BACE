@@ -6,8 +6,10 @@ from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
+from coevolution.core.interfaces.language import ILanguage
 
-from .adapters.python import PythonSandbox
+from infrastructure.languages.python import PythonLanguage
+from .adapters.generic import SubprocessSandbox
 from .types import BasicExecutionResult, SandboxConfig
 
 
@@ -24,6 +26,7 @@ class TestExecutor:
     def __init__(
         self,
         sandbox_adapter: Optional[ISandbox] = None,
+        language_adapter: Optional[ILanguage] = None,
         config: Optional[SandboxConfig] = None,
         **kwargs: Any,
     ):
@@ -49,35 +52,60 @@ class TestExecutor:
                     language_executable=kwargs.get("python_executable"),
                     test_method_timeout=kwargs.get("test_method_timeout"),
                 )
-            self.sandbox = PythonSandbox(config or SandboxConfig())
+            self.sandbox = SubprocessSandbox(config or SandboxConfig())
+
+        self.language_adapter = language_adapter or PythonLanguage()
 
         logger.debug(
             f"Initialized TestExecutor with sandbox: {type(self.sandbox).__name__}"
         )
 
     def execute_test_script(self, test_script: str) -> EvaluationResult:
-        """
-        Execute a test script and return a single test result.
-
-        Args:
-            test_script: The test script to execute
-
-        Returns:
-            EvaluationResult with detailed analysis
-        """
+        """Execute a test script and return a single test result."""
+        import os
+        import tempfile
+        
         logger.debug(f"TestExecutor: executing test script (len={len(test_script)})")
 
-        # Delegate to sandbox
-        return self.sandbox.execute_test_script(test_script)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            script_path = os.path.join(tmpdir, f"test_script{file_ext}")
+            xml_path = os.path.join(tmpdir, "results.xml")
+
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(test_script)
+
+            kwargs = {}
+            if hasattr(self.sandbox, "config") and hasattr(self.sandbox.config, "test_method_timeout"):
+                kwargs["timeout"] = self.sandbox.config.test_method_timeout
+
+            cmd = self.language_adapter.get_test_command(script_path, xml_path, **kwargs)
+            raw_result = self.sandbox.execute_command(cmd, cwd=tmpdir)
+
+            xml_content = None
+            if os.path.exists(xml_path):
+                with open(xml_path, "r", encoding="utf-8") as f:
+                    xml_content = f.read()
+
+            result: EvaluationResult = self.language_adapter.parse_test_results(raw_result, xml_content)
+        
+        return result
 
     def execute_code(self, code: str) -> BasicExecutionResult:
-        """
-        Execute arbitrary code safely (delegates to sandbox).
-
-        Args:
-            code: Source code to execute
-
-        Returns:
-            BasicExecutionResult
-        """
-        return self.sandbox.execute_code(code)
+        """Execute arbitrary code safely."""
+        import os
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
+            
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(code)
+            
+            if hasattr(self.language_adapter, "get_execution_command"):
+                cmd = self.language_adapter.get_execution_command(script_path)
+            else:
+                cmd = ["python", script_path]
+                
+            return self.sandbox.execute_command(cmd, cwd=tmpdir)

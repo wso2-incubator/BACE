@@ -57,12 +57,25 @@ def _execute_atomic_interaction(
 
         # Compose the complete test script using the language adapter
         script = language_adapter.compose_test_script(code_snippet, test_snippet)
-        # logger.debug(
-        #     f"Worker (PID {os.getpid()}): Composed test script for interaction ({code_idx}, {test_idx}):\n{script}"
-        # )
 
-        # Execute in sandbox
-        result: EvaluationResult = sandbox.execute_test_script(script)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = ".bal" if getattr(language_adapter, "language", "") == "ballerina" else ".py"
+            script_path = os.path.join(tmpdir, f"test_script{file_ext}")
+            xml_path = os.path.join(tmpdir, "results.xml")
+
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script)
+
+            cmd = language_adapter.get_test_command(script_path, xml_path)
+            raw_result = sandbox.execute_command(cmd, cwd=tmpdir)
+
+            xml_content = None
+            if os.path.exists(xml_path):
+                with open(xml_path, "r", encoding="utf-8") as f:
+                    xml_content = f.read()
+
+            result: EvaluationResult = language_adapter.parse_test_results(raw_result, xml_content)
 
         # logger.debug(
         #     f"Worker (PID {os.getpid()}): Executed interaction ({code_idx}, {test_idx}) with result: {result}"

@@ -43,10 +43,19 @@ def _worker_entry(
             script = language_adapter.compose_evaluation_script(
                 snippet, str(test_input_formatted)
             )
-            exec_result = sandbox.execute_code(script)
-            if exec_result.error:
-                return None
-            return exec_result.output.strip()
+            import tempfile
+            import os
+            with tempfile.TemporaryDirectory() as tmpdir:
+                file_ext = ".bal" if getattr(language_adapter, "language", "") == "ballerina" else ".py"
+                script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
+                with open(script_path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                
+                cmd = language_adapter.get_execution_command(script_path)
+                exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
+                if exec_result.error:
+                    return None
+                return exec_result.output.strip()
 
         out_a = run_snippet(code_a_snippet)
         out_b = run_snippet(code_b_snippet)
@@ -92,7 +101,17 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning("Input generator script produced invalid Python code.")
             return []
 
-        output = self._python_sandbox.execute_code(generator_script).output.strip()
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = os.path.join(tmpdir, "generator.py")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(generator_script)
+            
+            cmd = self.python.get_execution_command(script_path)
+            exec_result = self._python_sandbox.execute_command(cmd, cwd=tmpdir)
+            output = exec_result.output.strip()
+
         test_inputs = self.python.parse_test_inputs(output)
         if not test_inputs:
             logger.warning("No test inputs generated or failed to parse generator output.")
@@ -137,8 +156,17 @@ class DifferentialFinder(IDifferentialFinder):
         script = self.language_adapter.compose_evaluation_script(
             code, str(test_input_formatted)
         )
-        exec_result = self._local_sandbox.execute_code(script)
-        return None if exec_result.error else exec_result.output.strip()
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script)
+            
+            cmd = self.language_adapter.get_execution_command(script_path)
+            exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
+            return None if exec_result.error else exec_result.output.strip()
 
     def _find_differential_parallel(
         self, code_a: str, code_b: str, inputs: list[dict[str, Any]], limit: int
