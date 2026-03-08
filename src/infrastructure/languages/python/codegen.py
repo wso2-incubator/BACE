@@ -8,7 +8,6 @@ from coevolution.core.interfaces.language import (
     LanguageTransformationError,
 )
 from .ast import (
-    MethodSignature,
     remove_main_block,
 )
 

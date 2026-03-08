@@ -1,13 +1,11 @@
 """Generic subprocess implementation of the ISandbox protocol."""
 
-import os
 import shutil
 import subprocess
 import tempfile
 import time
 from typing import Optional
 
-from loguru import logger
 
 from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.memory import MemoryMonitor

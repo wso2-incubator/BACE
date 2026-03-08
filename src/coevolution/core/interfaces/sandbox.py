@@ -7,7 +7,6 @@ from typing import Protocol
 
 from coevolution.core.interfaces.data import (
     BasicExecutionResult,
-    EvaluationResult,
     SandboxConfig,
 )
 
