@@ -4,8 +4,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from coevolution.core.interfaces.language import ILanguage
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.services.execution import ExecutionSystem, _execute_atomic_interaction
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
 
 # --- Fixtures ---
@@ -75,7 +77,7 @@ class TestExecutionSystemLogic:
         into the (N_code x N_test) matrix.
         """
         code_pop, test_pop = mock_populations
-        system = ExecutionSystem(basic_config, enable_multiprocessing=False)
+        system = ExecutionSystem(basic_config, language_adapter=PythonLanguage(), enable_multiprocessing=False)
 
         # We mock the atomic executor to return a specific pattern
         # Let's say: Code 0 passes everything, Code 1 fails everything.
@@ -89,6 +91,7 @@ class TestExecutionSystemLogic:
                 code_snippet: str,
                 test_snippet: str,
                 config: SandboxConfig,
+                adapter: ILanguage,
             ) -> tuple[int, int, EvaluationResult]:
                 status: Literal["passed"] | Literal["failed"] = (
                     "passed" if c_idx == 0 else "failed"
@@ -123,12 +126,12 @@ class TestWorkerResilience:
         """
         # We simulate a catastrophic failure in the sandbox creation
         with patch(
-            "infrastructure.sandbox.SafeCodeSandbox.from_config"
+            "coevolution.services.execution.create_sandbox"
         ) as mock_sandbox:
             mock_sandbox.side_effect = RuntimeError("Docker Daemon unresponsive")
 
             c_idx, t_idx, result = _execute_atomic_interaction(
-                0, 0, "code", "test", basic_config
+                0, 0, "code", "test", basic_config, PythonLanguage()
             )
 
             assert result.status == "error"
@@ -148,7 +151,7 @@ class TestIntegrationConcurrency:
         # NOTE: For this test to run in a real suite, we need the SandboxConfig
         # to be pickleable. We verify that here.
         system = ExecutionSystem(
-            basic_config, enable_multiprocessing=True, cpu_workers=2
+            basic_config, language_adapter=PythonLanguage(), enable_multiprocessing=True, cpu_workers=2
         )
 
         # We patch the sandbox inside the worker process to avoid needing real Docker

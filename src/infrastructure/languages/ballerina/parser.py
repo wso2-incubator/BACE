@@ -24,8 +24,8 @@ MAIN_PATTERN = re.compile(
 
 
 def is_syntax_valid(code: str) -> bool:
-    """Validate Ballerina syntax (stubbed for now)."""
-    return True
+    """Validate Ballerina syntax (basic check)."""
+    return basic_syntax_check(code)
 
 
 def basic_syntax_check(code: str) -> bool:
