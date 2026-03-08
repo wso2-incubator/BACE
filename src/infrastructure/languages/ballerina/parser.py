@@ -5,7 +5,6 @@ import re
 from typing import Any, Dict, List
 
 from loguru import logger
-from coevolution.core.interfaces.language import LanguageParsingError
 
 
 # Regex patterns heavily used in parsing
