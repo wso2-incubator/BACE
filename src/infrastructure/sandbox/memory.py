@@ -2,15 +2,12 @@
 
 import threading
 import time
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+import psutil
 
 if TYPE_CHECKING:
     import subprocess
-
-try:
-    import psutil
-except ImportError:
-    psutil = None
 
 
 class MemoryMonitor:
@@ -26,9 +23,6 @@ class MemoryMonitor:
         self.thread: Optional[threading.Thread] = None
 
     def _monitor(self) -> None:
-        if not psutil:
-            return
-
         try:
             p = psutil.Process(self.proc.pid)
         except psutil.NoSuchProcess:

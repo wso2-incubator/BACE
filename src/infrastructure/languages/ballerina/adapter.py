@@ -58,7 +58,7 @@ class BallerinaLanguage(ILanguage):
         """
         Parses the raw stdout/JSON returned by the SubprocessSandbox into a structured EvaluationResult.
         """
-        return self._test_analyzer.analyze_test_results(raw_result)
+        return self._test_analyzer.analyze_test_output(raw_result)
 
     # ------------------------------------------------------------------
     # ILanguage interface implementations

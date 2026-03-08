@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from datasets import load_dataset
+from datasets import load_dataset  # type: ignore[import-untyped]
 from loguru import logger
 
 from ..core.interfaces import Problem, Test

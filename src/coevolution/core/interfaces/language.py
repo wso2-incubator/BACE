@@ -114,11 +114,31 @@ class ILanguage(Protocol):
         """
         ...
 
-    def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]:
+    def get_execution_command(self, file_path: str) -> list[str]:
         """
-        Parses the raw output from a test input generator into a list of input dictionaries.
+        Provide the command to execute a script in this language.
         """
         ...
+
+    def get_test_command(
+        self, test_file_path: str, result_xml_path: str, **kwargs: Any
+    ) -> list[str]:
+        """
+        Provide the command to execute tests for a script in this language.
+        """
+        ...
+
+    def parse_test_results(
+        self, raw_result: Any, xml_content: str | None = None
+    ) -> Any:
+        # raw_result is BasicExecutionResult, return is EvaluationResult
+        # We use Any here to avoid circular imports in the interface layer
+        """
+        Parse raw execution results into a structured EvaluationResult.
+        """
+        ...
+
+    def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]:
         """
         Parses the raw output from a test input generator into a list of input dictionaries.
         """
