@@ -84,4 +84,3 @@ class ProblemRephraser:
 
 
 __all__ = ["ProblemRephraser"]
-__all__ = ["ProblemRephraser"]
