@@ -3,13 +3,13 @@
 # Differential test execution sandbox
 differential:
   timeout: 10
-  max_memory_mb: 100
+  max_memory_mb: 256
   max_output_size: 10000000
 
 # Main execution sandbox
 execution:
   timeout: 500
-  max_memory_mb: 100
+  max_memory_mb: 256
   max_output_size: 10000000
   test_method_timeout: 60
 

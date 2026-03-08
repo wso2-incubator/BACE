@@ -12,6 +12,7 @@ from loguru import logger
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.analyzer import PytestXmlAnalyzer
+from infrastructure.sandbox.memory import MemoryMonitor
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
@@ -127,33 +128,52 @@ class PythonSandbox(ISandbox):
 
             try:
                 start_time = time.time()
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     [self.python_executable, script_path],
-                    capture_output=capture_output,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.config.timeout,
                     cwd=tmpdir,
                 )
+
+                monitor = MemoryMonitor(proc, self.config.max_memory_mb)
+                monitor.start()
+
+                try:
+                    stdout_data, stderr_data = proc.communicate(timeout=self.config.timeout)
+                finally:
+                    monitor.stop()
+
                 execution_time = time.time() - start_time
 
+                if monitor.exceeded:
+                    return BasicExecutionResult(
+                        success=False,
+                        output="",
+                        error=f"Memory limit exceeded ({self.config.max_memory_mb} MB)",
+                        execution_time=execution_time,
+                        timeout=False,
+                        return_code=-1,
+                    )
+
                 stdout = (
-                    result.stdout[: self.config.max_output_size]
-                    if result.stdout
+                    stdout_data[: self.config.max_output_size]
+                    if stdout_data
                     else ""
                 )
                 stderr = (
-                    result.stderr[: self.config.max_output_size]
-                    if result.stderr
+                    stderr_data[: self.config.max_output_size]
+                    if stderr_data
                     else ""
                 )
 
                 return BasicExecutionResult(
-                    success=result.returncode == 0,
+                    success=proc.returncode == 0,
                     output=stdout,
                     error=stderr,
                     execution_time=execution_time,
                     timeout=False,
-                    return_code=result.returncode,
+                    return_code=proc.returncode,
                 )
 
             except subprocess.TimeoutExpired:
@@ -201,14 +221,35 @@ class PythonSandbox(ISandbox):
                 if self.config.test_method_timeout is not None:
                     cmd.extend(["--timeout", str(self.config.test_method_timeout)])
 
-                proc_result = subprocess.run(
+                proc = subprocess.Popen(
                     cmd,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.config.timeout,
                     cwd=tmpdir,
                 )
+
+                monitor = MemoryMonitor(proc, self.config.max_memory_mb)
+                monitor.start()
+
+                try:
+                    stdout_data, stderr_data = proc.communicate(timeout=self.config.timeout)
+                finally:
+                    monitor.stop()
+
                 execution_time = time.time() - start_time
+
+                if monitor.exceeded:
+                    basic_result = BasicExecutionResult(
+                        success=False,
+                        output="",
+                        error=f"Test execution exceeded memory limit of {self.config.max_memory_mb} MB",
+                        execution_time=execution_time,
+                        timeout=False,
+                        return_code=-1,
+                    )
+                    analyzer = PytestXmlAnalyzer()
+                    return analyzer.analyze_pytest_xml(None, basic_result)
 
                 xml_content = None
                 if os.path.exists(xml_path):
@@ -216,12 +257,12 @@ class PythonSandbox(ISandbox):
                         xml_content = f.read()
 
                 basic_result = BasicExecutionResult(
-                    success=proc_result.returncode == 0,
-                    output=proc_result.stdout,
-                    error=proc_result.stderr,
+                    success=proc.returncode == 0,
+                    output=stdout_data,
+                    error=stderr_data,
                     execution_time=execution_time,
                     timeout=False,
-                    return_code=proc_result.returncode,
+                    return_code=proc.returncode,
                 )
 
                 analyzer = PytestXmlAnalyzer()

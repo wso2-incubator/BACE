@@ -135,7 +135,7 @@ class SandboxConfig:
 
     # 1. Resource Constraints
     timeout: int = 30
-    max_memory_mb: int = 100
+    max_memory_mb: int = 256
     max_output_size: int = 10000
 
     # 2. Environment Settings

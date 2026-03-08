@@ -13,6 +13,7 @@ from infrastructure.sandbox.ballerina_analyzer import (
     BallerinaTestAnalyzer,
     truncate_preserve_tail,
 )
+from infrastructure.sandbox.memory import MemoryMonitor
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
 
 
@@ -53,33 +54,52 @@ class BallerinaSandbox(ISandbox):
 
             try:
                 start_time = time.time()
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     [self.bal_executable, "run", "--offline"],
-                    capture_output=capture_output,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.config.timeout,
                     cwd=tmpdir,
                 )
+
+                monitor = MemoryMonitor(proc, self.config.max_memory_mb)
+                monitor.start()
+
+                try:
+                    stdout_data, stderr_data = proc.communicate(timeout=self.config.timeout)
+                finally:
+                    monitor.stop()
+
                 execution_time = time.time() - start_time
 
+                if monitor.exceeded:
+                    return BasicExecutionResult(
+                        success=False,
+                        output="",
+                        error=f"Ballerina execution exceeded memory limit of {self.config.max_memory_mb} MB",
+                        execution_time=execution_time,
+                        timeout=False,
+                        return_code=-1,
+                    )
+
                 stdout = (
-                    result.stdout[: self.config.max_output_size]
-                    if result.stdout
+                    stdout_data[: self.config.max_output_size]
+                    if stdout_data
                     else ""
                 )
                 stderr = (
-                    result.stderr[: self.config.max_output_size]
-                    if result.stderr
+                    stderr_data[: self.config.max_output_size]
+                    if stderr_data
                     else ""
                 )
 
                 return BasicExecutionResult(
-                    success=result.returncode == 0,
+                    success=proc.returncode == 0,
                     output=stdout,
                     error=stderr,
                     execution_time=execution_time,
                     timeout=False,
-                    return_code=result.returncode,
+                    return_code=proc.returncode,
                 )
 
             except subprocess.TimeoutExpired:
@@ -117,36 +137,57 @@ class BallerinaSandbox(ISandbox):
             try:
                 start_time = time.time()
                 # Run bal test with JUnit reporter
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     [self.bal_executable, "test", "--offline"],
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.config.timeout,
                     cwd=tmpdir,
                 )
+                
+                monitor = MemoryMonitor(proc, self.config.max_memory_mb)
+                monitor.start()
+
+                try:
+                    stdout_data, stderr_data = proc.communicate(timeout=self.config.timeout)
+                finally:
+                    monitor.stop()
+
                 execution_time = time.time() - start_time
+
+                if monitor.exceeded:
+                    basic_result = BasicExecutionResult(
+                        success=False,
+                        output="",
+                        error=f"Ballerina test exceeded memory limit of {self.config.max_memory_mb} MB",
+                        execution_time=execution_time,
+                        timeout=False,
+                        return_code=-1,
+                    )
+                    analyzer = BallerinaTestAnalyzer()
+                    return analyzer.analyze_test_output(basic_result)
 
                 # Truncate stdout/stderr to avoid propagating huge raw logs
                 logger.debug(
                     "bal test produced stdout_len=%d stderr_len=%d",
-                    len(result.stdout or ""),
-                    len(result.stderr or ""),
+                    len(stdout_data or ""),
+                    len(stderr_data or ""),
                 )
 
                 stdout = truncate_preserve_tail(
-                    result.stdout, self.config.max_output_size
+                    stdout_data, self.config.max_output_size
                 )
                 stderr = truncate_preserve_tail(
-                    result.stderr, self.config.max_output_size
+                    stderr_data, self.config.max_output_size
                 )
 
                 basic_result = BasicExecutionResult(
-                    success=result.returncode == 0,
+                    success=proc.returncode == 0,
                     output=stdout,
                     error=stderr,
                     execution_time=execution_time,
                     timeout=False,
-                    return_code=result.returncode,
+                    return_code=proc.returncode,
                 )
 
                 # Use Ballerina-specific analyzer

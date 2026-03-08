@@ -24,7 +24,7 @@ def create_safe_test_environment(
     """
     config = config or SandboxConfig(
         timeout=300,
-        max_memory_mb=100,
+        max_memory_mb=256,
         max_output_size=1_000_000,
         test_method_timeout=30,
     )
@@ -48,7 +48,7 @@ def create_test_executor(
     if not sandbox_adapter:
         config = config or SandboxConfig(
             timeout=180,
-            max_memory_mb=100,
+            max_memory_mb=256,
             max_output_size=1_000_000,
             test_method_timeout=30,
         )
