@@ -5,8 +5,8 @@ This test verifies that when a method returns str (like LCB STDIN problems),
 the differential test generation preserves string outputs correctly.
 """
 
-from coevolution.strategies.breeding.differential_finder import DifferentialFinder
-from coevolution.strategies.operators.differential_llm_operator import (
+from coevolution.populations.differential.finder import DifferentialFinder
+from coevolution.populations.differential.operators.llm_operator import (
     DifferentialLLMOperator,
 )
 from infrastructure.sandbox import SandboxConfig

@@ -17,7 +17,8 @@ from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.language import ILanguage
-from infrastructure.languages.utils import python_ast, python_codegen
+from . import ast as python_ast
+from . import codegen as python_codegen
 from infrastructure.sandbox.analyzer import PytestXmlAnalyzer
 from infrastructure.sandbox.types import BasicExecutionResult
 

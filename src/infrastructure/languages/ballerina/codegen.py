@@ -5,7 +5,7 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from infrastructure.languages.utils.ballerina_parser import (
+from .parser import (
     FUNCTION_PATTERN,
     remove_main_block,
 )

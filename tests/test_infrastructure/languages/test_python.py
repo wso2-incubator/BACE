@@ -9,7 +9,9 @@ from coevolution.core.interfaces import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from infrastructure.languages.python import PythonLanguage, _MethodSignature
+from infrastructure.languages.python import PythonLanguage
+from infrastructure.languages.python import ast as python_ast
+from infrastructure.languages.python.ast import MethodSignature as _MethodSignature
 
 
 @pytest.fixture
@@ -209,7 +211,7 @@ class TestParseMethodSignature:
                 def sol(self, input_str: str) -> str:
                     pass
         """)
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.class_name == "Solution"
         assert sig.method_name == "sol"
         assert sig.params == [("input_str", "str")]
@@ -218,7 +220,7 @@ class TestParseMethodSignature:
 
     def test_standalone_function(self, adapter: PythonLanguage) -> None:
         starter = "def add(x: int, y: int) -> int:\n    pass\n"
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.class_name is None
         assert sig.method_name == "add"
         assert sig.params == [("x", "int"), ("y", "int")]
@@ -231,7 +233,7 @@ class TestParseMethodSignature:
                 def add(self, x: int, y: int) -> int:
                     pass
         """)
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.class_name == "Solution"
         assert sig.method_name == "add"
         assert sig.params == [("x", "int"), ("y", "int")]
@@ -242,7 +244,7 @@ class TestParseMethodSignature:
             class Solution:
                 def calculate(self, value: float) -> float:
         """)
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.method_name == "calculate"
         assert sig.params == [("value", "float")]
 
@@ -252,7 +254,7 @@ class TestParseMethodSignature:
                 def process(self, data):
                     pass
         """)
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.params == [("data", None)]
         assert sig.return_type is None
 
@@ -260,7 +262,7 @@ class TestParseMethodSignature:
         with pytest.raises(
             LanguageParsingError, match="No class or function definition found"
         ):
-            adapter._parse_method_signature("# just a comment\nx = 5\n")
+            python_ast.parse_method_signature("# just a comment\nx = 5\n")
 
     def test_class_without_instance_method_raises_error(
         self, adapter: PythonLanguage
@@ -272,7 +274,7 @@ class TestParseMethodSignature:
                     pass
         """)
         with pytest.raises(LanguageParsingError, match="No instance method found"):
-            adapter._parse_method_signature(starter)
+            python_ast.parse_method_signature(starter)
 
     def test_multiple_methods_selects_first(self, adapter: PythonLanguage) -> None:
         starter = textwrap.dedent("""
@@ -282,7 +284,7 @@ class TestParseMethodSignature:
                 def second(self, y: str) -> str:
                     pass
         """)
-        sig = adapter._parse_method_signature(starter)
+        sig = python_ast.parse_method_signature(starter)
         assert sig.method_name == "first"
 
 

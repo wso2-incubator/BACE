@@ -16,7 +16,8 @@ from loguru import logger
 
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.language import ILanguage
-from infrastructure.languages.utils import ballerina_codegen, ballerina_parser
+from . import codegen as ballerina_codegen
+from . import parser as ballerina_parser
 from infrastructure.sandbox.ballerina_analyzer import BallerinaTestAnalyzer
 from infrastructure.sandbox.types import BasicExecutionResult
 

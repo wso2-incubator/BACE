@@ -7,7 +7,7 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from infrastructure.languages.utils.python_ast import (
+from .ast import (
     MethodSignature,
     remove_main_block,
 )

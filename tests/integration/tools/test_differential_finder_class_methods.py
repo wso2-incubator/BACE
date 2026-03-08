@@ -5,7 +5,7 @@ These tests verify that the entire differential testing workflow works correctly
 for class methods with various parameter types, not just simple input_str/output_str.
 """
 
-from coevolution.strategies.breeding.differential_finder import DifferentialFinder
+from coevolution.populations.differential.finder import DifferentialFinder
 from infrastructure.sandbox import SandboxConfig
 
 

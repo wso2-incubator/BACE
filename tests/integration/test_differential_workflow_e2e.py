@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from coevolution.strategies.breeding.differential_finder import DifferentialFinder
-from coevolution.strategies.operators.differential_llm_operator import (
+from coevolution.populations.differential.finder import DifferentialFinder
+from coevolution.populations.differential.operators.llm_operator import (
     DifferentialLLMOperator,
 )
 from infrastructure.sandbox import SandboxConfig
