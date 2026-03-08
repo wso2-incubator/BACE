@@ -3,7 +3,7 @@
 import numpy as np
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import IScriptComposer
 from coevolution.utils import logging as logging_utils
 
 # Import concrete classes
@@ -61,7 +61,7 @@ class Orchestrator:
         execution_system: IExecutionSystem,
         bayesian_system: IBeliefUpdater,
         ledger_factory: LedgerFactory,
-        language_adapter: ILanguage,
+        composer: IScriptComposer,
     ) -> None:
         """
         Initializes the orchestrator by storing all injected dependencies.
@@ -128,7 +128,7 @@ class Orchestrator:
         self.execution_system = execution_system
         self.bayesian_system = bayesian_system
         self.ledger_factory = ledger_factory
-        self.language_adapter = language_adapter
+        self.composer = composer
 
     def run(self, problem: Problem) -> tuple[CodePopulation, dict[str, TestPopulation]]:
         """
@@ -687,7 +687,7 @@ class Orchestrator:
         """
         # Generate test functions directly from test cases
         test_functions = [
-            self.language_adapter.generate_test_case(
+            self.composer.generate_test_case(
                 tc.input, tc.output, starter_code, idx + 1
             )
             for idx, tc in enumerate(test_cases)

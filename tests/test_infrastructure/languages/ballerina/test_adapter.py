@@ -39,7 +39,7 @@ function add(int a, int b) returns int {
     return a + b;
 }
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
         assert "function add" in blocks[0]
         assert "return a + b" in blocks[0]
@@ -62,7 +62,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
     return true;
 }
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         # With syntax validation disabled (always returns True), both blocks should be extracted
         assert len(blocks) == 2
         assert "Solution 1" in blocks[0]
@@ -70,7 +70,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
 
     def test_extracts_capital_ballerina_block(self, adapter: BallerinaLanguage) -> None:
         response = "```Ballerina\nfunction test() {}\n```"
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
 
     def test_returns_empty_list_when_no_blocks(
@@ -78,7 +78,7 @@ function hasCloseElements2(float[] numbers, float threshold) returns boolean {
     ) -> None:
         # falling back to entire response as code is only done if valid
         response = "This is just text with no code blocks."
-        assert adapter.extract_code_blocks(response) == []
+        assert adapter.parser.extract_code_blocks(response) == []
 
     def test_skips_invalid_syntax_blocks(self, adapter: BallerinaLanguage) -> None:
         """With syntax validation disabled, all blocks are extracted."""
@@ -90,7 +90,7 @@ function valid() {
     return;
 }
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         # With syntax validation enabled, only the valid block is extracted
         assert len(blocks) == 1
         assert "function valid" in blocks[0]
@@ -102,5 +102,5 @@ function first() {}
 ```ballerina
 function second() {}
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 2

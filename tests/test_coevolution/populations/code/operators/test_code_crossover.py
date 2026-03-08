@@ -42,14 +42,14 @@ def mock_parents():
 @pytest.fixture
 def crossover_operator():
     mock_llm = MagicMock()
-    mock_language = MagicMock()
-    mock_language.language = "python"
+    mock_parser = MagicMock()
     mock_selector = MagicMock()
     mock_prob = MagicMock()
 
     op = CodeCrossoverOperator(
         llm=mock_llm,
-        language_adapter=mock_language,
+        parser=mock_parser,
+        language_name="python",
         parent_selector=mock_selector,
         prob_assigner=mock_prob,
     )
@@ -60,7 +60,7 @@ def test_code_crossover_execute_success(crossover_operator, mock_context, mock_p
     # Setup
     crossover_operator.parent_selector.select_parents.return_value = mock_parents
     crossover_operator._llm.generate.return_value = "```python\nchild code\n```"
-    crossover_operator.language_adapter.extract_code_blocks.return_value = [
+    crossover_operator.parser.extract_code_blocks.return_value = [
         "child code"
     ]
     crossover_operator.prob_assigner.assign_probability.return_value = 0.5

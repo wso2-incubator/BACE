@@ -23,7 +23,7 @@ from coevolution.core.interfaces.base import BaseIndividual
 from coevolution.core.interfaces.config import PopulationConfig
 from coevolution.core.interfaces.context import CoevolutionContext
 from coevolution.core.interfaces.initializer import IPopulationInitializer
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.core.interfaces.operators import IOperator
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
@@ -59,12 +59,13 @@ class BaseLLMService:
     Handles prompt rendering tools, LLM calls, retries, and code block extraction.
     """
 
-    def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
+    def __init__(self, llm: ILanguageModel, parser: ICodeParser, language_name: str) -> None:
         self._llm = llm
-        self.language_adapter = language_adapter
-        self.prompt_manager = get_prompt_manager(language=language_adapter.language)
+        self.parser = parser
+        self.language_name = language_name
+        self.prompt_manager = get_prompt_manager(language=language_name)
         logger.debug(
-            f"Initialized {self.__class__.__name__} with prompt manager for {language_adapter.language}"
+            f"Initialized {self.__class__.__name__} with prompt manager for {language_name}"
         )
 
     @llm_retry(exception_types=(LLMGenerationError,))
@@ -98,7 +99,7 @@ class BaseLLMService:
         Returns:
             Extracted code block or the original response if no block found
         """
-        blocks = self.language_adapter.extract_code_blocks(response)
+        blocks = self.parser.extract_code_blocks(response)
         if blocks:
             return blocks[0]
         return response
@@ -116,11 +117,12 @@ class BaseLLMOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         parent_selector: IParentSelectionStrategy[T],
         prob_assigner: IProbabilityAssigner,
     ) -> None:
-        super().__init__(llm, language_adapter)
+        super().__init__(llm, parser, language_name)
         self.parent_selector = parent_selector
         self.prob_assigner = prob_assigner
 
@@ -144,10 +146,11 @@ class BaseLLMInitializer[T: BaseIndividual](
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         pop_config: PopulationConfig,
     ) -> None:
-        super().__init__(llm, language_adapter)
+        super().__init__(llm, parser, language_name)
         self.pop_config = pop_config
 
     @abstractmethod

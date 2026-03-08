@@ -3,143 +3,95 @@
 Protocol for language-specific operations.
 """
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from coevolution.core.exceptions import (
     LanguageError,
     LanguageParsingError,
     LanguageTransformationError,
 )
+from coevolution.core.interfaces.data import BasicExecutionResult, EvaluationResult
 
 # Re-export so existing callers that import from this module are unaffected.
 __all__ = [
+    "ICodeParser",
+    "IScriptComposer",
+    "ILanguageRuntime",
+    "ITestAnalyzer",
     "ILanguage",
     "LanguageError",
     "LanguageParsingError",
     "LanguageTransformationError",
 ]
 
+@runtime_checkable
+class ITestAnalyzer(Protocol):
+    """
+    Protocol for analyzing test execution output.
+    
+    Each language implementation should provide an analyzer that converts
+    raw execution results (stdout, stderr, XML) into a structured 
+    EvaluationResult.
+    """
 
+    def analyze(self, raw_result: BasicExecutionResult, **kwargs: Any) -> EvaluationResult:
+        """
+        Analyze a raw execution result and return an EvaluationResult.
+        
+        Args:
+            raw_result: The raw execution result.
+            **kwargs: Additional context, such as XML content for Python.
+            
+        Returns:
+            EvaluationResult: The structured test result.
+        """
+        ...
+
+@runtime_checkable
+class ICodeParser(Protocol):
+    """Protocol for static code analysis and parsing."""
+    def extract_code_blocks(self, response: str) -> list[str]: ...
+    def is_syntax_valid(self, code: str) -> bool: ...
+    def extract_test_names(self, test_code: str) -> list[str]: ...
+    def split_tests(self, test_code: str) -> list[str]: ...
+    def remove_main_block(self, code: str) -> str: ...
+    def normalize_code(self, code: str) -> str: ...
+    def contains_starter_code(self, code: str, starter_code: str) -> bool: ...
+    def get_structural_metadata(self, code: str) -> dict[str, Any]: ...
+    def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]: ...
+    def get_docstring(self, code: str) -> str: ...
+
+@runtime_checkable
+class IScriptComposer(Protocol):
+    """Protocol for generative script composition."""
+    def compose_test_script(self, code_snippet: str, test_snippet: str) -> str: ...
+    def compose_evaluation_script(self, code_snippet: str, input_data: str) -> str: ...
+    def generate_test_case(self, input_str: str, output_str: str, starter_code: str, test_number: int) -> str: ...
+    def compose_generator_script(self, generator_code: str, num_inputs: int) -> str: ...
+
+@runtime_checkable
+class ILanguageRuntime(Protocol):
+    """Protocol for language-specific runtime infrastructure."""
+    def get_execution_command(self, file_path: str) -> list[str]: ...
+    def get_test_command(self, test_file_path: str, result_xml_path: str, **kwargs: Any) -> list[str]: ...
+
+@runtime_checkable
 class ILanguage(Protocol):
     """
-    Protocol defining the contract for language-specific operations.
-
-    This allows the core evolution engine to remain language-agnostic by
-    delegating syntax-sensitive tasks (extraction, validation, composition)
-    to concrete language implementations.
+    Facade Protocol defining the aggregate contract for language operations.
+    Exposes specialized capabilities as properties.
     """
+    @property
+    def language(self) -> str: ...
 
     @property
-    def language(self) -> str:
-        """
-        Return the name of the programming language.
-        """
-        ...
+    def parser(self) -> ICodeParser: ...
 
-    def extract_code_blocks(self, response: str) -> list[str]:
-        """
-        Extract code snippets from a raw LLM response.
-        Should handle Markdown-style code blocks for the specific language.
-        """
-        ...
+    @property
+    def composer(self) -> IScriptComposer: ...
 
-    def is_syntax_valid(self, code: str) -> bool:
-        """
-        Check if the provided code snippet has valid syntax in the target language.
-        """
-        ...
+    @property
+    def runtime(self) -> ILanguageRuntime: ...
 
-    def extract_test_names(self, test_code: str) -> list[str]:
-        """
-        Extract the names of individual test cases from a test suite/snippet.
-        """
-        ...
-
-    def split_tests(self, test_code: str) -> list[str]:
-        """
-        Split a block of test code into individual standalone test functions/methods.
-        """
-        ...
-
-    def compose_test_script(self, code_snippet: str, test_snippet: str) -> str:
-        """
-        Combine a code snippet and a test snippet into a single executable script.
-        """
-        ...
-
-    def compose_evaluation_script(self, code_snippet: str, input_data: str) -> str:
-        """
-        Combine a code snippet and raw input data into an executable script
-        that prints the output of the function call.
-        """
-        ...
-
-    def generate_test_case(
-        self, input_str: str, output_str: str, starter_code: str, test_number: int
-    ) -> str:
-        """
-        Generate a test case string based on raw input and expected output data.
-        """
-        ...
-
-    def remove_main_block(self, code: str) -> str:
-        """
-        Remove the 'if __name__ == "__main__":' block (or equivalent) from code.
-        """
-        ...
-
-    def normalize_code(self, code: str) -> str:
-        """
-        Normalize code by removing comments, docstrings, and standardizing whitespace
-        to allow for structural comparison.
-        """
-        ...
-
-    def contains_starter_code(self, code: str, starter_code: str) -> bool:
-        """
-        Check if the starter code structure is present in the provided code.
-        """
-        ...
-
-    def get_structural_metadata(self, code: str) -> dict[str, Any]:
-        """
-        Extract structural metadata such as function names, class definitions,
-        and imports.
-        """
-        ...
-
-    def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
-        """
-        Compose a script that executes the generator function and prints the result.
-        """
-        ...
-
-    def get_execution_command(self, file_path: str) -> list[str]:
-        """
-        Provide the command to execute a script in this language.
-        """
-        ...
-
-    def get_test_command(
-        self, test_file_path: str, result_xml_path: str, **kwargs: Any
-    ) -> list[str]:
-        """
-        Provide the command to execute tests for a script in this language.
-        """
-        ...
-
-    def parse_test_results(
-        self, raw_result: Any, xml_content: str | None = None
-    ) -> Any:
-        # raw_result is BasicExecutionResult, return is EvaluationResult
-        # We use Any here to avoid circular imports in the interface layer
-        """
-        Parse raw execution results into a structured EvaluationResult.
-        """
-        ...
-
-    def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]:
-        """
-        Parses the raw output from a test input generator into a list of input dictionaries.
-        """
-        ...
+    @property
+    def analyzer(self) -> ITestAnalyzer: ...

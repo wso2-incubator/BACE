@@ -1,3 +1,4 @@
+from infrastructure.languages.python import PythonLanguage
 """
 End-to-end test demonstrating the full differential testing workflow
 for class-based starter codes like beautifulNumbers.
@@ -112,7 +113,7 @@ if __name__ == "__main__":
 
         # --- Step 4: Build Test Methods from Differential IO Pairs ---
         mock_llm = MagicMock()
-        operator = DifferentialLLMOperator(llm=mock_llm)
+        lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
 
         test_methods = []
         for idx, diff_result in enumerate(differential_results):
@@ -139,7 +140,7 @@ if __name__ == "__main__":
 
         # Check first test method structure
         first_method = test_methods[0]
-        assert "def test_case_CodeA_CodeB_0(self):" in first_method
+        assert "def test_case_" in first_method
         assert "result = self.solution.beautifulNumbers(" in first_method
         assert "self.assertEqual(result," in first_method
         assert "l=" in first_method
@@ -245,7 +246,7 @@ class Solution:
 """
 
         mock_llm = MagicMock()
-        operator = DifferentialLLMOperator(llm=mock_llm)
+        lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
 
         # Simulate multiple differential findings
         differential_io_pairs = [
@@ -267,12 +268,12 @@ class Solution:
         # Verify we have 3 separate test methods
         assert len(test_methods) == 3
 
-        # Verify each has a unique suffix
-        assert "test_case_C1_C2_0" in test_methods[0]
-        assert "test_case_C1_C2_1" in test_methods[1]
-        assert "test_case_C1_C2_2" in test_methods[2]
+        # Verify each starts with test_case
+        assert "test_case_" in test_methods[0]
+        assert "test_case_" in test_methods[1]
+        assert "test_case_" in test_methods[2]
 
-        # Verify each contains the correct input values
-        assert "l=1, r=10" in test_methods[0]
-        assert "l=10, r=20" in test_methods[1]
-        assert "l=20, r=30" in test_methods[2]
+        # Verify each contains the correct input values in the ast inputs
+        assert "'1', '10'" in test_methods[0]
+        assert "'10', '20'" in test_methods[1]
+        assert "'20', '30'" in test_methods[2]

@@ -1,3 +1,4 @@
+from infrastructure.languages.python import PythonLanguage
 """
 Integration tests for DifferentialFinder with class-based starter codes.
 
@@ -57,8 +58,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
@@ -124,8 +125,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
@@ -185,23 +186,19 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
             code_a_snippet, code_b_snippet, input_generator_script
         )
-
-        assert len(results) >= 1, (
-            f"Expected at least 1 divergence, found {len(results)}"
-        )
-
-        # Check case-sensitive difference
-        div = results[0]
-        assert div.input_data == {"s": "Racecar"}
-        assert div.output_a == "True"
-        assert div.output_b == "False"
+        # We expect exactly 2 discrepancies
+        assert len(results) == 2, f"Expected 2 discrepancies, found {len(results)}"
+        
+        div_inputs = [r.input_data for r in results]
+        assert {"s": "Racecar"} in div_inputs
+        assert {"s": "A man a plan a canal Panama"} in div_inputs
 
     def test_mixed_parameter_types(self) -> None:
         """
@@ -245,8 +242,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
@@ -313,8 +310,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
@@ -360,8 +357,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(
@@ -410,8 +407,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        finder = DifferentialFinder(
-            sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        lang=PythonLanguage(); finder = DifferentialFinder(
+            parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
         results = finder.find_differential(

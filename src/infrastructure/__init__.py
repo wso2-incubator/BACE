@@ -29,7 +29,6 @@ from .sandbox import (
     BasicExecutionResult,
     CodeExecutionError,
     CodeExecutionTimeoutError,
-    PytestXmlAnalyzer,
     SafeCodeSandbox,
     SandboxConfig,
     TestExecutor,
@@ -56,7 +55,6 @@ __all__ = [
     "CodeExecutionTimeoutError",
     # New architecture
     "TestExecutor",
-    "PytestXmlAnalyzer",
     "create_test_executor",
 ]
 __version__ = "0.1.0"

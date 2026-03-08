@@ -357,7 +357,9 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
         sandbox_config=exec_sandbox_config,
         enable_multiprocessing=True,
         cpu_workers=cpu_count,
-        language_adapter=language_adapter,
+        composer=language_adapter.composer,
+        runtime=language_adapter.runtime,
+        analyzer=language_adapter.analyzer,
     )
 
     # 4. Auxiliary Systems
@@ -457,7 +459,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # 6. Orchestrator Configuration
     builder = (
         OrchestratorBuilder()
-        .with_language_adapter(language_adapter)
+        .with_composer(language_adapter.composer)
         .with_evolution_config(schedule)
         .with_code_profile(code_profile)
     )

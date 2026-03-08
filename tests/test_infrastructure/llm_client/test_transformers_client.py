@@ -23,7 +23,7 @@ def _make_fake_transformers() -> SimpleNamespace:
                 content = messages[0].get("content", str(messages[0]))
             else:
                 content = str(messages)
-            return [{"generated_text": f"fake-gen: {content}"}]
+            return [{"generated_text": [{"role": "assistant", "content": f"fake-gen: {content}"}]}]
 
         return pipe
 

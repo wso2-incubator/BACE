@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .breeder import IBreeder
     from .config import EvolutionConfig
     from .initializer import IPopulationInitializer
-    from .language import ILanguage
+    from .language import IScriptComposer
     from .selection import IEliteSelectionStrategy
     from .systems import IBeliefUpdater, IExecutionSystem, LedgerFactory
 
@@ -100,4 +100,4 @@ class OrchestratorConfig:
     execution_system: "IExecutionSystem"
     bayesian_system: "IBeliefUpdater"
     ledger_factory: "LedgerFactory"
-    language_adapter: "ILanguage"
+    composer: "IScriptComposer"

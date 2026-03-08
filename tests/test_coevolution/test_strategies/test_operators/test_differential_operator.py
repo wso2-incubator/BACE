@@ -20,22 +20,36 @@ def mock_llm() -> MagicMock:
 
 
 @pytest.fixture
-def mock_language() -> MagicMock:
-    """Returns a mock language adapter."""
-    lang = MagicMock(spec=ILanguage)
-    lang.language = "python"
-    lang.extract_code_blocks.side_effect = (
+def mock_parser() -> MagicMock:
+    """Returns a mock parser."""
+    parser = MagicMock()
+    parser.extract_code_blocks.side_effect = (
         lambda x: [x]
         if "```python" not in x
         else [x.split("```python")[1].split("```")[0].strip()]
     )
-    return lang
+    return parser
 
 
 @pytest.fixture
-def operator(mock_llm: MagicMock, mock_language: MagicMock) -> DifferentialLLMOperator:
+def mock_composer() -> MagicMock:
+    """Returns a mock composer."""
+    composer = MagicMock()
+    composer.generate_test_case.return_value = "def test_f(): assert True"
+    return composer
+
+
+@pytest.fixture
+def diff_llm_operator(
+    mock_llm: MagicMock, mock_parser: MagicMock, mock_composer: MagicMock
+) -> DifferentialLLMOperator:
     """Returns the DifferentialLLMOperator instance with mocked dependencies."""
-    return DifferentialLLMOperator(llm=mock_llm, language_adapter=mock_language)
+    return DifferentialLLMOperator(
+        llm=mock_llm,
+        parser=mock_parser,
+        composer=mock_composer,
+        language_name="python",
+    )
 
 
 @pytest.fixture
@@ -49,8 +63,9 @@ def sample_io_pairs() -> list[DifferentialInputOutput]:
 
 
 def test_get_test_method_from_io(
-    operator: DifferentialLLMOperator,
+    diff_llm_operator: DifferentialLLMOperator,
     sample_io_pairs: list[DifferentialInputOutput],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify generation of test methods from IO pairs."""
     starter_code = "class Solution:\n    def f(self, x):\n        return x"
@@ -58,7 +73,7 @@ def test_get_test_method_from_io(
 
     # This calls into PythonLanguage.compose_test_case internally in DifferentialLLMOperator.get_test_method_from_io
     # Since DifferentialLLMOperator uses hardcoded PythonLanguage for tests, we can test it directly.
-    result = operator.get_test_method_from_io(
+    result = diff_llm_operator.get_test_method_from_io(
         starter_code, sample_io_pairs, parent_ids, io_index=0
     )
 
@@ -68,14 +83,15 @@ def test_get_test_method_from_io(
 
 
 def test_get_test_method_from_io_standalone(
-    operator: DifferentialLLMOperator,
+    diff_llm_operator: DifferentialLLMOperator,
     sample_io_pairs: list[DifferentialInputOutput],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify test generation for standalone functions."""
     starter_code = "def f(x: int) -> int:\n    return x"
     parent_ids = ["S1", "S2"]
 
-    result = operator.get_test_method_from_io(
+    result = diff_llm_operator.get_test_method_from_io(
         starter_code, sample_io_pairs, parent_ids, io_index=0
     )
 

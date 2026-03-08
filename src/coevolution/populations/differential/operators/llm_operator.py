@@ -13,7 +13,8 @@ from typing import Any, TypedDict
 from loguru import logger
 
 from coevolution.core.interfaces.language import (
-    ILanguage,
+    ICodeParser,
+    IScriptComposer,
     LanguageParsingError,
     LanguageTransformationError,
 )
@@ -49,18 +50,19 @@ class DifferentialLLMOperator(BaseLLMService):
     DifferentialDiscoveryOperator.
     """
 
-    def __init__(self, llm: ILanguageModel, language_adapter: ILanguage) -> None:
-        super().__init__(llm, language_adapter)
+    def __init__(self, llm: ILanguageModel, parser: ICodeParser, composer: IScriptComposer, language_name: str) -> None:
+        super().__init__(llm, parser, language_name)
+        self.composer = composer
         # Input generator scripts are always Python regardless of main code language
         self.python_adapter = PythonLanguage()
         logger.debug(
-            f"DifferentialLLMOperator: code={language_adapter.language}, "
+            f"DifferentialLLMOperator: code={language_name}, "
             "generator-script=Python"
         )
 
     def _extract_python_code_block(self, response: str) -> str:
         """Extract a Python code block from the LLM response."""
-        blocks = self.python_adapter.extract_code_blocks(response)
+        blocks = self.python_adapter.parser.extract_code_blocks(response)
         return blocks[0] if blocks else response
 
     @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
@@ -80,7 +82,7 @@ class DifferentialLLMOperator(BaseLLMService):
 
         response = self._generate(prompt)
         code_block = self._extract_python_code_block(response)
-        script = self.python_adapter.compose_generator_script(
+        script = self.python_adapter.composer.compose_generator_script(
             code_block, dto.num_inputs_to_generate
         )
         logger.debug(f"Generated script ({len(script)} chars)")
@@ -105,7 +107,7 @@ class DifferentialLLMOperator(BaseLLMService):
         output_str = str(io_pair["output"])
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
 
-        return self.language_adapter.generate_test_case(
+        return self.composer.generate_test_case(
             input_str, output_str, starter_code, test_number
         )
 

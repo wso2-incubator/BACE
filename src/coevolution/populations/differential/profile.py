@@ -60,10 +60,12 @@ def create_differential_test_profile(
     )
     parent_selector: RouletteWheelParentSelection[TestIndividual] = RouletteWheelParentSelection()
 
-    llm_service = DifferentialLLMOperator(llm=llm_client, language_adapter=language_adapter)
+    llm_service = DifferentialLLMOperator(llm=llm_client, parser=language_adapter.parser, composer=language_adapter.composer, language_name=language_adapter.language)
 
     differential_finder = DifferentialFinder(
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        composer=language_adapter.composer,
+        runtime=language_adapter.runtime,
         sandbox_config=sandbox_config,
         enable_multiprocessing=cpu_workers > 1,
         cpu_workers=cpu_workers,
@@ -71,7 +73,8 @@ def create_differential_test_profile(
 
     discovery_op = DifferentialDiscoveryOperator(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         parent_selector=parent_selector,
         prob_assigner=prob_assigner,
         llm_service=llm_service,
@@ -91,7 +94,8 @@ def create_differential_test_profile(
 
     initializer = DifferentialInitializer(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         pop_config=population_config,
     )
 

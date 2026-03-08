@@ -14,61 +14,61 @@ def adapter() -> PythonLanguage:
 
 class TestIsSyntaxValid:
     def test_valid_function(self, adapter: PythonLanguage) -> None:
-        assert adapter.is_syntax_valid("def add(a, b):\n    return a + b")
+        assert adapter.parser.is_syntax_valid("def add(a, b):\n    return a + b")
 
     def test_valid_class(self, adapter: PythonLanguage) -> None:
-        assert adapter.is_syntax_valid("class Solution:\n    def solve(self): pass")
+        assert adapter.parser.is_syntax_valid("class Solution:\n    def solve(self): pass")
 
     def test_empty_string_is_valid(self, adapter: PythonLanguage) -> None:
-        assert adapter.is_syntax_valid("")
+        assert adapter.parser.is_syntax_valid("")
 
     def test_invalid_syntax(self, adapter: PythonLanguage) -> None:
-        assert not adapter.is_syntax_valid("def broken(:\n    pass")
+        assert not adapter.parser.is_syntax_valid("def broken(:\n    pass")
 
     def test_unmatched_paren(self, adapter: PythonLanguage) -> None:
-        assert not adapter.is_syntax_valid("result = (1 + 2")
+        assert not adapter.parser.is_syntax_valid("result = (1 + 2")
 
 
 class TestExtractTestNames:
     def test_extracts_single_test(self, adapter: PythonLanguage) -> None:
         code = "def test_add():\n    assert 1 + 1 == 2"
-        assert adapter.extract_test_names(code) == ["test_add"]
+        assert adapter.parser.extract_test_names(code) == ["test_add"]
 
     def test_extracts_multiple_tests(self, adapter: PythonLanguage) -> None:
         code = (
             "def test_one():\n    pass\n\ndef test_two():\n    pass\n\n"
             "def helper():\n    pass"
         )
-        names = adapter.extract_test_names(code)
+        names = adapter.parser.extract_test_names(code)
         assert names == ["test_one", "test_two"]
 
     def test_returns_empty_when_no_tests(self, adapter: PythonLanguage) -> None:
-        assert adapter.extract_test_names("def helper(): pass") == []
+        assert adapter.parser.extract_test_names("def helper(): pass") == []
 
     def test_handles_syntax_error_gracefully(self, adapter: PythonLanguage) -> None:
-        assert adapter.extract_test_names("def test_broken(") == []
+        assert adapter.parser.extract_test_names("def test_broken(") == []
 
 
 class TestSplitTests:
     def test_splits_single_test(self, adapter: PythonLanguage) -> None:
         code = "def test_foo():\n    assert True"
-        parts = adapter.split_tests(code)
+        parts = adapter.parser.split_tests(code)
         assert len(parts) == 1
         assert "test_foo" in parts[0]
 
     def test_splits_multiple_tests(self, adapter: PythonLanguage) -> None:
         code = "def test_a():\n    pass\n\ndef test_b():\n    pass"
-        parts = adapter.split_tests(code)
+        parts = adapter.parser.split_tests(code)
         assert len(parts) == 2
 
     def test_ignores_non_test_functions(self, adapter: PythonLanguage) -> None:
         code = "def helper():\n    pass\n\ndef test_real():\n    pass"
-        parts = adapter.split_tests(code)
+        parts = adapter.parser.split_tests(code)
         assert len(parts) == 1
         assert "test_real" in parts[0]
 
     def test_returns_empty_on_no_tests(self, adapter: PythonLanguage) -> None:
-        assert adapter.split_tests("x = 1") == []
+        assert adapter.parser.split_tests("x = 1") == []
 
 
 class TestParseMethodSignature:
@@ -159,32 +159,32 @@ class TestContainsStarterCode:
     def test_exact_match(self, adapter: PythonLanguage) -> None:
         starter = "class Solution:\n    def solve(self): pass"
         code = "class Solution:\n    def solve(self):\n        return 42"
-        assert adapter.contains_starter_code(code, starter)
+        assert adapter.parser.contains_starter_code(code, starter)
 
     def test_empty_starter_always_true(self, adapter: PythonLanguage) -> None:
-        assert adapter.contains_starter_code("def f(): pass", "")
+        assert adapter.parser.contains_starter_code("def f(): pass", "")
 
     def test_missing_function_returns_false(self, adapter: PythonLanguage) -> None:
         starter = "class Solution:\n    def missing(self): pass"
         code = "class Solution:\n    def present(self): pass"
-        assert not adapter.contains_starter_code(code, starter)
+        assert not adapter.parser.contains_starter_code(code, starter)
 
 
 class TestGetStructuralMetadata:
     def test_extracts_classes_and_functions(self, adapter: PythonLanguage) -> None:
         code = "class Foo:\n    pass\n\ndef bar():\n    pass"
-        meta = adapter.get_structural_metadata(code)
+        meta = adapter.parser.get_structural_metadata(code)
         assert "Foo" in meta["classes"]
         assert "bar" in meta["functions"]
 
     def test_extracts_imports(self, adapter: PythonLanguage) -> None:
         code = "import math\nfrom typing import List\n\ndef f(): pass"
-        meta = adapter.get_structural_metadata(code)
+        meta = adapter.parser.get_structural_metadata(code)
         assert any("import math" in imp for imp in meta["imports"])
         assert any("List" in imp for imp in meta["imports"])
 
     def test_returns_empty_for_empty_code(self, adapter: PythonLanguage) -> None:
-        meta = adapter.get_structural_metadata("")
+        meta = adapter.parser.get_structural_metadata("")
         assert meta["classes"] == []
         assert meta["functions"] == []
         assert meta["imports"] == []
@@ -193,25 +193,25 @@ class TestGetStructuralMetadata:
 class TestParseTestInputs:
     def test_parses_list_of_dicts(self, adapter: PythonLanguage) -> None:
         outputs = '[{"a": 1, "b": 2}, {"a": 3, "b": 4}]'
-        result = adapter.parse_test_inputs(outputs)
+        result = adapter.parser.parse_test_inputs(outputs)
         assert len(result) == 2
         assert result[0]["a"] == 1
 
     def test_wraps_single_dict_in_list(self, adapter: PythonLanguage) -> None:
         outputs = '{"a": 1}'
-        result = adapter.parse_test_inputs(outputs)
+        result = adapter.parser.parse_test_inputs(outputs)
         assert len(result) == 1
         assert result[0]["a"] == 1
 
     def test_handles_inf_and_nan(self, adapter: PythonLanguage) -> None:
         import math
 
-        result = adapter.parse_test_inputs("[{'v': inf}]")
+        result = adapter.parser.parse_test_inputs("[{'v': inf}]")
         assert len(result) == 1
         assert math.isinf(result[0]["v"])
 
     def test_returns_empty_on_invalid_input(self, adapter: PythonLanguage) -> None:
-        assert adapter.parse_test_inputs("not valid") == []
+        assert adapter.parser.parse_test_inputs("not valid") == []
 
 
 class TestDocstringExtraction:
@@ -224,7 +224,7 @@ class TestDocstringExtraction:
                     """I am the method docstring"""
                     pass
         ''')
-        assert adapter.get_docstring(code) == "I am the class docstring"
+        assert adapter.parser.get_docstring(code) == "I am the class docstring"
 
     def test_priority_2_method_docstring(self, adapter: PythonLanguage) -> None:
         code = textwrap.dedent('''
@@ -233,7 +233,7 @@ class TestDocstringExtraction:
                     """I am the method docstring"""
                     pass
         ''')
-        assert adapter.get_docstring(code) == "I am the method docstring"
+        assert adapter.parser.get_docstring(code) == "I am the method docstring"
 
     def test_priority_3_method_comments(self, adapter: PythonLanguage) -> None:
         code = textwrap.dedent("""
@@ -242,7 +242,7 @@ class TestDocstringExtraction:
                 def solve(self):
                     pass
         """)
-        assert adapter.get_docstring(code) == "I am the method comment"
+        assert adapter.parser.get_docstring(code) == "I am the method comment"
 
     def test_priority_4_class_comments(self, adapter: PythonLanguage) -> None:
         code = textwrap.dedent("""
@@ -251,7 +251,7 @@ class TestDocstringExtraction:
                 def solve(self):
                     pass
         """)
-        assert adapter.get_docstring(code) == "I am the class comment"
+        assert adapter.parser.get_docstring(code) == "I am the class comment"
 
     def test_method_comments_beat_class_comments(self, adapter: PythonLanguage) -> None:
         code = textwrap.dedent("""
@@ -261,7 +261,7 @@ class TestDocstringExtraction:
                 def solve(self):
                     pass
         """)
-        assert adapter.get_docstring(code) == "Method comment (should be picked)"
+        assert adapter.parser.get_docstring(code) == "Method comment (should be picked)"
 
     def test_standalone_function_docstring(self, adapter: PythonLanguage) -> None:
         code = textwrap.dedent('''
@@ -269,7 +269,7 @@ class TestDocstringExtraction:
                 """Standalone docstring"""
                 pass
         ''')
-        assert adapter.get_docstring(code) == "Standalone docstring"
+        assert adapter.parser.get_docstring(code) == "Standalone docstring"
 
     def test_returns_empty_string_on_failure(self, adapter: PythonLanguage) -> None:
-        assert adapter.get_docstring("not valid python {{{") == ""
+        assert adapter.parser.get_docstring("not valid python {{{") == ""

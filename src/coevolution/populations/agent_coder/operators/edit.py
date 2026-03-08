@@ -10,7 +10,7 @@ from coevolution.core.interfaces import (
     CoevolutionContext,
 )
 from coevolution.core.interfaces.language import (
-    ILanguage,
+    ICodeParser,
     LanguageParsingError,
     LanguageTransformationError,
 )
@@ -35,11 +35,12 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         prob_assigner: IProbabilityAssigner,
     ) -> None:
-        super().__init__(llm, language_adapter, parent_selector, prob_assigner)
+        super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
         self._conversation_history: list[dict[str, str]] = []
 
     def reset_session(self) -> None:
@@ -101,7 +102,7 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
         self._conversation_history.append({"role": "assistant", "content": response})
 
         edited_code = self._extract_code_block(response)
-        if not self.language_adapter.contains_starter_code(edited_code, problem.starter_code):
+        if not self.parser.contains_starter_code(edited_code, problem.starter_code):
             raise ValueError("AgentCoder edit result does not contain starter code")
 
         probability = self.prob_assigner.assign_probability(

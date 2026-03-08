@@ -64,10 +64,10 @@ def create_default_code_profile(
     parent_selector: RouletteWheelParentSelection[CodeIndividual] = RouletteWheelParentSelection()
     prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy, initial_prior=initial_prior)
 
-    mutation_op = CodeMutationOperator(llm_client, language_adapter, parent_selector, prob_assigner)
-    crossover_op = CodeCrossoverOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    mutation_op = CodeMutationOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
+    crossover_op = CodeCrossoverOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
     edit_op = CodeEditOperator(
-        llm_client, language_adapter, parent_selector, prob_assigner,
+        llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner,
         failing_test_selector=FailingTestSelector,
         k_failing_tests=k_failing_tests,
     )
@@ -83,7 +83,8 @@ def create_default_code_profile(
 
     initializer = CodeInitializer(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         pop_config=population_config,
         init_batch_size=init_pop_batch_size,
         llm_workers=llm_workers,

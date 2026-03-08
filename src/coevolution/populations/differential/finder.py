@@ -10,7 +10,7 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser, IScriptComposer, ILanguageRuntime
 from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
@@ -30,28 +30,28 @@ WorkerResult = Union[
 
 
 def _worker_entry(
-    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, ILanguage],
+    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, IScriptComposer, ILanguageRuntime],
 ) -> WorkerResult:
     """Stateless worker function for parallel execution."""
-    idx, input_data, code_a_snippet, code_b_snippet, config, language_adapter = task_args
+    idx, input_data, code_a_snippet, code_b_snippet, config, composer, runtime = task_args
 
     try:
         sandbox = create_sandbox(config)
 
         def run_snippet(snippet: str) -> Optional[str]:
             test_input_formatted = {"inputdata": input_data}
-            script = language_adapter.compose_evaluation_script(
+            script = composer.compose_evaluation_script(
                 snippet, str(test_input_formatted)
             )
             import tempfile
             import os
             with tempfile.TemporaryDirectory() as tmpdir:
-                file_ext = ".bal" if getattr(language_adapter, "language", "") == "ballerina" else ".py"
+                file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
                 script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
                 with open(script_path, "w", encoding="utf-8") as f:
                     f.write(script)
                 
-                cmd = language_adapter.get_execution_command(script_path)
+                cmd = runtime.get_execution_command(script_path)
                 exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
                 if exec_result.error:
                     return None
@@ -82,12 +82,16 @@ class DifferentialFinder(IDifferentialFinder):
     def __init__(
         self,
         sandbox_config: SandboxConfig,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        composer: IScriptComposer,
+        runtime: ILanguageRuntime,
         enable_multiprocessing: bool = True,
         cpu_workers: int = 4,
     ) -> None:
         self.sandbox_config = sandbox_config
-        self.language_adapter = language_adapter
+        self.parser = parser
+        self.composer = composer
+        self.runtime = runtime
         self.enable_multiprocessing = enable_multiprocessing
         self.cpu_workers = cpu_workers
         self.python = PythonLanguage()
@@ -97,7 +101,7 @@ class DifferentialFinder(IDifferentialFinder):
         self._python_sandbox = create_sandbox(python_config)
 
     def _generate_test_inputs(self, generator_script: str) -> list[dict[str, Any]]:
-        if not self.python.is_syntax_valid(generator_script):
+        if not self.python.parser.is_syntax_valid(generator_script):
             logger.warning("Input generator script produced invalid Python code.")
             return []
 
@@ -108,11 +112,11 @@ class DifferentialFinder(IDifferentialFinder):
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(generator_script)
             
-            cmd = self.python.get_execution_command(script_path)
+            cmd = self.python.runtime.get_execution_command(script_path)
             exec_result = self._python_sandbox.execute_command(cmd, cwd=tmpdir)
             output = exec_result.output.strip()
 
-        test_inputs = self.python.parse_test_inputs(output)
+        test_inputs = self.python.parser.parse_test_inputs(output)
         if not test_inputs:
             logger.warning("No test inputs generated or failed to parse generator output.")
         return test_inputs
@@ -153,18 +157,18 @@ class DifferentialFinder(IDifferentialFinder):
 
     def _run_single_sequential(self, code: str, input_data: dict[str, Any]) -> Optional[str]:
         test_input_formatted = {"inputdata": input_data}
-        script = self.language_adapter.compose_evaluation_script(
+        script = self.composer.compose_evaluation_script(
             code, str(test_input_formatted)
         )
         import tempfile
         import os
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            file_ext = ".bal" if hasattr(self.runtime, "bal_executable") else ".py"
             script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(script)
             
-            cmd = self.language_adapter.get_execution_command(script_path)
+            cmd = self.runtime.get_execution_command(script_path)
             exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
             return None if exec_result.error else exec_result.output.strip()
 
@@ -173,7 +177,7 @@ class DifferentialFinder(IDifferentialFinder):
     ) -> list[DifferentialResult]:
         found_divergences = []
         tasks = [
-            (i, inp, code_a, code_b, self.sandbox_config, self.language_adapter)
+            (i, inp, code_a, code_b, self.sandbox_config, self.composer, self.runtime)
             for i, inp in enumerate(inputs)
         ]
         chunk_size = max(1, len(inputs) // (self.cpu_workers * 4))

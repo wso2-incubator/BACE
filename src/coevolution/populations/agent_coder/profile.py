@@ -47,7 +47,8 @@ def create_agent_coder_code_profile(
 
     edit_op = AgentCoderEditOperator(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         parent_selector=parent_selector,
         prob_assigner=prob_assigner,
     )
@@ -59,7 +60,8 @@ def create_agent_coder_code_profile(
 
     initializer = AgentCoderInitializer(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         pop_config=population_config,
         edit_operator=edit_op,  # shares conversation history
     )

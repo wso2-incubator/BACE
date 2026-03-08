@@ -1,17 +1,16 @@
-"""Pytest XML analyzer for extracting test results."""
+"""Python test output analyzer utilizing pytest JUnit XML."""
 
 import re
 import xml.etree.ElementTree as ET
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from loguru import logger
 
-from coevolution.core.interfaces.data import EvaluationResult
+from coevolution.core.interfaces.language import ITestAnalyzer
+from coevolution.core.interfaces.data import BasicExecutionResult, EvaluationResult
 
-from .types import BasicExecutionResult
 
-
-class PytestXmlAnalyzer:
+class PythonTestAnalyzer(ITestAnalyzer):
     """
     Analyzes pytest JUnit XML output to extract a single test result.
 
@@ -25,19 +24,16 @@ class PytestXmlAnalyzer:
     )
 
     # Regex to capture absolute paths to temporary python files (handles Unix and Windows)
-    # Matches examples like: /var/.../tmppjtsol6j.py:425 or C:\Temp\tmppjtsol6j.py:425
     TEMP_PATH_PATTERN = re.compile(r"(?:(?:[A-Za-z]:\\)|/)[^\s:<>\"]+\.py(?::\d+)?")
 
     # Regex to capture relative temp file references
-    # Matches examples like: tmphhckiio3.py:80: or tmphhckiio3.py:64:
     TEMP_FILENAME_PATTERN = re.compile(r"\btmp\w{7,12}\.py(?::\d+)?:?")
 
     # Regex to capture module-like prefixes in instance/class representations
-    # Example: "<tmppjtsol6j.TestMakeAEqualB testMethod=test_x>" -> "<TestMakeAEqualB testMethod=test_x>"
     MODULE_PREFIX_PATTERN = re.compile(r"<[A-Za-z0-9_]+\.([A-Za-z_][A-Za-z0-9_]*)")
 
     def __init__(self) -> None:
-        """Initialize the pytest XML analyzer."""
+        """Initialize the python test analyzer."""
         pass
 
     def _remove_ansi_codes(self, text: Optional[str]) -> Optional[str]:
@@ -49,10 +45,6 @@ class PytestXmlAnalyzer:
     def _sanitize_details(self, text: Optional[str]) -> Optional[str]:
         """
         Strip ANSI codes AND sanitize temporary file paths/module names.
-
-        Replaces absolute temporary file paths with a generic `test_script.py` while
-        preserving optional line numbers, and removes random module prefixes from
-        class/instance representations.
         """
         if not text:
             return text
@@ -60,10 +52,9 @@ class PytestXmlAnalyzer:
         # 1. Remove ANSI codes
         sanitized = self.ANSI_ESCAPE_PATTERN.sub("", text)
 
-        # 2. Replace full temporary file paths with a generic name, preserving line numbers
+        # 2. Replace full temporary file paths with a generic name
         def _path_repl(m: re.Match[str]) -> str:
             match_text = m.group(0)
-            # If there's a colon with a line number, preserve it
             colon_idx = match_text.rfind(":")
             if colon_idx != -1 and match_text[colon_idx + 1 :].isdigit():
                 return f"test_script.py:{match_text[colon_idx + 1 :]}"
@@ -71,11 +62,9 @@ class PytestXmlAnalyzer:
 
         sanitized = self.TEMP_PATH_PATTERN.sub(_path_repl, sanitized)
 
-        # 3. Replace relative temp file references with generic name, preserving line numbers
+        # 3. Replace relative temp file references
         def _filename_repl(m: re.Match[str]) -> str:
             match_text = m.group(0)
-            # Extract line number if present (before the trailing colon)
-            # Handle cases like tmpXXX.py:80: or tmpXXX.py:64
             if ":" in match_text:
                 parts = match_text.rstrip(":").split(":")
                 if len(parts) == 2 and parts[1].isdigit():
@@ -89,38 +78,32 @@ class PytestXmlAnalyzer:
 
         return sanitized
 
-    def analyze_pytest_xml(
-        self, xml_content: Optional[str], basic_result: BasicExecutionResult
-    ) -> EvaluationResult:
+    def analyze(self, raw_result: BasicExecutionResult, **kwargs: Any) -> EvaluationResult:
         """
         Analyze pytest XML output and return a single test result.
 
         Args:
-            xml_content: The XML content from pytest --junitxml output, or None if XML wasn't generated
-            basic_result: Basic execution result from code execution
-
-        Returns:
-            EvaluationResult with detailed test analysis
+            raw_result: Basic execution result from code execution
+            **kwargs: Can include 'xml_content'
         """
+        xml_content = kwargs.get("xml_content")
+        
         logger.debug(
-            f"Analyzing pytest XML output: xml_available={xml_content is not None}, success={basic_result.success}, return_code={basic_result.return_code}"
+            f"Analyzing Python test results: xml_available={xml_content is not None}"
         )
 
-        # If XML content is available, parse it
         if xml_content:
             try:
-                return self._parse_xml_content(xml_content, basic_result)
+                return self._parse_xml_content(xml_content, raw_result)
             except Exception as e:
                 logger.warning(
                     f"Failed to parse XML content: {e}. Falling back to error analysis."
                 )
-                # Fall through to error analysis
 
-        # No XML or parsing failed - analyze based on basic result
-        return self._analyze_execution_error(basic_result)
+        return self._analyze_execution_error(raw_result)
 
     def _parse_xml_content(
-        self, xml_content: str, basic_result: BasicExecutionResult
+        self, xml_content: str, basic_result: Any
     ) -> EvaluationResult:
         """Parse JUnit XML content and extract the test result."""
         try:
@@ -129,14 +112,11 @@ class PytestXmlAnalyzer:
             logger.error(f"XML parsing error: {e}")
             raise
 
-        # We assume there's exactly one test case as we run one test function
         testcase = root.find(".//testcase")
 
         if testcase is None:
-            # No test case found in XML, check if there's a suite-level error
             testsuite = root.find(".//testsuite")
             if testsuite is not None and int(testsuite.get("errors", 0)) > 0:
-                # Look for error tag in testsuite or testcases
                 error_node = testsuite.find(".//error")
                 if error_node is not None:
                     raw_details = error_node.text or error_node.get("message", "")
@@ -150,26 +130,21 @@ class PytestXmlAnalyzer:
             return self._analyze_execution_error(basic_result)
 
         test_name = testcase.get("name", "unknown")
-
-        # Determine status and details
         status: Literal["passed", "failed", "error"] = "passed"
         details = None
 
-        # Check for failure
         failure = testcase.find("failure")
         if failure is not None:
             status = "failed"
             raw_details = failure.text or failure.get("message", "")
             details = self._sanitize_details(raw_details)
 
-        # Check for error
         error = testcase.find("error")
         if error is not None:
             status = "error"
             raw_details = error.text or error.get("message", "")
             details = self._sanitize_details(raw_details)
 
-        # Check if this test timed out
         if details:
             details_lower = details.lower()
             if "timeout" in details_lower or "timed out" in details_lower:
@@ -187,19 +162,19 @@ class PytestXmlAnalyzer:
         )
 
     def _analyze_execution_error(
-        self, basic_result: BasicExecutionResult
+        self, basic_result: Any
     ) -> EvaluationResult:
         """Analyze execution results when XML parsing failed or wasn't available."""
-        details = basic_result.error or basic_result.output or "No output available"
+        details = getattr(basic_result, "error", None) or getattr(basic_result, "output", None) or "No output available"
 
         status: Literal["error"] = "error"
-        if basic_result.timeout:
+        if getattr(basic_result, "timeout", False):
             details = (
-                f"Execution timed out after {basic_result.execution_time}s. {details}"
+                f"Execution timed out after {getattr(basic_result, 'execution_time', 0)}s. {details}"
             )
 
         return EvaluationResult(
             status=status,
             error_log=self._sanitize_details(details),
-            execution_time=basic_result.execution_time,
+            execution_time=getattr(basic_result, "execution_time", 0.0),
         )

@@ -11,7 +11,7 @@ from loguru import logger
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import CoevolutionContext
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
 
@@ -57,7 +57,8 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         parent_selector: IParentSelectionStrategy[TestIndividual],
         prob_assigner: IProbabilityAssigner,
         llm_service: DifferentialLLMOperator,
@@ -68,7 +69,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
         num_passing_tests_to_sample: int = 5,
         llm_workers: int = 4,
     ) -> None:
-        super().__init__(llm, language_adapter, parent_selector, prob_assigner)
+        super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
         self.llm_service = llm_service
         self.differential_finder = differential_finder
         self.func_eq_selector = func_eq_selector

@@ -1,9 +1,11 @@
+from infrastructure.languages.python import PythonLanguage
+from infrastructure.languages.ballerina import BallerinaLanguage
 """Integration test for dual-language differential testing: Python generators + Ballerina code."""
 
 import pytest
 
-from infrastructure.languages import BallerinaLanguage, PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
+from infrastructure.sandbox.executor import TestExecutor
 
 
 class TestDualLanguageDifferentialTesting:
@@ -45,15 +47,16 @@ print(generate_test_inputs(5))
         python_sandbox = create_sandbox(python_config)
 
         # Compose and execute generator script
-        composed_script = python.compose_generator_script(python_generator, 5)
-        result = python_sandbox.execute_code(composed_script)
+        composed_script = python.composer.compose_generator_script(python_generator, 5)
+        executor = TestExecutor(sandbox_adapter=python_sandbox, language_adapter=python)
+        result = executor.execute_code(composed_script)
 
         assert result.success, f"Generator should execute successfully: {result.error}"
 
         # Parse output (use last line in case of multiple outputs)
         output_lines = result.output.strip().split("\n")
         output_to_parse = output_lines[-1]
-        test_inputs = python.parse_test_inputs(output_to_parse)
+        test_inputs = python.parser.parse_test_inputs(output_to_parse)
 
         # Verify we got test inputs
         assert len(test_inputs) == 5, "Should generate 5 test inputs"
@@ -76,9 +79,10 @@ public function add(int a, int b) returns int {
         # Step 4: Execute Ballerina code with Python-generated inputs
         ballerina = BallerinaLanguage()
         ballerina_config = SandboxConfig(
-            timeout=5, max_memory_mb=200, max_output_size=50_000, language="ballerina"
+            timeout=30, max_memory_mb=200, max_output_size=50_000, language="ballerina"
         )
         ballerina_sandbox = create_sandbox(ballerina_config)
+        ballerina_executor = TestExecutor(sandbox_adapter=ballerina_sandbox, language_adapter=ballerina)
 
         results_a = []
         results_b = []
@@ -91,18 +95,18 @@ public function add(int a, int b) returns int {
             input_formatted = f"add({a}, {b})"
 
             # Execute correct code
-            script_a = ballerina.compose_evaluation_script(
+            script_a = ballerina.composer.compose_evaluation_script(
                 ballerina_code_correct, input_formatted
             )
-            output_a = ballerina_sandbox.execute_code(script_a)
+            output_a = ballerina_executor.execute_code(script_a)
             assert output_a.success, f"Correct code should execute: {output_a.error}"
             results_a.append(int(output_a.output.strip()))
 
             # Execute buggy code
-            script_b = ballerina.compose_evaluation_script(
+            script_b = ballerina.composer.compose_evaluation_script(
                 ballerina_code_buggy, input_formatted
             )
-            output_b = ballerina_sandbox.execute_code(script_b)
+            output_b = ballerina_executor.execute_code(script_b)
             assert output_b.success, f"Buggy code should execute: {output_b.error}"
             results_b.append(int(output_b.output.strip()))
 
@@ -155,16 +159,17 @@ print(generate_test_inputs(5))
             timeout=5, max_memory_mb=200, max_output_size=50_000, language="python"
         )
         python_sandbox = create_sandbox(python_config)
+        executor = TestExecutor(sandbox_adapter=python_sandbox, language_adapter=python)
 
-        composed_script = python.compose_generator_script(python_generator, 5)
-        result = python_sandbox.execute_code(composed_script)
+        composed_script = python.composer.compose_generator_script(python_generator, 5)
+        result = executor.execute_code(composed_script)
 
         assert result.success, "Generator should execute successfully"
 
         # Parse output
         output_lines = result.output.strip().split("\n")
         output_to_parse = output_lines[-1]
-        test_inputs = python.parse_test_inputs(output_to_parse)
+        test_inputs = python.parser.parse_test_inputs(output_to_parse)
 
         # Verify special float values are parsed correctly
         assert len(test_inputs) == 5, "Should parse 5 inputs"

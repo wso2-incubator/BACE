@@ -12,7 +12,8 @@ import os
 import numpy as np
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import IScriptComposer, ILanguageRuntime
+from coevolution.core.interfaces.language import ITestAnalyzer
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from ..core.interfaces import (
@@ -30,7 +31,9 @@ def _execute_atomic_interaction(
     code_snippet: str,
     test_snippet: str,
     sandbox_config: SandboxConfig,
-    language_adapter: ILanguage,
+    composer: IScriptComposer,
+    runtime: ILanguageRuntime,
+    analyzer: ITestAnalyzer,
 ) -> tuple[int, int, EvaluationResult]:
     """
     Worker function to execute a single code snippet against a single test function.
@@ -41,7 +44,9 @@ def _execute_atomic_interaction(
         code_snippet: The code snippet to test
         test_snippet: The test function snippet
         sandbox_config: Serializable configuration for creating a fresh sandbox
-        language_adapter: Adapter for composing the test script
+        composer: Adapter for composing the test script
+        runtime: Adapter for runtime infrastructure
+        analyzer: Adapter for test results analysis
 
     Returns:
         Tuple of (code_id, test_id, EvaluationResult)
@@ -56,18 +61,18 @@ def _execute_atomic_interaction(
         sandbox = create_sandbox(sandbox_config)
 
         # Compose the complete test script using the language adapter
-        script = language_adapter.compose_test_script(code_snippet, test_snippet)
+        script = composer.compose_test_script(code_snippet, test_snippet)
 
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_ext = ".bal" if getattr(language_adapter, "language", "") == "ballerina" else ".py"
+            file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
             script_path = os.path.join(tmpdir, f"test_script{file_ext}")
             xml_path = os.path.join(tmpdir, "results.xml")
 
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(script)
 
-            cmd = language_adapter.get_test_command(script_path, xml_path)
+            cmd = runtime.get_test_command(script_path, xml_path)
             raw_result = sandbox.execute_command(cmd, cwd=tmpdir)
 
             xml_content = None
@@ -75,7 +80,7 @@ def _execute_atomic_interaction(
                 with open(xml_path, "r", encoding="utf-8") as f:
                     xml_content = f.read()
 
-            result: EvaluationResult = language_adapter.parse_test_results(raw_result, xml_content)
+            result: EvaluationResult = analyzer.analyze(raw_result, xml_content=xml_content)
 
         # logger.debug(
         #     f"Worker (PID {os.getpid()}): Executed interaction ({code_idx}, {test_idx}) with result: {result}"
@@ -105,7 +110,9 @@ class ExecutionSystem(IExecutionSystem):
     def __init__(
         self,
         sandbox_config: "SandboxConfig",
-        language_adapter: ILanguage,
+        composer: IScriptComposer,
+        runtime: ILanguageRuntime,
+        analyzer: ITestAnalyzer,
         enable_multiprocessing: bool = True,
         cpu_workers: int | None = None,
     ):
@@ -114,12 +121,16 @@ class ExecutionSystem(IExecutionSystem):
 
         Args:
             sandbox_config: Configuration for creating sandbox instances
-            language_adapter: Adapter for language-specific operations
+            composer: Generative string composition
+            runtime: Runtime commands and OS interaction
+            analyzer: Result parsing integration
             enable_multiprocessing: Whether to use multiprocessing for parallel execution
             cpu_workers: Number of worker processes (None = auto-detect from CPU count)
         """
         self.sandbox_config = sandbox_config
-        self.language_adapter = language_adapter
+        self.composer = composer
+        self.runtime = runtime
+        self.analyzer = analyzer
         self.enable_multiprocessing = enable_multiprocessing
         self._cpu_workers = cpu_workers
 
@@ -181,7 +192,9 @@ class ExecutionSystem(IExecutionSystem):
                 code.snippet,
                 test.snippet,
                 self.sandbox_config,
-                self.language_adapter,
+                self.composer,
+                self.runtime,
+                self.analyzer,
             )
             for i, code in enumerate(code_population)
             for j, test in enumerate(test_population)
@@ -213,7 +226,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_with_multiprocessing(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguage]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, IScriptComposer, ILanguageRuntime, ITestAnalyzer]],
         num_workers: int,
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks using multiprocessing pool."""
@@ -231,7 +244,7 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_sequentially(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, ILanguage]],
+        tasks: list[tuple[int, int, str, str, SandboxConfig, IScriptComposer, ILanguageRuntime, ITestAnalyzer]],
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")

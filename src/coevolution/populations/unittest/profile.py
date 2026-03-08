@@ -59,9 +59,9 @@ def create_unittest_test_profile(
     parent_selector: RouletteWheelParentSelection[TestIndividual] = RouletteWheelParentSelection()
     prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy, initial_prior=initial_prior)
 
-    mutation_op = UnittestMutationOperator(llm_client, language_adapter, parent_selector, prob_assigner)
-    crossover_op = UnittestCrossoverOperator(llm_client, language_adapter, parent_selector, prob_assigner)
-    edit_op = UnittestEditOperator(llm_client, language_adapter, parent_selector, prob_assigner)
+    mutation_op = UnittestMutationOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
+    crossover_op = UnittestCrossoverOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
+    edit_op = UnittestEditOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
 
     breeder: Breeder[TestIndividual] = Breeder(
         registered_operators=[
@@ -74,7 +74,8 @@ def create_unittest_test_profile(
 
     initializer = UnittestInitializer(
         llm=llm_client,
-        language_adapter=language_adapter,
+        parser=language_adapter.parser,
+        language_name=language_adapter.language,
         pop_config=population_config,
         llm_workers=llm_workers,
     )

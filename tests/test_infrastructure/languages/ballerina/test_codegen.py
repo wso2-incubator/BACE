@@ -19,7 +19,7 @@ class TestComposeTestScript:
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
-        script = adapter.compose_test_script(code, test)
+        script = adapter.composer.compose_test_script(code, test)
         assert "import ballerina/test;" in script
         assert "function add" in script
         assert "testAdd" in script
@@ -32,7 +32,7 @@ function testAdd() {
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
-        script = adapter.compose_test_script(code, test)
+        script = adapter.composer.compose_test_script(code, test)
         # Should only have one test import
         assert script.count("import ballerina/test") == 1
 
@@ -44,7 +44,7 @@ function add(int a, int b) returns int { return a + b; }"""
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
-        script = adapter.compose_test_script(code, test)
+        script = adapter.composer.compose_test_script(code, test)
         # Test import should appear only once, at the top
         lines = script.split("\n")
         import_count = sum(1 for line in lines if "import ballerina/test" in line)
@@ -58,7 +58,7 @@ class TestComposeEvaluationScript:
     def test_creates_executable_script(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
         input_data = "add(5, 3)"
-        script = adapter.compose_evaluation_script(code, input_data)
+        script = adapter.composer.compose_evaluation_script(code, input_data)
         assert "import ballerina/io;" in script
         assert "public function main()" in script
         assert "var result = add(5, 3);" in script
@@ -70,12 +70,12 @@ class TestComposeEvaluationScript:
         code = "function add(int a, int b) returns int { return a + b; }"
         input_data = "not a function call"
         with pytest.raises(LanguageTransformationError, match="Invalid input format"):
-            adapter.compose_evaluation_script(code, input_data)
+            adapter.composer.compose_evaluation_script(code, input_data)
 
     def test_handles_complex_arguments(self, adapter: BallerinaLanguage) -> None:
         code = "function concat(string a, string b) returns string { return a + b; }"
         input_data = 'concat("hello", " world")'
-        script = adapter.compose_evaluation_script(code, input_data)
+        script = adapter.composer.compose_evaluation_script(code, input_data)
         assert 'var result = concat("hello", " world");' in script
 
 
@@ -86,7 +86,7 @@ class TestGenerateTestCase:
         starter = "function add(int a, int b) returns int {"
         input_str = "add(1, 2)"
         output_str = "3"
-        test = adapter.generate_test_case(input_str, output_str, starter, 1)
+        test = adapter.composer.generate_test_case(input_str, output_str, starter, 1)
         assert "@test:Config" in test
         assert "testAdd1" in test
         assert "var result = add(1, 2);" in test
@@ -99,12 +99,12 @@ class TestGenerateTestCase:
         with pytest.raises(
             LanguageTransformationError, match="Failed to generate test case"
         ):
-            adapter.generate_test_case("test()", "5", starter, 1)
+            adapter.composer.generate_test_case("test()", "5", starter, 1)
 
     def test_handles_different_test_numbers(self, adapter: BallerinaLanguage) -> None:
         starter = "function multiply(int a, int b) returns int {"
-        test1 = adapter.generate_test_case("multiply(2, 3)", "6", starter, 1)
-        test2 = adapter.generate_test_case("multiply(4, 5)", "20", starter, 2)
+        test1 = adapter.composer.generate_test_case("multiply(2, 3)", "6", starter, 1)
+        test2 = adapter.composer.generate_test_case("multiply(4, 5)", "20", starter, 2)
         assert "testMultiply1" in test1
         assert "testMultiply2" in test2
 
@@ -120,14 +120,14 @@ class TestGenerateTestCaseWithRealDataset:
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
 
         # Public test case 1
-        test1 = adapter.generate_test_case("[1.0, 2.0, 3.0], 0.5", "false", starter, 1)
+        test1 = adapter.composer.generate_test_case("[1.0, 2.0, 3.0], 0.5", "false", starter, 1)
         assert "@test:Config" in test1
         assert "testHasCloseElements1" in test1
         assert "hasCloseElements([1.0, 2.0, 3.0], 0.5)" in test1
         assert "test:assertEquals(result, false" in test1
 
         # Public test case 2
-        test2 = adapter.generate_test_case(
+        test2 = adapter.composer.generate_test_case(
             "[1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3", "true", starter, 2
         )
         assert "@test:Config" in test2
@@ -142,7 +142,7 @@ class TestGenerateTestCaseWithRealDataset:
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
 
         # Private test case 1
-        test3 = adapter.generate_test_case(
+        test3 = adapter.composer.generate_test_case(
             "[1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3", "true", starter, 3
         )
         assert "@test:Config" in test3
@@ -151,7 +151,7 @@ class TestGenerateTestCaseWithRealDataset:
         assert "test:assertEquals(result, true" in test3
 
         # Private test case 2
-        test4 = adapter.generate_test_case(
+        test4 = adapter.composer.generate_test_case(
             "[1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05", "false", starter, 4
         )
         assert "@test:Config" in test4
@@ -178,7 +178,7 @@ class TestGenerateTestCaseWithRealDataset:
 
         generated_tests = []
         for i, (input_str, output_str) in enumerate(private_tests, start=1):
-            test = adapter.generate_test_case(input_str, output_str, starter, i)
+            test = adapter.composer.generate_test_case(input_str, output_str, starter, i)
             generated_tests.append(test)
 
             # Verify each test has correct structure
@@ -199,7 +199,7 @@ class TestGenerateTestCaseWithRealDataset:
         """Verify generated test code has valid Ballerina structure."""
         starter = "function hasCloseElements(float[] numbers, float threshold) returns boolean {"
 
-        test = adapter.generate_test_case("[1.0, 2.0, 3.0], 0.5", "false", starter, 1)
+        test = adapter.composer.generate_test_case("[1.0, 2.0, 3.0], 0.5", "false", starter, 1)
 
         # Check basic Ballerina test syntax
         assert test.count("{") == test.count("}")
@@ -210,7 +210,7 @@ class TestGenerateTestCaseWithRealDataset:
         assert "test:assertEquals" in test
 
         # Should be parseable by extract_test_names
-        test_names = adapter.extract_test_names(test)
+        test_names = adapter.parser.extract_test_names(test)
         assert len(test_names) == 1
         assert "testHasCloseElements1" in test_names
 
@@ -226,13 +226,13 @@ class TestRemoveMainBlock:
 public function main() {
     io:println(add(1, 2));
 }"""
-        cleaned = adapter.remove_main_block(code)
+        cleaned = adapter.parser.remove_main_block(code)
         assert "public function main()" not in cleaned
         assert "function add" in cleaned
 
     def test_preserves_code_without_main(self, adapter: BallerinaLanguage) -> None:
         code = "function add(int a, int b) returns int { return a + b; }"
-        cleaned = adapter.remove_main_block(code)
+        cleaned = adapter.parser.remove_main_block(code)
         assert "function add" in cleaned
 
     def test_cleans_up_extra_blank_lines(self, adapter: BallerinaLanguage) -> None:
@@ -241,6 +241,6 @@ public function main() {
 
 
 public function main() { }"""
-        cleaned = adapter.remove_main_block(code)
+        cleaned = adapter.parser.remove_main_block(code)
         # Should not have 3+ consecutive newlines
         assert "\n\n\n" not in cleaned

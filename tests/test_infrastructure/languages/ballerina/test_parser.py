@@ -17,29 +17,29 @@ class TestIsSyntaxValid:
     return a + b;
 }"""
         # Syntax validation is disabled, always returns True
-        assert adapter.is_syntax_valid(code)
+        assert adapter.parser.is_syntax_valid(code)
 
     def test_invalid_empty_string(self, adapter: BallerinaLanguage) -> None:
         # basic_syntax_check requires a 'function' keyword
-        assert not adapter.is_syntax_valid("")
-        assert not adapter.is_syntax_valid("   ")
+        assert not adapter.parser.is_syntax_valid("")
+        assert not adapter.parser.is_syntax_valid("   ")
 
     def test_invalid_unbalanced_braces(self, adapter: BallerinaLanguage) -> None:
         code = "function test() { return;"
         # Basic check should catch unbalanced braces
-        result = adapter.is_syntax_valid(code)
+        result = adapter.parser.is_syntax_valid(code)
         assert not result
 
     def test_invalid_unbalanced_parens(self, adapter: BallerinaLanguage) -> None:
         code = "function test( { return; }"
-        result = adapter.is_syntax_valid(code)
+        result = adapter.parser.is_syntax_valid(code)
         assert not result
 
     def test_basic_syntax_check_requires_function(
         self, adapter: BallerinaLanguage
     ) -> None:
         code = "int x = 5;"
-        result = adapter.is_syntax_valid(code)
+        result = adapter.parser.is_syntax_valid(code)
         assert not result
 
 
@@ -51,7 +51,7 @@ class TestExtractTestNames:
 function testAdd() {
     test:assertEquals(add(1, 2), 3);
 }"""
-        names = adapter.extract_test_names(test_code)
+        names = adapter.parser.extract_test_names(test_code)
         assert names == ["testAdd"]
 
     def test_extracts_multiple_test_names(self, adapter: BallerinaLanguage) -> None:
@@ -64,12 +64,12 @@ function testAdd() {
 function testSubtract() {
     test:assertEquals(subtract(5, 3), 2);
 }"""
-        names = adapter.extract_test_names(test_code)
+        names = adapter.parser.extract_test_names(test_code)
         assert names == ["testAdd", "testSubtract"]
 
     def test_returns_empty_list_when_no_tests(self, adapter: BallerinaLanguage) -> None:
         code = "function regular() { return 5; }"
-        names = adapter.extract_test_names(code)
+        names = adapter.parser.extract_test_names(code)
         assert names == []
 
 
@@ -81,7 +81,7 @@ class TestSplitTests:
 function testOne() {
     test:assertEquals(1, 1);
 }"""
-        tests = adapter.split_tests(test_code)
+        tests = adapter.parser.split_tests(test_code)
         assert len(tests) == 1
         assert "@test:Config" in tests[0]
         assert "testOne" in tests[0]
@@ -96,14 +96,14 @@ function testOne() {
 function testTwo() {
     test:assertEquals(2, 2);
 }"""
-        tests = adapter.split_tests(test_code)
+        tests = adapter.parser.split_tests(test_code)
         assert len(tests) == 2
         assert "testOne" in tests[0]
         assert "testTwo" in tests[1]
 
     def test_returns_empty_list_when_no_tests(self, adapter: BallerinaLanguage) -> None:
         code = "function regular() { return 5; }"
-        tests = adapter.split_tests(code)
+        tests = adapter.parser.split_tests(code)
         assert tests == []
 
     def test_handles_nested_braces(self, adapter: BallerinaLanguage) -> None:
@@ -113,7 +113,7 @@ function testComplex() {
         test:assertEquals(1, 1);
     }
 }"""
-        tests = adapter.split_tests(test_code)
+        tests = adapter.parser.split_tests(test_code)
         assert len(tests) == 1
         assert "if (true)" in tests[0]
 
@@ -126,7 +126,7 @@ class TestNormalizeCode:
     // This is a comment
     return 1;
 }"""
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "// This is a comment" not in normalized
         assert "return 1;" in normalized
 
@@ -136,7 +136,7 @@ class TestNormalizeCode:
        multiline comment */
     return 1;
 }"""
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "/* This is a" not in normalized
         assert "multiline comment */" not in normalized
         assert "return 1;" in normalized
@@ -145,7 +145,7 @@ class TestNormalizeCode:
         code = """function   test()   {
     return    1;
         }"""
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         lines = normalized.split("\n")
         # Each line should be stripped
         assert all(line == line.strip() for line in lines)
@@ -159,7 +159,7 @@ class TestContainsStarterCode:
         code = """function add(int a, int b) returns int {
     return a + b;
 }"""
-        assert adapter.contains_starter_code(code, starter)
+        assert adapter.parser.contains_starter_code(code, starter)
 
     def test_matches_function_signature(self, adapter: BallerinaLanguage) -> None:
         starter = "function multiply(int x, int y) returns int"
@@ -167,14 +167,14 @@ class TestContainsStarterCode:
 function multiply(int x, int y) returns int {
     return x * y;
 }"""
-        assert adapter.contains_starter_code(code, starter)
+        assert adapter.parser.contains_starter_code(code, starter)
 
     def test_returns_false_when_function_not_present(
         self, adapter: BallerinaLanguage
     ) -> None:
         starter = "function divide(int a, int b) returns int"
         code = "function add(int a, int b) returns int { return a + b; }"
-        assert not adapter.contains_starter_code(code, starter)
+        assert not adapter.parser.contains_starter_code(code, starter)
 
 
 class TestGetStructuralMetadata:
@@ -188,7 +188,7 @@ class TestGetStructuralMetadata:
 function subtract(int a, int b) returns int {
     return a - b;
 }"""
-        metadata = adapter.get_structural_metadata(code)
+        metadata = adapter.parser.get_structural_metadata(code)
         assert len(metadata["functions"]) == 2
         assert metadata["functions"][0]["name"] == "add"
         assert metadata["functions"][0]["visibility"] == "public"
@@ -200,7 +200,7 @@ function subtract(int a, int b) returns int {
         code = """public function main() {
     io:println("Hello");
 }"""
-        metadata = adapter.get_structural_metadata(code)
+        metadata = adapter.parser.get_structural_metadata(code)
         assert metadata["has_main"] is True
 
     def test_extracts_imports(self, adapter: BallerinaLanguage) -> None:
@@ -208,14 +208,14 @@ function subtract(int a, int b) returns int {
 import ballerina/test;
 
 function test() {}"""
-        metadata = adapter.get_structural_metadata(code)
+        metadata = adapter.parser.get_structural_metadata(code)
         assert "ballerina/io" in metadata["imports"]
         assert "ballerina/test" in metadata["imports"]
 
     def test_returns_empty_metadata_for_empty_code(
         self, adapter: BallerinaLanguage
     ) -> None:
-        metadata = adapter.get_structural_metadata("")
+        metadata = adapter.parser.get_structural_metadata("")
         assert metadata["functions"] == []
         assert metadata["imports"] == []
         assert metadata["has_main"] is False
@@ -229,7 +229,7 @@ class TestParseTestInputs:
 output: 3
 input: add(5, 7)
 output: 12"""
-        test_cases = adapter.parse_test_inputs(outputs)
+        test_cases = adapter.parser.parse_test_inputs(outputs)
         assert len(test_cases) == 2
         assert test_cases[0]["input"] == "add(1, 2)"
         assert test_cases[0]["output"] == "3"
@@ -240,7 +240,7 @@ output: 12"""
         outputs = """input: test(1)
 input: test(2)
 output: 4"""
-        test_cases = adapter.parse_test_inputs(outputs)
+        test_cases = adapter.parser.parse_test_inputs(outputs)
         assert len(test_cases) == 2
         assert test_cases[0]["output"] == ""
         assert test_cases[1]["output"] == "4"
@@ -249,7 +249,7 @@ output: 4"""
         self, adapter: BallerinaLanguage
     ) -> None:
         outputs = '[{"input": "test(1)", "output": "1"}]'
-        test_cases = adapter.parse_test_inputs(outputs)
+        test_cases = adapter.parser.parse_test_inputs(outputs)
         assert len(test_cases) == 1
         assert test_cases[0]["input"] == "test(1)"
 
@@ -257,5 +257,5 @@ output: 4"""
         self, adapter: BallerinaLanguage
     ) -> None:
         outputs = "This is not a valid format"
-        test_cases = adapter.parse_test_inputs(outputs)
+        test_cases = adapter.parser.parse_test_inputs(outputs)
         assert test_cases == []

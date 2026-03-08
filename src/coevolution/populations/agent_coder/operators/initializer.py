@@ -10,7 +10,7 @@ from coevolution.core.interfaces import (
     Problem,
 )
 from coevolution.core.interfaces.language import (
-    ILanguage,
+    ICodeParser,
     LanguageParsingError,
     LanguageTransformationError,
 )
@@ -34,11 +34,12 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         pop_config: PopulationConfig,
         edit_operator: AgentCoderEditOperator,
     ) -> None:
-        super().__init__(llm, language_adapter, pop_config)
+        super().__init__(llm, parser, language_name, pop_config)
         if pop_config.initial_population_size != 1:
             raise ValueError("AgentCoder only supports initial_population_size=1")
         self._edit_operator = edit_operator
@@ -58,12 +59,12 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
         response = self._generate(self._edit_operator._conversation_history)
         self._edit_operator._conversation_history.append({"role": "assistant", "content": response})
 
-        code_blocks = self.language_adapter.extract_code_blocks(response)
+        code_blocks = self.parser.extract_code_blocks(response)
         if not code_blocks:
             raise ValueError("AgentCoderInitializer: no code block in LLM response")
         code = code_blocks[-1]
 
-        if not self.language_adapter.contains_starter_code(code, problem.starter_code):
+        if not self.parser.contains_starter_code(code, problem.starter_code):
             raise ValueError("AgentCoderInitializer: generated code missing starter code")
 
         return CodeIndividual(

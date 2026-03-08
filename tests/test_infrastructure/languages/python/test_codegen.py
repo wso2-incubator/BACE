@@ -22,22 +22,22 @@ class TestComposeTestScript:
     def test_combines_code_and_test(self, adapter: PythonLanguage) -> None:
         code = "def add(a, b):\n    return a + b"
         test = "def test_add():\n    assert add(1, 2) == 3"
-        script = adapter.compose_test_script(code, test)
+        script = adapter.composer.compose_test_script(code, test)
         assert "def add" in script
         assert "def test_add" in script
 
     def test_adds_pytest_import_when_missing(self, adapter: PythonLanguage) -> None:
-        script = adapter.compose_test_script("def f(): pass", "def test_f(): pass")
+        script = adapter.composer.compose_test_script("def f(): pass", "def test_f(): pass")
         assert "import pytest" in script
 
     def test_does_not_duplicate_pytest_import(self, adapter: PythonLanguage) -> None:
         code = "import pytest\ndef f(): pass"
         test = "def test_f(): pass"
-        script = adapter.compose_test_script(code, test)
+        script = adapter.composer.compose_test_script(code, test)
         assert script.count("import pytest") == 1
 
     def test_includes_main_block(self, adapter: PythonLanguage) -> None:
-        script = adapter.compose_test_script("def f(): pass", "def test_f(): pass")
+        script = adapter.composer.compose_test_script("def f(): pass", "def test_f(): pass")
         assert 'if __name__ == "__main__":' in script
         assert 'pytest.main([__file__, "-v"])' in script
 
@@ -49,7 +49,7 @@ class TestGenerateTestCase:
                 def sol(self, input_str: str) -> str:
                     pass
         """)
-        code = adapter.generate_test_case("5\n3 2 1", "1 2 3", starter, 1)
+        code = adapter.composer.generate_test_case("5\n3 2 1", "1 2 3", starter, 1)
         assert "def test_case_1():" in code
         assert "solution = Solution()" in code
         assert "solution.sol(input_str)" in code
@@ -61,7 +61,7 @@ class TestGenerateTestCase:
                 def add(self, x: int, y: int) -> int:
                     pass
         """)
-        code = adapter.generate_test_case("5\n3", "8", starter, 1)
+        code = adapter.composer.generate_test_case("5\n3", "8", starter, 1)
         assert "def test_case_1():" in code
         assert "solution = Solution()" in code
         assert "import ast" in code
@@ -69,7 +69,7 @@ class TestGenerateTestCase:
 
     def test_standalone_function_test_generation(self, adapter: PythonLanguage) -> None:
         starter = "def add(x: int, y: int) -> int:\n    pass\n"
-        code = adapter.generate_test_case("5\n3", "8", starter, 1)
+        code = adapter.composer.generate_test_case("5\n3", "8", starter, 1)
         assert "def test_case_1():" in code
         assert "solution = " not in code
         assert "add(*args)" in code
@@ -80,7 +80,7 @@ class TestGenerateTestCase:
                 def calculate(self, a: int, b: int, c: int) -> int:
                     pass
         """)
-        code = adapter.generate_test_case("1\n2\n3", "6", starter, 42)
+        code = adapter.composer.generate_test_case("1\n2\n3", "6", starter, 42)
         assert "def test_case_42():" in code
 
     def test_different_class_names_preserved(self, adapter: PythonLanguage) -> None:
@@ -89,13 +89,13 @@ class TestGenerateTestCase:
                 def compute(self, x: int) -> int:
                     pass
         """)
-        code = adapter.generate_test_case("5", "25", starter, 1)
+        code = adapter.composer.generate_test_case("5", "25", starter, 1)
         assert "MySolution()" in code
         assert "solution.compute(*args)" in code
 
     def test_invalid_starter_raises_error(self, adapter: PythonLanguage) -> None:
         with pytest.raises(LanguageParsingError):
-            adapter.generate_test_case("1", "2", "not valid python code {", 1)
+            adapter.composer.generate_test_case("1", "2", "not valid python code {", 1)
 
     def test_stdin_round_trip_executes(self, adapter: PythonLanguage) -> None:
         starter = textwrap.dedent("""
@@ -103,7 +103,7 @@ class TestGenerateTestCase:
                 def sol(self, input_str: str) -> str:
                     return input_str
         """)
-        test_code = adapter.generate_test_case("hello", "hello", starter, 1)
+        test_code = adapter.composer.generate_test_case("hello", "hello", starter, 1)
         ns: dict[str, Any] = {}
         exec(starter + "\n" + test_code, ns)
         ns["test_case_1"]()  # must not raise
@@ -114,14 +114,14 @@ class TestGenerateTestCase:
                 def add(self, x: int, y: int) -> int:
                     return x + y
         """)
-        test_code = adapter.generate_test_case("5\n3", "8", starter, 1)
+        test_code = adapter.composer.generate_test_case("5\n3", "8", starter, 1)
         ns: dict[str, Any] = {}
         exec(starter + "\n" + test_code, ns)
         ns["test_case_1"]()
 
     def test_standalone_round_trip_executes(self, adapter: PythonLanguage) -> None:
         starter = "def sort_array(arr):\n    return sorted(arr)\n"
-        test_code = adapter.generate_test_case("[3, 1, 2]", "[1, 2, 3]", starter, 1)
+        test_code = adapter.composer.generate_test_case("[3, 1, 2]", "[1, 2, 3]", starter, 1)
         ns: dict[str, Any] = {}
         exec(starter + "\n" + test_code, ns)
         ns["test_case_1"]()
@@ -130,43 +130,43 @@ class TestGenerateTestCase:
 class TestRemoveMainBlock:
     def test_removes_main_block(self, adapter: PythonLanguage) -> None:
         code = "def foo():\n    pass\n\nif __name__ == '__main__':\n    foo()\n"
-        result = adapter.remove_main_block(code)
+        result = adapter.parser.remove_main_block(code)
         assert "if __name__" not in result
         assert "def foo" in result
 
     def test_preserves_code_without_main_block(self, adapter: PythonLanguage) -> None:
         code = "def foo():\n    pass"
-        result = adapter.remove_main_block(code)
+        result = adapter.parser.remove_main_block(code)
         assert "def foo" in result
 
     def test_preserves_other_if_blocks(self, adapter: PythonLanguage) -> None:
         code = (
             "x = 1\nif x > 0:\n    print(x)\n\nif __name__ == '__main__':\n    run()\n"
         )
-        result = adapter.remove_main_block(code)
+        result = adapter.parser.remove_main_block(code)
         assert "if x > 0" in result
         assert "if __name__" not in result
 
     def test_removes_double_quoted_main_block(self, adapter: PythonLanguage) -> None:
         code = 'def foo():\n    pass\n\nif __name__ == "__main__":\n    foo()\n'
-        result = adapter.remove_main_block(code)
+        result = adapter.parser.remove_main_block(code)
         assert "if __name__" not in result
 
     def test_removes_reversed_comparison(self, adapter: PythonLanguage) -> None:
         code = "def foo():\n    pass\n\nif '__main__' == __name__:\n    foo()\n"
-        result = adapter.remove_main_block(code)
+        result = adapter.parser.remove_main_block(code)
         assert "__main__" not in result
         assert "def foo" in result
 
     def test_raises_on_syntax_error(self, adapter: PythonLanguage) -> None:
         with pytest.raises(LanguageParsingError):
-            adapter.remove_main_block("if invalid syntax")
+            adapter.parser.remove_main_block("if invalid syntax")
 
 
 class TestComposeEvaluationScript:
     def test_basic_solution_class(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'a': 1, 'b': 2}}"
         )
         assert "class Solution" in script
@@ -176,7 +176,7 @@ class TestComposeEvaluationScript:
 
     def test_generated_script_executes_correctly(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'a': 1, 'b': 2}}"
         )
         captured = io.StringIO()
@@ -189,7 +189,7 @@ class TestComposeEvaluationScript:
 
     def test_wraps_loose_functions_into_solution(self, adapter: PythonLanguage) -> None:
         prog = "def multiply(x, y):\n    return x * y\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'x': 3, 'y': 4}}"
         )
         assert "class Solution" in script
@@ -198,14 +198,14 @@ class TestComposeEvaluationScript:
 
     def test_string_parameters(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def process(self, text, count):\n        return text * count\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'text': 'hello', 'count': 3}}"
         )
         assert "process('hello', 3)" in script
 
     def test_preserves_imports(self, adapter: PythonLanguage) -> None:
         prog = "import math\n\nclass Solution:\n    def sqrt_sum(self, a, b):\n        return math.sqrt(a + b)\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'a': 3, 'b': 6}}"
         )
         assert "import math" in script
@@ -215,27 +215,27 @@ class TestComposeEvaluationScript:
             "class Helper:\n    def val(self): return 42\n\n"
             "class Solution:\n    def solve(self, x):\n        return Helper().val() + x\n"
         )
-        script = adapter.compose_evaluation_script(prog, "{'inputdata': {'x': 8}}")
+        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {'x': 8}}")
         assert "class Helper" in script
         assert "class Solution" in script
 
     def test_no_parameters_function(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def get_answer(self):\n        return 42\n"
-        script = adapter.compose_evaluation_script(prog, "{'inputdata': {}}")
+        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {}}")
         assert "get_answer()" in script
 
     def test_list_as_parameter(self, adapter: PythonLanguage) -> None:
         prog = (
             "class Solution:\n    def sum_list(self, nums):\n        return sum(nums)\n"
         )
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'nums': [1, 2, 3, 4, 5]}}"
         )
         assert "sum_list([1, 2, 3, 4, 5])" in script
 
     def test_boolean_parameter(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def toggle(self, flag):\n        return not flag\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'flag': True}}"
         )
         assert "toggle(True)" in script
@@ -244,35 +244,35 @@ class TestComposeEvaluationScript:
         with pytest.raises(
             LanguageParsingError, match="Failed to parse programmer code"
         ):
-            adapter.compose_evaluation_script(
+            adapter.composer.compose_evaluation_script(
                 "class Solution: invalid syntax here", "{'inputdata': {}}"
             )
 
     def test_raises_when_no_solution_found(self, adapter: PythonLanguage) -> None:
         with pytest.raises(LanguageTransformationError, match="No Solution class"):
-            adapter.compose_evaluation_script("x = 1", "{'inputdata': {}}")
+            adapter.composer.compose_evaluation_script("x = 1", "{'inputdata': {}}")
 
     def test_raises_when_missing_inputdata_key(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
         with pytest.raises(LanguageTransformationError, match="inputdata"):
-            adapter.compose_evaluation_script(prog, "{'wrongkey': {'x': 1}}")
+            adapter.composer.compose_evaluation_script(prog, "{'wrongkey': {'x': 1}}")
 
     def test_raises_when_inputdata_not_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
         with pytest.raises(LanguageTransformationError, match="dict object"):
-            adapter.compose_evaluation_script(prog, "{'inputdata': 'not a dict'}")
+            adapter.composer.compose_evaluation_script(prog, "{'inputdata': 'not a dict'}")
 
     def test_raises_on_invalid_input_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
         with pytest.raises(
             LanguageTransformationError, match="Failed to parse input data"
         ):
-            adapter.compose_evaluation_script(prog, "this is not valid python dict")
+            adapter.composer.compose_evaluation_script(prog, "this is not valid python dict")
 
     def test_multiline_string_with_newlines(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, input_str):\n        return len(input_str.split('\\n'))\n"
         input_data = "{'inputdata': {'input_str': 'line1\\nline2\\nline3'}}"
-        script = adapter.compose_evaluation_script(prog, input_data)
+        script = adapter.composer.compose_evaluation_script(prog, input_data)
         captured = io.StringIO()
         sys.stdout = captured
         try:
@@ -283,7 +283,7 @@ class TestComposeEvaluationScript:
 
     def test_whitespace_in_input_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
-        script = adapter.compose_evaluation_script(
+        script = adapter.composer.compose_evaluation_script(
             prog, "{ 'inputdata' : { 'a' : 1 , 'b' : 2 } }"
         )
         assert "add(1, 2)" in script
@@ -298,29 +298,29 @@ class TestComposeEvaluationScript:
             "    def other(self, y):\n"
             "        return y * 3\n"
         )
-        script = adapter.compose_evaluation_script(prog, "{'inputdata': {'x': 10}}")
+        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {'x': 10}}")
         assert "sol.solve(10)" in script
 
 
 class TestNormalizeCode:
     def test_removes_comments(self, adapter: PythonLanguage) -> None:
         code = "def f():\n    # comment\n    return 1"
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "# comment" not in normalized
         assert "return 1" in normalized
 
     def test_removes_double_quote_docstrings(self, adapter: PythonLanguage) -> None:
         code = 'def f():\n    """docstring"""\n    return 1'
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "docstring" not in normalized
 
     def test_removes_single_quote_docstrings(self, adapter: PythonLanguage) -> None:
         code = "def f():\n    '''docstring'''\n    return 1"
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "docstring" not in normalized
 
     def test_strips_extra_whitespace(self, adapter: PythonLanguage) -> None:
         code = "def   foo():     pass"
-        normalized = adapter.normalize_code(code)
+        normalized = adapter.parser.normalize_code(code)
         assert "  " not in normalized
 

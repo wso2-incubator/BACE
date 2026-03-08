@@ -30,14 +30,14 @@ def mock_parent():
 @pytest.fixture
 def unittest_mutation_operator():
     mock_llm = MagicMock()
-    mock_language = MagicMock()
-    mock_language.language = "python"
+    mock_parser = MagicMock()
     mock_selector = MagicMock()
     mock_prob = MagicMock()
     
     op = UnittestMutationOperator(
         llm=mock_llm,
-        language_adapter=mock_language,
+        parser=mock_parser,
+        language_name="python",
         parent_selector=mock_selector,
         prob_assigner=mock_prob
     )
@@ -47,7 +47,7 @@ def test_unittest_mutation_execute_success(unittest_mutation_operator, mock_cont
     # Setup
     unittest_mutation_operator.parent_selector.select_parents.return_value = [mock_parent]
     unittest_mutation_operator._llm.generate.return_value = "```python\ndef test_mutated(): pass\n```"
-    unittest_mutation_operator.language_adapter.extract_code_blocks.return_value = ["def test_mutated(): pass"]
+    unittest_mutation_operator.parser.extract_code_blocks.return_value = ["def test_mutated(): pass"]
     unittest_mutation_operator.prob_assigner.assign_probability.return_value = 0.5
     
     # We need to mock _extract_first_test_function because it's called on 'self'

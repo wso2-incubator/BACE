@@ -79,7 +79,7 @@ class TestExecutor:
             if hasattr(self.sandbox, "config") and hasattr(self.sandbox.config, "test_method_timeout"):
                 kwargs["timeout"] = self.sandbox.config.test_method_timeout
 
-            cmd = self.language_adapter.get_test_command(script_path, xml_path, **kwargs)
+            cmd = self.language_adapter.runtime.get_test_command(script_path, xml_path, **kwargs)
             raw_result = self.sandbox.execute_command(cmd, cwd=tmpdir)
 
             xml_content = None
@@ -87,7 +87,7 @@ class TestExecutor:
                 with open(xml_path, "r", encoding="utf-8") as f:
                     xml_content = f.read()
 
-            result: EvaluationResult = self.language_adapter.parse_test_results(raw_result, xml_content)
+            result: EvaluationResult = self.language_adapter.analyzer.analyze(raw_result, xml_content=xml_content)
         
         return result
 
@@ -103,8 +103,8 @@ class TestExecutor:
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(code)
             
-            if hasattr(self.language_adapter, "get_execution_command"):
-                cmd = self.language_adapter.get_execution_command(script_path)
+            if hasattr(self.language_adapter.runtime, "get_execution_command"):
+                cmd = self.language_adapter.runtime.get_execution_command(script_path)
             else:
                 cmd = ["python", script_path]
                 

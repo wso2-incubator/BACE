@@ -11,7 +11,7 @@ from coevolution.core.interfaces import (
     Problem,
 )
 from coevolution.core.interfaces.language import (
-    ILanguage,
+    ICodeParser,
     LanguageParsingError,
     LanguageTransformationError,
 )
@@ -35,11 +35,12 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         pop_config: PopulationConfig,
         llm_workers: int = 1,
     ) -> None:
-        super().__init__(llm, language_adapter, pop_config)
+        super().__init__(llm, parser, language_name, pop_config)
         self.llm_workers = llm_workers
 
     def initialize(self, problem: Problem) -> list[TestIndividual]:
@@ -69,7 +70,7 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
         )
         response = self._generate(prompt)
 
-        code_blocks = self.language_adapter.extract_code_blocks(response)
+        code_blocks = self.parser.extract_code_blocks(response)
         test_functions: list[str] = []
         for block in code_blocks:
             test_functions.extend(self._extract_test_functions(block))
@@ -89,7 +90,7 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
                 starter_code=problem.starter_code,
             )
             extra_response = self._generate(extra_prompt)
-            for block in self.language_adapter.extract_code_blocks(extra_response):
+            for block in self.parser.extract_code_blocks(extra_response):
                 test_functions.extend(self._extract_test_functions(block))
                 if len(test_functions) >= target:
                     break

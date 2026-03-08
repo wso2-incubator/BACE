@@ -1,3 +1,4 @@
+from infrastructure.languages.python import PythonLanguage
 """
 Integration test for LCB STDIN-style problems with differential testing.
 
@@ -52,8 +53,9 @@ if __name__ == "__main__":
 
     # Find differential outputs
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
+    lang = PythonLanguage()
     finder = DifferentialFinder(
-        sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
     )
 
     results = finder.find_differential(
@@ -79,7 +81,7 @@ if __name__ == "__main__":
     from unittest.mock import MagicMock
 
     mock_llm = MagicMock()
-    operator = DifferentialLLMOperator(llm=mock_llm)
+    lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
 
     # Convert first divergence to IO pair
     div = results[0]

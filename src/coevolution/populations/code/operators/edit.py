@@ -13,7 +13,7 @@ from coevolution.core.interfaces import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
 from coevolution.strategies.llm_base import (
@@ -45,13 +45,14 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         prob_assigner: IProbabilityAssigner,
         failing_test_selector: IFailingTestSelector,
         k_failing_tests: int = 10,
     ) -> None:
-        super().__init__(llm, language_adapter, parent_selector, prob_assigner)
+        super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
         self.failing_test_selector = failing_test_selector
         self.k_failing_tests = k_failing_tests
 

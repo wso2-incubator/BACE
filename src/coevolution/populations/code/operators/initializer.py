@@ -15,7 +15,7 @@ from coevolution.core.interfaces import (
     PopulationConfig,
     Problem,
 )
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
@@ -35,13 +35,14 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
     def __init__(
         self,
         llm: ILanguageModel,
-        language_adapter: ILanguage,
+        parser: ICodeParser,
+        language_name: str,
         pop_config: PopulationConfig,
         init_batch_size: int = 2,
         llm_workers: int = 4,
         planning_enabled: bool = False,
     ) -> None:
-        super().__init__(llm, language_adapter, pop_config)
+        super().__init__(llm, parser, language_name, pop_config)
         self.init_batch_size = min(
             init_batch_size, pop_config.initial_population_size or 1
         )

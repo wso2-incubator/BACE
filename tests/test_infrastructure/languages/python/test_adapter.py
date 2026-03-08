@@ -21,13 +21,13 @@ class TestExtractCodeBlocks:
 def add(a, b):
     return a + b
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
         assert "def add" in blocks[0]
 
     def test_extracts_capital_python_block(self, adapter: PythonLanguage) -> None:
         response = "```Python\ndef foo(): pass\n```"
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
         assert "def foo" in blocks[0]
 
@@ -41,7 +41,7 @@ def solution_a():
 def solution_b():
     return 2
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 2
         assert "solution_a" in blocks[0]
         assert "solution_b" in blocks[1]
@@ -50,7 +50,7 @@ def solution_b():
         self, adapter: PythonLanguage
     ) -> None:
         response = "def foo():\n    return 42"
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
         assert "def foo" in blocks[0]
 
@@ -58,7 +58,7 @@ def solution_b():
         self, adapter: PythonLanguage
     ) -> None:
         response = "This is just plain text with no code."
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert blocks == []
 
     def test_skips_blocks_with_syntax_errors(self, adapter: PythonLanguage) -> None:
@@ -69,6 +69,6 @@ def valid():
 ```python
 def broken(
 ```"""
-        blocks = adapter.extract_code_blocks(response)
+        blocks = adapter.parser.extract_code_blocks(response)
         assert len(blocks) == 1
         assert "def valid" in blocks[0]
