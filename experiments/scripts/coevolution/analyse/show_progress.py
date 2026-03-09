@@ -13,6 +13,7 @@ from typing import Any
 
 import typer
 from rich import box
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -82,6 +83,21 @@ def load_config(run_id: str) -> dict[str, Any] | None:
         return None
 
 
+def extract_operator_rates(prof: dict[str, Any]) -> str:
+    """Extracts operator rates from both sub-dictionary and root-level keys."""
+    rates = prof.get("operator_rates", {})
+    if not rates:
+        # Fallback to root-level *_rate keys
+        rates = {
+            k.replace("_rate", ""): v
+            for k, v in prof.items()
+            if k.endswith("_rate") and isinstance(v, (int, float))
+        }
+    if not rates:
+        return ""
+    return ", ".join([f"{k}:{v:.1f}" for k, v in rates.items()])
+
+
 # ─── RENDERERS ────────────────────────────────────────────────────────────────
 
 
@@ -93,60 +109,86 @@ def display_config(config: dict[str, Any]) -> None:
     exp_cfg = config.get("experiment", {})
     llm_cfg = config.get("llm", {})
 
-    metadata_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
-    metadata_table.add_column("Key", style="bold cyan", no_wrap=True)
-    metadata_table.add_column("Value")
-
-    metadata_table.add_row("Experiment", exp_cfg.get("name", "N/A"))
+    metadata_table = Table(show_header=False, box=box.SIMPLE, border_style="dim")
     metadata_table.add_row(
-        "Description", f"[dim]{exp_cfg.get('description', 'N/A')}[/dim]"
+        "Experiment", f"[bold cyan]{exp_cfg.get('name', 'N/A')}[/bold cyan]"
     )
+    metadata_table.add_row("Description", f"[dim]{exp_cfg.get('description', '')}[/dim]")
     metadata_table.add_row(
         "LLM Model",
         f"[green]{llm_cfg.get('provider', 'N/A')}/{llm_cfg.get('model', 'N/A')}[/green]",
     )
     metadata_table.add_row(
-        "Language", f"[yellow]{exp_cfg.get('language', 'N/A')}[/yellow]"
+        "Language", f"[yellow]{exp_cfg.get('language', 'python')}[/yellow]"
     )
 
     console.print(Panel(metadata_table, title="[bold]Metadata", border_style="dim"))
 
-    # 2. Population Strategy (Settings + Operators)
+    # 2. Population Strategy (Detailed Panels)
     code_prof = config.get("code_profile", {})
-    test_profs = config.get("test_profiles", {})
+    
+    # Collect all profiles
+    profiles_to_show = [("Code", code_prof)]
+    
+    # Check for test profiles
+    test_profs_dict = config.get("test_profiles", {})
+    for pt in ["unittest", "differential", "public"]:
+        if f"{pt}_profile" in config:
+            test_profs_dict[pt] = config[f"{pt}_profile"]
+    
+    for t_type, t_prof in test_profs_dict.items():
+        profiles_to_show.append((t_type.title(), t_prof))
 
-    pop_table = Table(
-        title="Coevolutionary Strategy", box=box.ROUNDED, border_style="dim"
-    )
-    pop_table.add_column("Population", style="bold")
-    pop_table.add_column("Sizes (Init/Max)", justify="center")
-    pop_table.add_column("Elitism", justify="center")
-    pop_table.add_column("Operators (Rates)", style="dim")
+    panels = []
+    for name, prof in profiles_to_show:
+        cfg = prof.get("population_config", prof)
+        
+        # Base Settings
+        settings_table = Table(show_header=False, box=None, padding=(0, 1))
+        
+        # Population
+        init_size = cfg.get("initial_population_size")
+        max_size = cfg.get("max_population_size")
+        settings_table.add_row("Pop Sizes", f"[bold]{init_size} → {max_size}[/bold]")
+        settings_table.add_row("Init Prior", f"[dim]{cfg.get('initial_prior', 'N/A')}[/dim]")
+        
+        elitism = cfg.get("elitism_rate")
+        if elitism is not None:
+            settings_table.add_row("Elitism", f"{elitism:.1%}")
 
-    # Add Code Row
-    code_cfg = code_prof.get("population_config", {})
-    code_ops = code_prof.get("operator_rates", {})
-    ops_str = ", ".join([f"{k}:{v:.1f}" for k, v in code_ops.items()])
-    pop_table.add_row(
-        "Code",
-        f"{code_cfg.get('initial_population_size')} / {code_cfg.get('max_population_size')}",
-        f"{code_cfg.get('elitism_rate', 0):.1%}",
-        ops_str,
-    )
+        # Rates (Operations)
+        ops_str = extract_operator_rates(prof)
+        if ops_str:
+            settings_table.add_row("Op Rates", f"[yellow]{ops_str}[/yellow]")
+            
+        # Strategy
+        div = cfg.get("diversity_enabled")
+        if div is not None:
+            settings_table.add_row("Diversity", "[green]ON[/green]" if div else "[red]OFF[/red]")
+        
+        strat = cfg.get("prob_assigner_strategy")
+        if strat:
+            settings_table.add_row("Prob Strat", f"[dim]{strat}[/dim]")
+            
+        # Performance
+        workers = cfg.get("llm_workers")
+        if workers:
+            settings_table.add_row("Workers", f"{workers}")
+            
+        batch = cfg.get("init_pop_batch_size")
+        if batch:
+            settings_table.add_row("Batch Size", f"{batch}")
+            
+        # Specific Settings (Bayesian/Special)
+        for special in ["learning_rate", "alpha", "beta", "gamma", "k_failing_tests"]:
+            val = cfg.get(special)
+            if val is not None:
+                lbl = special.replace("_", " ").title()
+                settings_table.add_row(lbl, f"[cyan]{val}[/cyan]")
 
-    # Add Test Rows
-    for t_type, t_prof in test_profs.items():
-        t_cfg = t_prof.get("population_config", {})
-        t_ops = t_prof.get("operator_rates", {})
-        t_ops_str = ", ".join([f"{k}:{v:.1f}" for k, v in t_ops.items()])
-        pop_table.add_row(
-            t_type.title(),
-            f"{t_cfg.get('initial_population_size')} / {t_cfg.get('max_population_size')}",
-            f"{t_cfg.get('elitism_rate', 0):.1%}",
-            t_ops_str,
-        )
+        panels.append(Panel(settings_table, title=f"[bold]{name}", border_style="blue"))
 
-    console.print(pop_table)
+    console.print(Columns(panels, equal=True, expand=True))
 
     # 3. Evolution Schedule
     schedule_data = config.get("evolution_config", {}).get("schedule", {})
@@ -168,8 +210,8 @@ def display_config(config: dict[str, Any]) -> None:
                 "[green]✓[/green]" if p.get("evolve_code") else "[red]✗[/red]",
                 "[green]✓[/green]" if p.get("evolve_tests") else "[red]✗[/red]",
             )
-    console.print(sched_table)
-    console.print()
+        console.print(sched_table)
+        console.print()
 
 
 def display_initialization(events: list[dict[str, Any]]) -> None:
@@ -188,7 +230,7 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
         ]
 
         if code_creations:
-            console.print("\n[bold]Seed Populations[/bold]")
+            console.print("\n[bold]Seed Code Population[/bold]")
             for e in code_creations:
                 snippet = e.get("snippet", "")
                 ind_id = e.get("individual_id", "?")
@@ -205,6 +247,40 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
                         border_style="dim",
                     )
                 )
+
+        # Group test snippets
+        test_creations = [
+            e for e in gen0_creations if not str(e.get("individual_id", "")).startswith("C")
+        ]
+        if test_creations:
+            # Group by test_type
+            by_type = {}
+            for e in test_creations:
+                tt = str(e.get("test_type", "Unknown")).upper()
+                if tt not in by_type:
+                    by_type[tt] = []
+                by_type[tt].append(e)
+
+            for tt, creations in by_type.items():
+                console.print(f"\n[bold]Initial {tt} Population[/bold]")
+                test_panels = []
+                for e in creations:
+                    snippet = e.get("snippet", "")
+                    ind_id = e.get("individual_id", "?")
+                    test_panels.append(
+                        Panel(
+                            Syntax(
+                                snippet,
+                                "python",
+                                theme="ansi_dark",
+                                line_numbers=True,
+                                word_wrap=True,
+                            ),
+                            title=f"[bold]{fmt_id(ind_id)}[/bold]",
+                            border_style="dim",
+                        )
+                    )
+                console.print(Columns(test_panels, equal=True))
 
     # Show private matrix for Gen 0 if it exists
     gen0_matrices = [
@@ -445,7 +521,14 @@ def render_generation(
     console.rule(f"[bold yellow]GENERATION {gen}[/bold yellow]", style="yellow")
 
     # 1. Matrices & Failures (Work)
-    matrices = [e for e in gen_events if e["event_type"] == "OBSERVATION_MATRIX"]
+    # Filter to show only the LATEST matrix for each test_type in this generation
+    all_matrices = [e for e in gen_events if e["event_type"] == "OBSERVATION_MATRIX"]
+    matrix_map = {}
+    for m in all_matrices:
+        tt = str(m.get("test_type", "Unknown")).upper()
+        matrix_map[tt] = m
+    
+    matrices = list(matrix_map.values())
     failures = [e for e in gen_events if e["event_type"] == "EVALUATION_FAILED"]
 
     if matrices:
@@ -567,11 +650,20 @@ def main(
     if not events:
         return
 
-    # Snippets cache
+    # Snippets & Probability cache
     snippets: dict[str, str] = {}
+    latest_probs: dict[str, float] = {}
     for e in events:
+        ind_id = e.get("individual_id")
+        if not ind_id:
+            continue
+        
         if e["event_type"] == "CREATED" and "snippet" in e:
-            snippets[e["individual_id"]] = e["snippet"]
+            snippets[ind_id] = e["snippet"]
+        
+        prob = e.get("probability")
+        if prob is not None:
+            latest_probs[ind_id] = float(prob)
 
     # Phase 0: Configuration
     config = load_config(run_id)
@@ -623,7 +715,8 @@ def main(
             if code_survivors:
                 champion_meta = code_survivors[0]  # Sorted by prob
                 champion_id = champion_meta["individual_id"]
-                champion_prob = champion_meta.get("probability", 0.0)
+                # Use cached latest probability which is more reliable
+                champion_prob = latest_probs.get(champion_id, champion_meta.get("probability", 0.0))
 
                 # Find its row in the matrix
                 try:
