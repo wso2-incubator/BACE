@@ -336,29 +336,27 @@ def main(
             },
             "evolution_config": evo_config,
             "code_profile": {
-                "population_config": code_pop_config,
+                **code_pop_config.__dict__,
                 "operator_rates": {
                     "crossover": 0.2,
                     "mutation": 0.3,
                     "edit": 0.5,
                 },
             },
-            "test_profiles": {
-                "unittest": {
-                    "population_config": test_pop_configs["unittest"],
-                    "operator_rates": {
-                        "crossover": 0.1,
-                        "mutation": 0.4,
-                        "discovery": 0.5,
-                    },
+            "unittest_profile": {
+                **test_pop_configs["unittest"].__dict__,
+                "operator_rates": {
+                    "crossover": 0.1,
+                    "mutation": 0.4,
+                    "discovery": 0.5,
                 },
-                "differential": {
-                    "population_config": test_pop_configs["differential"],
-                    "operator_rates": {
-                        "crossover": 0.2,
-                        "mutation": 0.2,
-                        "discovery": 0.6,
-                    },
+            },
+            "differential_profile": {
+                **test_pop_configs["differential"].__dict__,
+                "operator_rates": {
+                    "crossover": 0.2,
+                    "mutation": 0.2,
+                    "discovery": 0.6,
                 },
             },
             "bayesian_config": bayesian_config,
