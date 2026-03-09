@@ -14,7 +14,9 @@ from infrastructure.llm_client import LLMClient
 from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TopKEliteSelector
-from coevolution.strategies.selection.parent_selection import RouletteWheelParentSelection
+from coevolution.strategies.selection.parent_selection import (
+    RouletteWheelParentSelection,
+)
 
 from .operators.edit import AgentCoderEditOperator
 from .operators.initializer import AgentCoderInitializer
@@ -43,7 +45,9 @@ def create_agent_coder_code_profile(
     prob_assigner = ProbabilityAssigner(
         strategy=prob_assigner_strategy, initial_prior=initial_prior
     )
-    parent_selector: RouletteWheelParentSelection[CodeIndividual] = RouletteWheelParentSelection()
+    parent_selector: RouletteWheelParentSelection[CodeIndividual] = (
+        RouletteWheelParentSelection()
+    )
 
     edit_op = AgentCoderEditOperator(
         llm=llm_client,

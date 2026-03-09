@@ -124,7 +124,9 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                 continue
             sorted_inds = sorted(inds, key=lambda x: x.id)
             group_pairs: list[_DiscoveryTask] = [
-                _DiscoveryTask(code_a=sorted_inds[i], code_b=sorted_inds[j], group=group)
+                _DiscoveryTask(
+                    code_a=sorted_inds[i], code_b=sorted_inds[j], group=group
+                )
                 for i in range(len(sorted_inds))
                 for j in range(i + 1, len(sorted_inds))
                 if not self._is_pair_explored(sorted_inds[i], sorted_inds[j])
@@ -170,10 +172,14 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                 question_content=context.problem.question_content,
             )
             script = self.llm_service.generate_script(dto)
-            logger.debug(f"Script generated for pair ({task.code_a.id}, {task.code_b.id})")
+            logger.debug(
+                f"Script generated for pair ({task.code_a.id}, {task.code_b.id})"
+            )
             return _DiscoveryContext(task=task, generator_script=script)
         except Exception as e:
-            logger.error(f"Script generation failed for {task.code_a.id} vs {task.code_b.id}: {e}")
+            logger.error(
+                f"Script generation failed for {task.code_a.id} vs {task.code_b.id}: {e}"
+            )
             return None
 
     def _batch_generate_scripts(
@@ -216,29 +222,38 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                     limit=self.divergence_limit,
                 )
                 if not divergences:
-                    logger.debug(f"No divergences for pair ({task.code_a.id}, {task.code_b.id})")
+                    logger.debug(
+                        f"No divergences for pair ({task.code_a.id}, {task.code_b.id})"
+                    )
                     continue
 
                 parent_probs = [
                     ind.probability
                     for tests in task.group.passing_test_individuals.values()
                     for ind in tests
-                    if hasattr(ind, "creation_op") and ind.creation_op == OPERATION_DISCOVERY
+                    if hasattr(ind, "creation_op")
+                    and ind.creation_op == OPERATION_DISCOVERY
                 ]
                 prob = (
-                    self.prob_assigner.assign_probability(OPERATION_DISCOVERY, parent_probs)
+                    self.prob_assigner.assign_probability(
+                        OPERATION_DISCOVERY, parent_probs
+                    )
                     if parent_probs
                     else self.prob_assigner.initial_prior
                 )
 
-                new_tests = self._create_divergence_tests(context, task, divergences, prob)
+                new_tests = self._create_divergence_tests(
+                    context, task, divergences, prob
+                )
                 offspring.extend(new_tests)
                 logger.debug(
                     f"Pair ({task.code_a.id}, {task.code_b.id}): "
                     f"{len(divergences)} divergences → {len(new_tests)} tests"
                 )
             except Exception as e:
-                logger.error(f"Divergence finding failed for {task.code_a.id} vs {task.code_b.id}: {e}")
+                logger.error(
+                    f"Divergence finding failed for {task.code_a.id} vs {task.code_b.id}: {e}"
+                )
         return offspring
 
     # ------------------------------------------------------------------
@@ -256,9 +271,25 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
         code_a, code_b = task.code_a, task.code_b
         results: list[TestIndividual] = []
 
-        scenarios: list[tuple[CodeIndividual, CodeIndividual, list[DifferentialInputOutput]]] = [
-            (code_a, code_b, [{"inputdata": d.input_data, "output": d.output_a} for d in divergences]),
-            (code_b, code_a, [{"inputdata": d.input_data, "output": d.output_b} for d in divergences]),
+        scenarios: list[
+            tuple[CodeIndividual, CodeIndividual, list[DifferentialInputOutput]]
+        ] = [
+            (
+                code_a,
+                code_b,
+                [
+                    {"inputdata": d.input_data, "output": d.output_a}
+                    for d in divergences
+                ],
+            ),
+            (
+                code_b,
+                code_a,
+                [
+                    {"inputdata": d.input_data, "output": d.output_b}
+                    for d in divergences
+                ],
+            ),
         ]
 
         for winner, loser, io_pairs in scenarios:
@@ -280,7 +311,9 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                     )
                 )
 
-        logger.debug(f"Created {len(results)} divergence tests for pair ({code_a.id}, {code_b.id})")
+        logger.debug(
+            f"Created {len(results)} divergence tests for pair ({code_a.id}, {code_b.id})"
+        )
         return results
 
     # ------------------------------------------------------------------
@@ -288,7 +321,9 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
     # ------------------------------------------------------------------
 
     def _mark_pair_explored(self, a: CodeIndividual, b: CodeIndividual) -> None:
-        self._explored_pairs_cache.add(cast(tuple[str, str], tuple(sorted((a.id, b.id)))))
+        self._explored_pairs_cache.add(
+            cast(tuple[str, str], tuple(sorted((a.id, b.id))))
+        )
 
     def _is_pair_explored(self, a: CodeIndividual, b: CodeIndividual) -> bool:
         return tuple(sorted((a.id, b.id))) in self._explored_pairs_cache

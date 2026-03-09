@@ -64,11 +64,15 @@ class TestExecutor:
         """Execute a test script and return a single test result."""
         import os
         import tempfile
-        
+
         logger.debug(f"TestExecutor: executing test script (len={len(test_script)})")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            file_ext = (
+                ".bal"
+                if getattr(self.language_adapter, "language", "") == "ballerina"
+                else ".py"
+            )
             script_path = os.path.join(tmpdir, f"test_script{file_ext}")
             xml_path = os.path.join(tmpdir, "results.xml")
 
@@ -76,10 +80,14 @@ class TestExecutor:
                 f.write(test_script)
 
             kwargs = {}
-            if hasattr(self.sandbox, "config") and hasattr(self.sandbox.config, "test_method_timeout"):
+            if hasattr(self.sandbox, "config") and hasattr(
+                self.sandbox.config, "test_method_timeout"
+            ):
                 kwargs["timeout"] = self.sandbox.config.test_method_timeout
 
-            cmd = self.language_adapter.runtime.get_test_command(script_path, xml_path, **kwargs)
+            cmd = self.language_adapter.runtime.get_test_command(
+                script_path, xml_path, **kwargs
+            )
             raw_result = self.sandbox.execute_command(cmd, cwd=tmpdir)
 
             xml_content = None
@@ -87,25 +95,31 @@ class TestExecutor:
                 with open(xml_path, "r", encoding="utf-8") as f:
                     xml_content = f.read()
 
-            result: EvaluationResult = self.language_adapter.analyzer.analyze(raw_result, xml_content=xml_content)
-        
+            result: EvaluationResult = self.language_adapter.analyzer.analyze(
+                raw_result, xml_content=xml_content
+            )
+
         return result
 
     def execute_code(self, code: str) -> BasicExecutionResult:
         """Execute arbitrary code safely."""
         import os
         import tempfile
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_ext = ".bal" if getattr(self.language_adapter, "language", "") == "ballerina" else ".py"
+            file_ext = (
+                ".bal"
+                if getattr(self.language_adapter, "language", "") == "ballerina"
+                else ".py"
+            )
             script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
-            
+
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(code)
-            
+
             if hasattr(self.language_adapter.runtime, "get_execution_command"):
                 cmd = self.language_adapter.runtime.get_execution_command(script_path)
             else:
                 cmd = ["python", script_path]
-                
+
             return self.sandbox.execute_command(cmd, cwd=tmpdir)

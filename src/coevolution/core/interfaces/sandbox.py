@@ -29,7 +29,9 @@ class ISandbox(Protocol):
         """
         ...
 
-    def execute_command(self, cmd: list[str], cwd: str | None = None) -> BasicExecutionResult:
+    def execute_command(
+        self, cmd: list[str], cwd: str | None = None
+    ) -> BasicExecutionResult:
         """
         Execute an arbitrary command safely in the sandbox.
 

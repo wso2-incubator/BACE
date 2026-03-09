@@ -20,12 +20,14 @@ OPERATION_DISCOVERY: str = "discovery"
 @dataclass(frozen=True)
 class FunctionallyEquivGroup:
     """A cluster of code individuals that behave identically on current tests."""
+
     code_individuals: list[CodeIndividual]
     passing_test_individuals: dict[str, list[TestIndividual]]
 
 
 class IFunctionallyEquivalentCodeSelector(Protocol):
     """Protocol for finding groups of code that behave identically."""
+
     def select_functionally_equivalent_codes(
         self,
         coevolution_context: CoevolutionContext,
@@ -35,6 +37,7 @@ class IFunctionallyEquivalentCodeSelector(Protocol):
 @dataclass(frozen=True)
 class DifferentialResult:
     """A single input where two code snippets produced different output."""
+
     input_data: dict[str, Any]
     output_a: Any
     output_b: Any
@@ -42,6 +45,7 @@ class DifferentialResult:
 
 class IDifferentialFinder(Protocol):
     """Protocol for the execution sandbox."""
+
     def find_differential(
         self,
         code_a_snippet: str,

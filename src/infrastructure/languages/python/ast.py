@@ -12,6 +12,7 @@ from coevolution.core.interfaces.language import LanguageParsingError
 @dataclass
 class MethodSignature:
     """Parsed method / function signature."""
+
     class_name: Optional[str]  # None for standalone functions
     method_name: str
     params: list[tuple[str, Optional[str]]]  # [(name, type_annotation), ...]
@@ -109,9 +110,7 @@ def get_structural_metadata(code: str) -> Dict[str, Any]:
         for node in tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 start = node.lineno - 1
-                end = (
-                    (node.end_lineno - 1) if node.end_lineno is not None else start
-                )
+                end = (node.end_lineno - 1) if node.end_lineno is not None else start
                 metadata["imports"].extend(lines[start : end + 1])
             elif isinstance(node, ast.ClassDef):
                 metadata["classes"].append(node.name)
@@ -264,9 +263,7 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
         class_name=class_node.name,
         method_name=method_node.name,
         params=params,
-        return_type=ast.unparse(method_node.returns)
-        if method_node.returns
-        else None,
+        return_type=ast.unparse(method_node.returns) if method_node.returns else None,
         is_standalone=False,
     )
 
@@ -277,7 +274,5 @@ def is_stdin_signature(sig: MethodSignature) -> bool:
         return False
     param_name, param_type = sig.params[0]
     return (
-        param_name == "input_str"
-        and param_type == "str"
-        and sig.return_type == "str"
+        param_name == "input_str" and param_type == "str" and sig.return_type == "str"
     )

@@ -51,7 +51,14 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
     def operation_name(self) -> str:
         return OPERATION_EDIT
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
         code_pop = context.code_population
         problem = context.problem
@@ -77,7 +84,9 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
         ]
 
         if not failing:
-            logger.info("AgentCoderEditOperator: no failing tests — returning parent unchanged")
+            logger.info(
+                "AgentCoderEditOperator: no failing tests — returning parent unchanged"
+            )
             return [code_parent]
 
         if not self._conversation_history:
@@ -97,7 +106,9 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
         )
         self._conversation_history.append({"role": "user", "content": prompt})
 
-        logger.debug(f"AgentCoder: repairing (history depth: {len(self._conversation_history)})")
+        logger.debug(
+            f"AgentCoder: repairing (history depth: {len(self._conversation_history)})"
+        )
         response = self._generate(self._conversation_history)
         self._conversation_history.append({"role": "assistant", "content": response})
 

@@ -78,7 +78,9 @@ class PythonTestAnalyzer(ITestAnalyzer):
 
         return sanitized
 
-    def analyze(self, raw_result: BasicExecutionResult, **kwargs: Any) -> EvaluationResult:
+    def analyze(
+        self, raw_result: BasicExecutionResult, **kwargs: Any
+    ) -> EvaluationResult:
         """
         Analyze pytest XML output and return a single test result.
 
@@ -87,7 +89,7 @@ class PythonTestAnalyzer(ITestAnalyzer):
             **kwargs: Can include 'xml_content'
         """
         xml_content = kwargs.get("xml_content")
-        
+
         logger.debug(
             f"Analyzing Python test results: xml_available={xml_content is not None}"
         )
@@ -161,17 +163,17 @@ class PythonTestAnalyzer(ITestAnalyzer):
             execution_time=execution_time,
         )
 
-    def _analyze_execution_error(
-        self, basic_result: Any
-    ) -> EvaluationResult:
+    def _analyze_execution_error(self, basic_result: Any) -> EvaluationResult:
         """Analyze execution results when XML parsing failed or wasn't available."""
-        details = getattr(basic_result, "error", None) or getattr(basic_result, "output", None) or "No output available"
+        details = (
+            getattr(basic_result, "error", None)
+            or getattr(basic_result, "output", None)
+            or "No output available"
+        )
 
         status: Literal["error"] = "error"
         if getattr(basic_result, "timeout", False):
-            details = (
-                f"Execution timed out after {getattr(basic_result, 'execution_time', 0)}s. {details}"
-            )
+            details = f"Execution timed out after {getattr(basic_result, 'execution_time', 0)}s. {details}"
 
         return EvaluationResult(
             status=status,

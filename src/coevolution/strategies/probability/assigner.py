@@ -29,8 +29,8 @@ class AssignmentStrategy(str, Enum):
     """Enumeration of available probability assignment strategies."""
 
     MEAN = "mean"  # Average of parent probabilities
-    MAX = "max"    # Maximum of parent probabilities (optimistic)
-    MIN = "min"    # Minimum of parent probabilities (pessimistic)
+    MAX = "max"  # Maximum of parent probabilities (optimistic)
+    MIN = "min"  # Minimum of parent probabilities (pessimistic)
     INIT = "init"  # Always return initial_prior (rarely needed directly)
 
 

@@ -15,7 +15,9 @@ from infrastructure.llm_client import LLMClient
 from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TestDiversityEliteSelector
-from coevolution.strategies.selection.parent_selection import RouletteWheelParentSelection
+from coevolution.strategies.selection.parent_selection import (
+    RouletteWheelParentSelection,
+)
 
 from .operators.mutation import UnittestMutationOperator
 from .operators.crossover import UnittestCrossoverOperator
@@ -56,12 +58,34 @@ def create_unittest_test_profile(
         diversity_selection=diversity_enabled,
     )
 
-    parent_selector: RouletteWheelParentSelection[TestIndividual] = RouletteWheelParentSelection()
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy, initial_prior=initial_prior)
+    parent_selector: RouletteWheelParentSelection[TestIndividual] = (
+        RouletteWheelParentSelection()
+    )
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
+    )
 
-    mutation_op = UnittestMutationOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
-    crossover_op = UnittestCrossoverOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
-    edit_op = UnittestEditOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
+    mutation_op = UnittestMutationOperator(
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
+    )
+    crossover_op = UnittestCrossoverOperator(
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
+    )
+    edit_op = UnittestEditOperator(
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
+    )
 
     breeder: Breeder[TestIndividual] = Breeder(
         registered_operators=[
@@ -85,7 +109,10 @@ def create_unittest_test_profile(
     )
 
     bayesian_config = BayesianConfig(
-        alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        learning_rate=learning_rate,
     )
 
     return TestProfile(
@@ -106,7 +133,10 @@ def create_public_test_profile(
     """Create a public/ground-truth test profile (fixed tests, no evolution)."""
     return PublicTestProfile(
         bayesian_config=BayesianConfig(
-            alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            learning_rate=learning_rate,
         )
     )
 

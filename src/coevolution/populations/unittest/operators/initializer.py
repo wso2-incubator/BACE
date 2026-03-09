@@ -60,7 +60,14 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
         logger.debug(f"UnittestInitializer: created {len(individuals)} individuals")
         return individuals
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def _generate_test_functions(self, problem: Problem, target: int) -> list[str]:
         prompt = self.prompt_manager.render_prompt(
             "operators/unittest/initial.j2",

@@ -18,7 +18,9 @@ from coevolution.strategies.selection.elite import (
     TopKEliteSelector,
 )
 from coevolution.strategies.selection.failing_test_selection import FailingTestSelector
-from coevolution.strategies.selection.parent_selection import RouletteWheelParentSelection
+from coevolution.strategies.selection.parent_selection import (
+    RouletteWheelParentSelection,
+)
 
 from .operators.mutation import CodeMutationOperator
 from .operators.crossover import CodeCrossoverOperator
@@ -61,13 +63,33 @@ def create_default_code_profile(
         diversity_selection=diversity_enabled,
     )
 
-    parent_selector: RouletteWheelParentSelection[CodeIndividual] = RouletteWheelParentSelection()
-    prob_assigner = ProbabilityAssigner(strategy=prob_assigner_strategy, initial_prior=initial_prior)
+    parent_selector: RouletteWheelParentSelection[CodeIndividual] = (
+        RouletteWheelParentSelection()
+    )
+    prob_assigner = ProbabilityAssigner(
+        strategy=prob_assigner_strategy, initial_prior=initial_prior
+    )
 
-    mutation_op = CodeMutationOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
-    crossover_op = CodeCrossoverOperator(llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner)
+    mutation_op = CodeMutationOperator(
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
+    )
+    crossover_op = CodeCrossoverOperator(
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
+    )
     edit_op = CodeEditOperator(
-        llm_client, language_adapter.parser, language_adapter.language, parent_selector, prob_assigner,
+        llm_client,
+        language_adapter.parser,
+        language_adapter.language,
+        parent_selector,
+        prob_assigner,
         failing_test_selector=FailingTestSelector,
         k_failing_tests=k_failing_tests,
     )

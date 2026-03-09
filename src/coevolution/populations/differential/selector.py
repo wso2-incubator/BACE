@@ -29,7 +29,9 @@ class FunctionallyEqSelector(IFunctionallyEquivalentCodeSelector):
         code_pop = coevolution_context.code_population
 
         if code_pop.size == 0:
-            logger.warning("No code individuals to evaluate for functional equivalence.")
+            logger.warning(
+                "No code individuals to evaluate for functional equivalence."
+            )
             return []
 
         matrices_to_stack = []

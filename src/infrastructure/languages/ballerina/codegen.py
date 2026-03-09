@@ -15,16 +15,16 @@ def compose_test_script(code_snippet: str, test_snippet: str) -> str:
     """Combine implementation and test cases into an executable test file."""
     has_test_import = "import ballerina/test" in test_snippet
     script_parts = []
-    
+
     if not has_test_import:
         script_parts.append("import ballerina/test;")
         script_parts.append("")
-        
+
     code_clean = re.sub(r"import ballerina/test;?\s*", "", code_snippet)
     script_parts.append(code_clean.strip())
     script_parts.append("")
     script_parts.append(test_snippet.strip())
-    
+
     return "\n".join(script_parts)
 
 
@@ -83,9 +83,7 @@ function test{capitalized_name}{test_number}() {{
 }}"""
         return test_code
     except Exception as e:
-        raise LanguageTransformationError(
-            f"Failed to generate test case: {e}"
-        ) from e
+        raise LanguageTransformationError(f"Failed to generate test case: {e}") from e
 
 
 def compose_generator_script(generator_code: str, num_inputs: int) -> str:

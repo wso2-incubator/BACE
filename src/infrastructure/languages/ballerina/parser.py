@@ -92,13 +92,13 @@ def normalize_code(code: str) -> str:
 def get_structural_metadata(code: str) -> Dict[str, Any]:
     """Extract information about functions, imports, and has_main flag."""
     metadata: Dict[str, Any] = {"functions": [], "imports": [], "has_main": False}
-    
+
     func_matches = FUNCTION_PATTERN.findall(code)
     for match in func_matches:
         visibility = match[0].strip() if match[0] else ""
         func_name = match[1]
         returns = match[2].strip() if match[2] else ""
-        
+
         metadata["functions"].append(
             {
                 "name": func_name,

@@ -61,9 +61,9 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
         if c.name == "Solution":
             solution_class_node = c
             for member in c.body:
-                if isinstance(
-                    member, ast.FunctionDef
-                ) and not member.name.startswith("_"):
+                if isinstance(member, ast.FunctionDef) and not member.name.startswith(
+                    "_"
+                ):
                     solution_method_name = member.name
                     break
         else:
@@ -91,29 +91,21 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
             "No Solution class or functions found in programmer code"
         )
     if not solution_method_name:
-        raise LanguageTransformationError(
-            "No callable method found in Solution class"
-        )
+        raise LanguageTransformationError("No callable method found in Solution class")
 
     try:
         input_dict = eval(input_data, {"__builtins__": {}}, {})  # noqa: S307
         if "inputdata" not in input_dict:
-            raise LanguageTransformationError(
-                "Input data must contain 'inputdata' key"
-            )
+            raise LanguageTransformationError("Input data must contain 'inputdata' key")
         input_params = input_dict["inputdata"]
         if not isinstance(input_params, dict):
-            raise LanguageTransformationError(
-                "'inputdata' value must be a dict object"
-            )
+            raise LanguageTransformationError("'inputdata' value must be a dict object")
     except (ValueError, SyntaxError, NameError, TypeError) as e:
         raise LanguageTransformationError(f"Failed to parse input data: {e}") from e
     except LanguageTransformationError:
         raise
     except Exception as e:
-        raise LanguageTransformationError(
-            f"Error processing input data: {e}"
-        ) from e
+        raise LanguageTransformationError(f"Error processing input data: {e}") from e
 
     parts: list[str] = []
     for node in prog_imports:

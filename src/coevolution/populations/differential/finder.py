@@ -10,7 +10,11 @@ from typing import Any, Optional, Union
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ICodeParser, IScriptComposer, ILanguageRuntime
+from coevolution.core.interfaces.language import (
+    ICodeParser,
+    IScriptComposer,
+    ILanguageRuntime,
+)
 from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
@@ -20,6 +24,7 @@ from .types import DifferentialResult, IDifferentialFinder
 @dataclass
 class ExecutionError:
     """Internal helper to propagate worker errors safely."""
+
     input_idx: int
     error_message: str
 
@@ -30,10 +35,14 @@ WorkerResult = Union[
 
 
 def _worker_entry(
-    task_args: tuple[int, dict[str, Any], str, str, SandboxConfig, IScriptComposer, ILanguageRuntime],
+    task_args: tuple[
+        int, dict[str, Any], str, str, SandboxConfig, IScriptComposer, ILanguageRuntime
+    ],
 ) -> WorkerResult:
     """Stateless worker function for parallel execution."""
-    idx, input_data, code_a_snippet, code_b_snippet, config, composer, runtime = task_args
+    idx, input_data, code_a_snippet, code_b_snippet, config, composer, runtime = (
+        task_args
+    )
 
     try:
         sandbox = create_sandbox(config)
@@ -45,12 +54,13 @@ def _worker_entry(
             )
             import tempfile
             import os
+
             with tempfile.TemporaryDirectory() as tmpdir:
                 file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
                 script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
                 with open(script_path, "w", encoding="utf-8") as f:
                     f.write(script)
-                
+
                 cmd = runtime.get_execution_command(script_path)
                 exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
                 if exec_result.error:
@@ -64,7 +74,9 @@ def _worker_entry(
             return idx, ExecutionError(idx, "Runtime execution failure in sandbox")
 
         if out_a != out_b:
-            return idx, DifferentialResult(input_data=input_data, output_a=out_a, output_b=out_b)
+            return idx, DifferentialResult(
+                input_data=input_data, output_a=out_a, output_b=out_b
+            )
 
         return idx, None
 
@@ -107,18 +119,21 @@ class DifferentialFinder(IDifferentialFinder):
 
         import tempfile
         import os
+
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = os.path.join(tmpdir, "generator.py")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(generator_script)
-            
+
             cmd = self.python.runtime.get_execution_command(script_path)
             exec_result = self._python_sandbox.execute_command(cmd, cwd=tmpdir)
             output = exec_result.output.strip()
 
         test_inputs = self.python.parser.parse_test_inputs(output)
         if not test_inputs:
-            logger.warning("No test inputs generated or failed to parse generator output.")
+            logger.warning(
+                "No test inputs generated or failed to parse generator output."
+            )
         return test_inputs
 
     def find_differential(
@@ -135,9 +150,13 @@ class DifferentialFinder(IDifferentialFinder):
             return found_divergences
 
         if not self.enable_multiprocessing or self.cpu_workers <= 1:
-            return self._find_differential_sequential(code_a_snippet, code_b_snippet, test_inputs, limit)
+            return self._find_differential_sequential(
+                code_a_snippet, code_b_snippet, test_inputs, limit
+            )
 
-        return self._find_differential_parallel(code_a_snippet, code_b_snippet, test_inputs, limit)
+        return self._find_differential_parallel(
+            code_a_snippet, code_b_snippet, test_inputs, limit
+        )
 
     def _find_differential_sequential(
         self, code_a: str, code_b: str, inputs: list[dict[str, Any]], limit: int
@@ -155,19 +174,22 @@ class DifferentialFinder(IDifferentialFinder):
                 found.append(DifferentialResult(ti, res_a, res_b))
         return found
 
-    def _run_single_sequential(self, code: str, input_data: dict[str, Any]) -> Optional[str]:
+    def _run_single_sequential(
+        self, code: str, input_data: dict[str, Any]
+    ) -> Optional[str]:
         test_input_formatted = {"inputdata": input_data}
         script = self.composer.compose_evaluation_script(
             code, str(test_input_formatted)
         )
         import tempfile
         import os
+
         with tempfile.TemporaryDirectory() as tmpdir:
             file_ext = ".bal" if hasattr(self.runtime, "bal_executable") else ".py"
             script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(script)
-            
+
             cmd = self.runtime.get_execution_command(script_path)
             exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
             return None if exec_result.error else exec_result.output.strip()
@@ -184,7 +206,9 @@ class DifferentialFinder(IDifferentialFinder):
 
         try:
             with multiprocessing.Pool(processes=self.cpu_workers) as pool:
-                result_iterator = pool.imap_unordered(_worker_entry, tasks, chunksize=chunk_size)
+                result_iterator = pool.imap_unordered(
+                    _worker_entry, tasks, chunksize=chunk_size
+                )
                 for idx, result in result_iterator:
                     if isinstance(result, DifferentialResult):
                         found_divergences.append(result)

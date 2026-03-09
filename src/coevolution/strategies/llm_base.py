@@ -59,7 +59,9 @@ class BaseLLMService:
     Handles prompt rendering tools, LLM calls, retries, and code block extraction.
     """
 
-    def __init__(self, llm: ILanguageModel, parser: ICodeParser, language_name: str) -> None:
+    def __init__(
+        self, llm: ILanguageModel, parser: ICodeParser, language_name: str
+    ) -> None:
         self._llm = llm
         self.parser = parser
         self.language_name = language_name

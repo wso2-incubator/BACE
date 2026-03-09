@@ -2,7 +2,7 @@
 """
 Ballerina implementation of the ILanguage protocol.
 
-Refactored to enforce Separation of Concerns via the Facade pattern. 
+Refactored to enforce Separation of Concerns via the Facade pattern.
 This class acts as an orchestration facade and execution configuration registry.
 """
 
@@ -11,10 +11,16 @@ from typing import Any, Dict, List
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguage, ICodeParser, IScriptComposer, ILanguageRuntime
+from coevolution.core.interfaces.language import (
+    ILanguage,
+    ICodeParser,
+    IScriptComposer,
+    ILanguageRuntime,
+)
 from .analyzer import BallerinaTestAnalyzer
 from . import codegen as ballerina_codegen
 from . import parser as ballerina_parser
+
 
 class BallerinaParser(ICodeParser):
     def __init__(self) -> None:
@@ -23,7 +29,9 @@ class BallerinaParser(ICodeParser):
     def extract_code_blocks(self, response: str) -> List[str]:
         matches = self._block_pattern.findall(response)
         if matches:
-            valid_blocks = [code.strip() for code in matches if self.is_syntax_valid(code.strip())]
+            valid_blocks = [
+                code.strip() for code in matches if self.is_syntax_valid(code.strip())
+            ]
             if valid_blocks:
                 return valid_blocks
 
@@ -82,8 +90,12 @@ class BallerinaComposer(IScriptComposer):
     def compose_evaluation_script(self, code_snippet: str, input_data: str) -> str:
         return ballerina_codegen.compose_evaluation_script(code_snippet, input_data)
 
-    def generate_test_case(self, input_str: str, output_str: str, starter_code: str, test_number: int) -> str:
-        return ballerina_codegen.generate_test_case(input_str, output_str, starter_code, test_number)
+    def generate_test_case(
+        self, input_str: str, output_str: str, starter_code: str, test_number: int
+    ) -> str:
+        return ballerina_codegen.generate_test_case(
+            input_str, output_str, starter_code, test_number
+        )
 
     def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
         return ballerina_codegen.compose_generator_script(generator_code, num_inputs)
@@ -96,7 +108,9 @@ class BallerinaRuntime(ILanguageRuntime):
     def get_execution_command(self, file_path: str) -> List[str]:
         return [self.bal_executable, "run", file_path]
 
-    def get_test_command(self, test_file_path: str, result_xml_path: str, **kwargs: Any) -> List[str]:
+    def get_test_command(
+        self, test_file_path: str, result_xml_path: str, **kwargs: Any
+    ) -> List[str]:
         return [self.bal_executable, "test", test_file_path]
 
 
@@ -104,15 +118,18 @@ class BallerinaLanguage(ILanguage):
     """
     Facade adapter for Ballerina-specific code operations and execution parameters.
     """
+
     def __init__(self, bal_executable: str = "bal") -> None:
         self.bal_executable = bal_executable
-        
+
         self._parser = BallerinaParser()
         self._composer = BallerinaComposer()
         self._runtime = BallerinaRuntime(self.bal_executable)
         self._analyzer = BallerinaTestAnalyzer()
-        
-        logger.info(f"Initialized Ballerina language facade adapter with exe: {self.bal_executable}")
+
+        logger.info(
+            f"Initialized Ballerina language facade adapter with exe: {self.bal_executable}"
+        )
 
     @property
     def language(self) -> str:

@@ -48,16 +48,27 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
         self._edit_operator.reset_session()
         return [self._generate_initial(problem)]
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def _generate_initial(self, problem: Problem) -> CodeIndividual:
         prompt = self.prompt_manager.render_prompt(
             "operators/agent_coder/init.j2",
             question_content=problem.question_content,
             starter_code=problem.starter_code,
         )
-        self._edit_operator._conversation_history.append({"role": "user", "content": prompt})
+        self._edit_operator._conversation_history.append(
+            {"role": "user", "content": prompt}
+        )
         response = self._generate(self._edit_operator._conversation_history)
-        self._edit_operator._conversation_history.append({"role": "assistant", "content": response})
+        self._edit_operator._conversation_history.append(
+            {"role": "assistant", "content": response}
+        )
 
         code_blocks = self.parser.extract_code_blocks(response)
         if not code_blocks:
@@ -65,7 +76,9 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
         code = code_blocks[-1]
 
         if not self.parser.contains_starter_code(code, problem.starter_code):
-            raise ValueError("AgentCoderInitializer: generated code missing starter code")
+            raise ValueError(
+                "AgentCoderInitializer: generated code missing starter code"
+            )
 
         return CodeIndividual(
             snippet=code,

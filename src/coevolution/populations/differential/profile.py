@@ -15,7 +15,9 @@ from infrastructure.sandbox.types import SandboxConfig
 from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TestDiversityEliteSelector
-from coevolution.strategies.selection.parent_selection import RouletteWheelParentSelection
+from coevolution.strategies.selection.parent_selection import (
+    RouletteWheelParentSelection,
+)
 
 from .finder import DifferentialFinder
 from .selector import FunctionallyEqSelector
@@ -58,9 +60,16 @@ def create_differential_test_profile(
     prob_assigner = ProbabilityAssigner(
         strategy=prob_assigner_strategy, initial_prior=initial_prior
     )
-    parent_selector: RouletteWheelParentSelection[TestIndividual] = RouletteWheelParentSelection()
+    parent_selector: RouletteWheelParentSelection[TestIndividual] = (
+        RouletteWheelParentSelection()
+    )
 
-    llm_service = DifferentialLLMOperator(llm=llm_client, parser=language_adapter.parser, composer=language_adapter.composer, language_name=language_adapter.language)
+    llm_service = DifferentialLLMOperator(
+        llm=llm_client,
+        parser=language_adapter.parser,
+        composer=language_adapter.composer,
+        language_name=language_adapter.language,
+    )
 
     differential_finder = DifferentialFinder(
         parser=language_adapter.parser,
@@ -103,7 +112,10 @@ def create_differential_test_profile(
         TestDiversityEliteSelector(test_population_key="differential")
     )
     bayesian_config = BayesianConfig(
-        alpha=alpha, beta=beta, gamma=gamma, learning_rate=learning_rate,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        learning_rate=learning_rate,
     )
 
     return TestProfile(

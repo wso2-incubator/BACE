@@ -110,16 +110,8 @@ class SubprocessSandbox(ISandbox):
                     return_code=-1,
                 )
 
-            stdout = (
-                stdout_data[: self.config.max_output_size]
-                if stdout_data
-                else ""
-            )
-            stderr = (
-                stderr_data[: self.config.max_output_size]
-                if stderr_data
-                else ""
-            )
+            stdout = stdout_data[: self.config.max_output_size] if stdout_data else ""
+            stderr = stderr_data[: self.config.max_output_size] if stderr_data else ""
 
             return BasicExecutionResult(
                 success=proc.returncode == 0,

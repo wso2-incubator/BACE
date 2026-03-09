@@ -2,7 +2,7 @@
 """
 Python implementation of the ILanguage protocol.
 
-Refactored to enforce Separation of Concerns via the Facade pattern. 
+Refactored to enforce Separation of Concerns via the Facade pattern.
 This class acts as an orchestration facade and execution configuration registry.
 """
 
@@ -12,10 +12,16 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from coevolution.core.interfaces.language import ILanguage, ICodeParser, IScriptComposer, ILanguageRuntime
+from coevolution.core.interfaces.language import (
+    ILanguage,
+    ICodeParser,
+    IScriptComposer,
+    ILanguageRuntime,
+)
 from .analyzer import PythonTestAnalyzer
 from . import ast as python_ast
 from . import codegen as python_codegen
+
 
 class PythonParser(ICodeParser):
     def __init__(self) -> None:
@@ -27,7 +33,9 @@ class PythonParser(ICodeParser):
             stripped = response.strip()
             if python_ast.is_syntax_valid(stripped):
                 return [stripped]
-            logger.debug(f"No Python code blocks found in response: {response[:100]}...")
+            logger.debug(
+                f"No Python code blocks found in response: {response[:100]}..."
+            )
             return []
         valid_blocks = [block for block in matches if python_ast.is_syntax_valid(block)]
         if not valid_blocks and matches:
@@ -70,10 +78,12 @@ class PythonParser(ICodeParser):
             return True
         if normalized_starter in normalized_code:
             return True
+
         def _signatures(text: str) -> List[str]:
             sigs = [f"class {n}" for n in re.findall(r"class\s+(\w+)", text)]
             sigs += [f"def {n}" for n in re.findall(r"def\s+(\w+)\s*\(", text)]
             return sigs
+
         code_sigs = _signatures(normalized_code)
         starter_sigs = _signatures(normalized_starter)
         if not starter_sigs:
@@ -88,11 +98,27 @@ class PythonComposer(IScriptComposer):
     def compose_evaluation_script(self, code_snippet: str, input_data: str) -> str:
         return python_codegen.compose_evaluation_script(code_snippet, input_data)
 
-    def generate_test_case(self, input_str: str, output_str: str, starter_code: str, test_number: int) -> str:
+    def generate_test_case(
+        self, input_str: str, output_str: str, starter_code: str, test_number: int
+    ) -> str:
         sig = python_ast.parse_method_signature(starter_code)
         if python_ast.is_stdin_signature(sig):
-            return python_codegen.gen_stdin_test(input_str, output_str, sig.class_name, sig.method_name, test_number, sig.is_standalone)
-        return python_codegen.gen_functional_test(input_str, output_str, sig.class_name, sig.method_name, test_number, sig.is_standalone)
+            return python_codegen.gen_stdin_test(
+                input_str,
+                output_str,
+                sig.class_name,
+                sig.method_name,
+                test_number,
+                sig.is_standalone,
+            )
+        return python_codegen.gen_functional_test(
+            input_str,
+            output_str,
+            sig.class_name,
+            sig.method_name,
+            test_number,
+            sig.is_standalone,
+        )
 
     def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:
         return python_codegen.compose_generator_script(generator_code, num_inputs)
@@ -105,11 +131,19 @@ class PythonRuntime(ILanguageRuntime):
     def get_execution_command(self, file_path: str) -> List[str]:
         return [self.python_exe, file_path]
 
-    def get_test_command(self, test_file_path: str, result_xml_path: str, **kwargs: Any) -> List[str]:
+    def get_test_command(
+        self, test_file_path: str, result_xml_path: str, **kwargs: Any
+    ) -> List[str]:
         cmd = [
-            self.python_exe, "-m", "pytest", test_file_path,
-            "--junitxml", result_xml_path, "--color=no",
-            "-o", "console_output_style=classic",
+            self.python_exe,
+            "-m",
+            "pytest",
+            test_file_path,
+            "--junitxml",
+            result_xml_path,
+            "--color=no",
+            "-o",
+            "console_output_style=classic",
         ]
         timeout = kwargs.get("timeout")
         if timeout is not None:
@@ -121,15 +155,18 @@ class PythonLanguage(ILanguage):
     """
     Facade adapter for Python-specific code operations and execution parameters.
     """
+
     def __init__(self, python_exe: Optional[str] = None) -> None:
         self.python_exe = python_exe or sys.executable
-        
+
         self._parser = PythonParser()
         self._composer = PythonComposer()
         self._runtime = PythonRuntime(self.python_exe)
         self._analyzer = PythonTestAnalyzer()
-        
-        logger.info(f"Initialized Python language Facade adapter with exe: {self.python_exe}")
+
+        logger.info(
+            f"Initialized Python language Facade adapter with exe: {self.python_exe}"
+        )
 
     @property
     def language(self) -> str:

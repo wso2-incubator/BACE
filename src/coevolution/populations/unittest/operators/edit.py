@@ -36,7 +36,14 @@ class UnittestEditOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual]):
     def operation_name(self) -> str:
         return OPERATION_EDIT
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[TestIndividual]:
         test_pop = context.test_populations["unittest"]
         code_pop = context.code_population
@@ -76,7 +83,8 @@ class UnittestEditOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual]):
         failing_inds = [code_pop[i] for i in failing_indices]
 
         error_traces = [
-            interactions.execution_results[fi.id][parent.id].error_log or "No trace available"
+            interactions.execution_results[fi.id][parent.id].error_log
+            or "No trace available"
             for fi in failing_inds
         ]
 

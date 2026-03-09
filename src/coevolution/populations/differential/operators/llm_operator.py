@@ -36,6 +36,7 @@ class DifferentialInputOutput(TypedDict):
 @dataclass(frozen=True)
 class DifferentialGenScriptInput:
     """Input for the script-generation LLM call."""
+
     question_content: str
     equivalent_code_snippet_1: str
     equivalent_code_snippet_2: str
@@ -50,14 +51,19 @@ class DifferentialLLMOperator(BaseLLMService):
     DifferentialDiscoveryOperator.
     """
 
-    def __init__(self, llm: ILanguageModel, parser: ICodeParser, composer: IScriptComposer, language_name: str) -> None:
+    def __init__(
+        self,
+        llm: ILanguageModel,
+        parser: ICodeParser,
+        composer: IScriptComposer,
+        language_name: str,
+    ) -> None:
         super().__init__(llm, parser, language_name)
         self.composer = composer
         # Input generator scripts are always Python regardless of main code language
         self.python_adapter = PythonLanguage()
         logger.debug(
-            f"DifferentialLLMOperator: code={language_name}, "
-            "generator-script=Python"
+            f"DifferentialLLMOperator: code={language_name}, generator-script=Python"
         )
 
     def _extract_python_code_block(self, response: str) -> str:
@@ -65,7 +71,14 @@ class DifferentialLLMOperator(BaseLLMService):
         blocks = self.python_adapter.parser.extract_code_blocks(response)
         return blocks[0] if blocks else response
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def generate_script(self, dto: DifferentialGenScriptInput) -> str:
         """Ask the LLM to write a Python input-generator script."""
         logger.info(

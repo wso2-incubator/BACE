@@ -64,6 +64,7 @@ def _execute_atomic_interaction(
         script = composer.compose_test_script(code_snippet, test_snippet)
 
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
             script_path = os.path.join(tmpdir, f"test_script{file_ext}")
@@ -80,7 +81,9 @@ def _execute_atomic_interaction(
                 with open(xml_path, "r", encoding="utf-8") as f:
                     xml_content = f.read()
 
-            result: EvaluationResult = analyzer.analyze(raw_result, xml_content=xml_content)
+            result: EvaluationResult = analyzer.analyze(
+                raw_result, xml_content=xml_content
+            )
 
         # logger.debug(
         #     f"Worker (PID {os.getpid()}): Executed interaction ({code_idx}, {test_idx}) with result: {result}"
@@ -226,7 +229,18 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_with_multiprocessing(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, IScriptComposer, ILanguageRuntime, ITestAnalyzer]],
+        tasks: list[
+            tuple[
+                int,
+                int,
+                str,
+                str,
+                SandboxConfig,
+                IScriptComposer,
+                ILanguageRuntime,
+                ITestAnalyzer,
+            ]
+        ],
         num_workers: int,
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks using multiprocessing pool."""
@@ -244,7 +258,18 @@ class ExecutionSystem(IExecutionSystem):
 
     def _execute_sequentially(
         self,
-        tasks: list[tuple[int, int, str, str, SandboxConfig, IScriptComposer, ILanguageRuntime, ITestAnalyzer]],
+        tasks: list[
+            tuple[
+                int,
+                int,
+                str,
+                str,
+                SandboxConfig,
+                IScriptComposer,
+                ILanguageRuntime,
+                ITestAnalyzer,
+            ]
+        ],
     ) -> list[tuple[int, int, EvaluationResult]]:
         """Execute tasks sequentially (for debugging or single-threaded mode)."""
         logger.debug("Running sequential execution (no multiprocessing)")

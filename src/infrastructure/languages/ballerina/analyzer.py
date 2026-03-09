@@ -27,7 +27,9 @@ class BallerinaTestAnalyzer(ITestAnalyzer):
     Analyzer for Ballerina test output.
     """
 
-    def analyze(self, raw_result: BasicExecutionResult, **kwargs: Any) -> EvaluationResult:
+    def analyze(
+        self, raw_result: BasicExecutionResult, **kwargs: Any
+    ) -> EvaluationResult:
         """
         Analyze Ballerina test execution output.
         """
@@ -195,14 +197,16 @@ class BallerinaTestAnalyzer(ITestAnalyzer):
             return ""
 
         lines = combined.split("\n")
-        match_indexes = [i for i, line in enumerate(lines) if re.search(r"\berror\b", line, re.I)]
+        match_indexes = [
+            i for i, line in enumerate(lines) if re.search(r"\berror\b", line, re.I)
+        ]
         if not match_indexes:
             return ""
 
         blocks = []
         seen = set()
         for idx in match_indexes:
-            block = "\n".join(lines[max(0, idx - 3):min(len(lines), idx + 4)]).strip()
+            block = "\n".join(lines[max(0, idx - 3) : min(len(lines), idx + 4)]).strip()
             if block and block not in seen:
                 seen.add(block)
                 blocks.append(block)

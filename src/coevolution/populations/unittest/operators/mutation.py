@@ -28,7 +28,14 @@ class UnittestMutationOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual])
     def operation_name(self) -> str:
         return OPERATION_MUTATION
 
-    @llm_retry((ValueError, LanguageParsingError, LanguageTransformationError, LLMGenerationError))
+    @llm_retry(
+        (
+            ValueError,
+            LanguageParsingError,
+            LanguageTransformationError,
+            LLMGenerationError,
+        )
+    )
     def execute(self, context: CoevolutionContext) -> list[TestIndividual]:
         test_pop = context.test_populations["unittest"]
         parents = self.parent_selector.select_parents(test_pop, 1, context)

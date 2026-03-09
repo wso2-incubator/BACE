@@ -174,7 +174,9 @@ class MockTestOperator:
         if op == OPERATION_MUTATION:
             snippet = f"def test_mutated_{np.random.randint(1000)}(): pass  # mutated"
         elif op == OPERATION_CROSSOVER:
-            snippet = f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
+            snippet = (
+                f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
+            )
         else:
             snippet = f"def test_edited_{np.random.randint(1000)}(): pass  # edited"
 
