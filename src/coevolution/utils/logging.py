@@ -13,20 +13,22 @@ Functions:
     log_final_survivors: Logs all surviving individuals at evolution end.
 """
 
+import dataclasses
+import json
 import multiprocessing
 import os
 import sys
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from loguru import logger
 
 if TYPE_CHECKING:
     import numpy as np
+    from loguru import Record
 
-    from coevolution.core.individual import CodeIndividual, TestIndividual
-    from coevolution.core.interfaces import BaseIndividual, Problem
+    from coevolution.core.interfaces import Problem
+    from coevolution.core.interfaces.data import ExecutionResults
     from coevolution.core.population import CodePopulation, TestPopulation
 
 
@@ -35,7 +37,8 @@ def setup_logging(
     file_level: str = "DEBUG",
     log_file_base_name: str = "coevolution_run",
     run_id: str | None = None,
-) -> None:
+    problem_id: str = "SETUP",
+) -> str:
     """
     Architecturally robust logging setup that prevents multiprocessing corruption.
 
@@ -55,9 +58,37 @@ def setup_logging(
     is_main_process = current_process.name == "MainProcess"
     pid = os.getpid()
 
-    # Generate or use provided run_id
+    # Generate/Resolve run_id (fallback to env for multiprocess workers)
     if run_id is None:
-        run_id = uuid.uuid4().hex[:8]
+        run_id = os.getenv("COEV_RUN_ID", uuid.uuid4().hex[:8])
+    if problem_id == "SETUP":
+        problem_id = os.getenv("COEV_PROBLEM_ID", "SETUP")
+
+    # Detect if we should check for collisions (only in MainProcess and for NEW runs)
+    if is_main_process and run_id != os.getenv("COEV_RUN_ID"):
+        # If run_id directory exists, append timestamp until unique
+        base_run_id = run_id
+        while os.path.exists(f"logs/{run_id}"):
+            import time
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # If we are hitting collisions in the same second, add more precision
+            run_id = f"{base_run_id}_{timestamp}"
+            if os.path.exists(f"logs/{run_id}"):
+                time.sleep(1)  # Wait a bit if we collision exactly on the same second
+
+        if run_id != base_run_id:
+            # Print to stderr immediately as logger isn't fully set up yet
+            sys.stderr.write(
+                f"\n[WARNING] Run ID collision: 'logs/{base_run_id}' already exists.\n"
+                f"[WARNING] Renaming current run to: '{run_id}'\n\n"
+            )
+
+    # Lock these into the environment so child processes inherit them automatically
+    if is_main_process:
+        os.environ["COEV_RUN_ID"] = str(run_id)
+        os.environ["COEV_PROBLEM_ID"] = str(problem_id)
 
     # ------------------------------------------------------------------
     # 2. CONTEXT CONFIGURATION
@@ -65,7 +96,7 @@ def setup_logging(
     # Standardize context to ensure every log line has traceable metadata
     default_context = {
         "run_id": run_id,
-        "problem_id": "SETUP",
+        "problem_id": problem_id,
         "proc_type": "MAIN" if is_main_process else "WORKER",
     }
 
@@ -100,50 +131,68 @@ def setup_logging(
         enqueue=True,  # Ensure thread safety for console output
     )
 
-    # B. File Handler (The Critical Fix)
+    # B. File Handlers
+    def is_evo_event(record: "Record") -> bool:
+        return bool(record["extra"].get("is_evolution_event", False))
+
+    def is_trace_event(record: "Record") -> bool:
+        return not bool(record["extra"].get("is_evolution_event", False))
+
     if is_main_process:
-        # MAIN PROCESS: Writes to the master log file
-        # We REMOVE compression to prevent locking issues.
-        log_file_path = (
-            f"logs/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_MASTER.log"
-        )
+        # MAIN PROCESS: Writes to the master trace log and the evolutionary history
+        trace_path = f"logs/{run_id}/trace.jsonl"
+        history_path = f"logs/{run_id}/{problem_id}/evolutionary_history.jsonl"
+
         logger.add(
-            log_file_path,
+            trace_path,
             level=file_level.upper(),
             format=file_format,
-            rotation="1 GB",  # Rotate by size
+            rotation="1 GB",
             retention="10 days",
-            compression=None,  # <--- CRITICAL: DISABLE COMPRESSION
+            compression=None,
             enqueue=True,
             serialize=True,
+            filter=is_trace_event,
+        )
+        logger.add(
+            history_path,
+            level="INFO",
+            format="{message}",
+            rotation="1 GB",
+            retention="10 days",
+            compression=None,
+            enqueue=True,
+            serialize=True,
+            filter=is_evo_event,
         )
     else:
-        # WORKER PROCESS: Writes to its own dedicated file
-        # This completely eliminates the "FileNotFound" race condition.
-        # We include the PID in the filename.
-        log_file_path = f"logs/workers/{log_file_base_name}_{{time:YYYYMMDD}}_{run_id}_WORKER_{pid}.log"
-
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        # WORKER PROCESS: Writes to a shared trace file for all workers
+        log_file_path = f"logs/{run_id}/workers.jsonl"
 
         logger.add(
             log_file_path,
             level=file_level.upper(),
             format=file_format,
-            rotation="500 MB",  # Smaller rotation for workers
+            rotation="500 MB",
             retention="5 days",
-            compression=None,  # Disable compression here too
+            compression=None,
             enqueue=True,
             serialize=True,
+            filter=is_trace_event,
         )
 
     # Apply context
     logger.configure(extra=default_context)
 
     if is_main_process:
-        logger.info(f"Logging Initialized. Master log: {log_file_path}")
+        logger.info(f"Logging Initialized. Trace logs in logs/{run_id}/")
     else:
         logger.debug(f"Worker Logging Initialized. PID: {pid}")
+
+    if run_id is None:
+        raise ValueError("Run ID could not be determined")
+
+    return run_id
 
 
 def log_section_header(level: str, message: str) -> None:
@@ -185,7 +234,6 @@ def log_generation_summary(
         code_population: The current code population
         test_populations: Dictionary mapping test type to test population (e.g., {"unittest": pop, "differential": pop})
     """
-    import json
 
     code_gen_num = code_population.generation
 
@@ -230,69 +278,11 @@ def log_generation_summary(
         summary[f"{test_type}_new_count"] = len(new_test_ids)
         summary[f"{test_type}_new_ids"] = new_test_ids
 
-    log_subsection_header("INFO", "Generation Summary")
-    logger.info(f"GEN_SUMMARY|{json.dumps(summary)}")
-
-
-def log_individual_complete(
-    individual: "BaseIndividual",
-    population_type: str,
-    status: str,
-) -> None:
-    """
-    Logs a single individual's complete lifecycle record.
-    Called when individual dies (removed from population) or survives (final generation).
-
-    Args:
-        gen_logger: The logger bound with GEN_LOG=True for generation logging
-        individual: The individual to log
-        status: Either "DIED" or "SURVIVED"
-    """
-    import json
-
-    # Get complete record from individual (includes all lifecycle events)
-    record = individual.get_complete_record()
-
-    for key, value in record.items():
-        # Round float values to 4 decimal places for cleaner logs
-        if isinstance(value, float):
-            record[key] = round(value, 4)
-
-    # Add status to the record
-    record["status"] = status
-
-    # Log with structured format for easy parsing
-    logger.debug(
-        f"{population_type}_INDIVIDUAL_{status}|{individual.id}|{json.dumps(record)}"
+    # Log structured summary
+    logger.bind(is_evolution_event=True).info(
+        "GENERATION_SUMMARY",
+        event_data=summary,
     )
-    logger.debug(f"Logged complete record for {individual.id} with status {status}")
-
-
-def log_final_survivors(
-    code_population: "CodePopulation",
-    test_populations: dict[str, "TestPopulation"],
-) -> None:
-    """
-    Logs all individuals that survived to the final generation.
-    Called at the end of run() after evolution loop completes.
-
-    Args:
-        gen_logger: The logger bound with GEN_LOG=True for generation logging
-        code_population: The final code population
-        test_population: The final test population
-    """
-    log_section_header("INFO", "Final Survivors")
-
-    logger.debug(f"Logging {len(code_population)} code survivors")
-    code_ind: "CodeIndividual"
-    for code_ind in code_population:
-        log_individual_complete(code_ind, "code", "SURVIVED")
-
-    for test_type, test_pop in test_populations.items():
-        logger.debug(f"Logging {len(test_pop)} test survivors")
-        test_ind: "TestIndividual"
-        for test_ind in test_pop:
-            log_individual_complete(test_ind, test_type, "SURVIVED")
 
 
 def log_belief_update_start(
@@ -597,6 +587,7 @@ def _log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None
 
 
 def log_observation_matrix(
+    generation: int,
     observation_matrix: "np.ndarray",
     code_population: "CodePopulation",
     test_population: "TestPopulation",
@@ -605,25 +596,40 @@ def log_observation_matrix(
     code_ids = [ind.id for ind in code_population]
     test_ids = [ind.id for ind in test_population]
 
-    # --- New Pandas Method ---
-
-    # 1. Create the DataFrame
-    df = pd.DataFrame(observation_matrix, index=code_ids, columns=test_ids)
-
-    # 2. Give the index column a name for a cleaner header
-    df.index.name = "Code\\Test"
-
-    logger.info(f"Logging {test_type.upper()} observation matrix ({df.shape})")
-
-    # 3. Log the entire pre-formatted string.
-    #    Add a newline to ensure it starts on its own line.
-    logger.info(f"\n{df.to_string()}")
-    logger.debug(f"{test_type.upper()} serialized | {df.to_json()}")
-
-    # --- End New Method ---
+    logger.bind(is_evolution_event=True).info(
+        "OBSERVATION_MATRIX",
+        event_data={
+            "generation": generation,
+            "test_type": test_type,
+            "matrix": observation_matrix.tolist(),
+            "code_ids": code_ids,
+            "test_ids": test_ids,
+        },
+    )
 
     _log_observation_matrix_statistics(observation_matrix)
     return
+
+
+def log_evaluation_failures(
+    generation: int, test_type: str, execution_results: "ExecutionResults"
+) -> None:
+    """
+    Logs comprehensive stack traces / error logs for evaluations that failed.
+    """
+    for code_id, test_results in execution_results.items():
+        for test_id, result in test_results.items():
+            if result.status == "failed" and result.error_log:
+                logger.bind(is_evolution_event=True).info(
+                    "EVALUATION_FAILED",
+                    event_data={
+                        "generation": generation,
+                        "test_type": test_type,
+                        "code_id": code_id,
+                        "test_id": test_id,
+                        "error_log": result.error_log,
+                    },
+                )
 
 
 def log_problem(problem: "Problem") -> None:
@@ -633,3 +639,33 @@ def log_problem(problem: "Problem") -> None:
     logger.info(f"Private tests: {len(problem.private_test_cases)}")
     logger.debug(f"Problem content:\n{problem.question_content}")
     logger.debug(f"Starter code:\n{problem.starter_code}")
+
+
+def save_run_config(run_id: str, config: dict[str, Any]) -> None:
+    """
+    Saves the experiment configuration to a JSON file in the run directory.
+
+    Supports both dictionaries and dataclasses (via recursion).
+
+    Args:
+        run_id: The ID of the run (used to locate the directory)
+        config: The configuration object or dictionary to save.
+    """
+
+    class DataclassEncoder(json.JSONEncoder):
+        def default(self, obj: dict[str, Any]) -> Any:
+            if dataclasses.is_dataclass(obj):
+                return dataclasses.asdict(obj)
+            if isinstance(obj, (set, frozenset)):
+                return list(obj)
+            return super().default(obj)
+
+    config_path = f"logs/{run_id}/run_config.json"
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=4, cls=DataclassEncoder)
+        logger.info(f"Run configuration saved to {config_path}")
+    except Exception as e:
+        logger.error(f"Failed to save run configuration: {e}")

@@ -45,6 +45,9 @@ def _worker_entry(
     )
 
     try:
+        from coevolution.utils.logging import setup_logging
+        setup_logging()
+
         sandbox = create_sandbox(config)
 
         def run_snippet(snippet: str) -> Optional[str]:

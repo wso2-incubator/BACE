@@ -4,6 +4,7 @@ import numpy as np
 from loguru import logger
 
 from coevolution.core.interfaces.language import IScriptComposer
+from coevolution.services.lifecycle import LifecycleEmitter
 from coevolution.utils import logging as logging_utils
 
 # Import concrete classes
@@ -256,7 +257,14 @@ class Orchestrator:
         # Initial Private Run (Baseline) - executor returns atomic InteractionData
         private_interaction = self._get_interaction_data(code_pop, private_pop)
         logging_utils.log_observation_matrix(
-            private_interaction.observation_matrix, code_pop, private_pop, "private"
+            code_pop.generation,
+            private_interaction.observation_matrix,
+            code_pop,
+            private_pop,
+            "private",
+        )
+        logging_utils.log_evaluation_failures(
+            code_pop.generation, "private", private_interaction.execution_results
         )
 
         # Log generation 0 for all evolved test populations
@@ -296,17 +304,28 @@ class Orchestrator:
             interaction = self.execution_system.execute_tests(code_pop, test_pop)
             interactions[test_type] = interaction
             logging_utils.log_observation_matrix(
+                code_pop.generation,
                 interaction.observation_matrix,
                 code_pop,
                 test_pop,
                 test_type,
+            )
+            logging_utils.log_evaluation_failures(
+                code_pop.generation, test_type, interaction.execution_results
             )
 
         # Execute public (fixed) test population
         public_interaction = self.execution_system.execute_tests(code_pop, public_pop)
         interactions["public"] = public_interaction
         logging_utils.log_observation_matrix(
-            public_interaction.observation_matrix, code_pop, public_pop, "public"
+            code_pop.generation,
+            public_interaction.observation_matrix,
+            code_pop,
+            public_pop,
+            "public",
+        )
+        logging_utils.log_evaluation_failures(
+            code_pop.generation, "public", public_interaction.execution_results
         )
 
         return interactions
@@ -435,12 +454,24 @@ class Orchestrator:
 
         # 2. ANCHOR: Update Code based on Public Tests first
         logger.debug("Anchoring code beliefs with public tests...")
+        code_prior = code_pop.probabilities.copy()
         code_post_public = self.bayesian_system.update_code_beliefs(
             prior_code_probs=code_pop.probabilities,
             prior_test_probs=public_pop.probabilities,
             observation_matrix=public_obs_matrix,
             code_update_mask_matrix=mask_pub,
             config=self.public_test_profile.bayesian_config,
+        )
+        logger.bind(is_evolution_event=True).info(
+            "BELIEF_UPDATE",
+            event_data={
+                "generation": context.code_population.generation,
+                "population": "code",
+                "based_on": "public",
+                "ids": code_ids,
+                "prior": code_prior.tolist(),
+                "posterior": code_post_public.tolist(),
+            },
         )
         code_pop.update_probabilities(code_post_public, test_type="public")
         logger.debug(
@@ -474,12 +505,25 @@ class Orchestrator:
             logger.debug(
                 f"Calculating {test_type} test updates based on updated code beliefs on public tests..."
             )
+            test_prior = test_pop.probabilities.copy()
             test_post = self.bayesian_system.update_test_beliefs(
                 prior_code_probs=code_post_public,
                 prior_test_probs=test_pop.probabilities,
                 observation_matrix=test_obs_matrix,
                 test_update_mask_matrix=test_mask,
                 config=test_profile.bayesian_config,
+            )
+            logger.bind(is_evolution_event=True).info(
+                "BELIEF_UPDATE",
+                event_data={
+                    "generation": test_pop.generation,
+                    "population": "test",
+                    "based_on": "code",
+                    "ids": test_ids,
+                    "test_type": test_type,
+                    "prior": test_prior.tolist(),
+                    "posterior": test_post.tolist(),
+                },
             )
             logger.debug(
                 f"Posterior {test_type} test probabilities after update: {np.round(test_post, 4)}"
@@ -488,12 +532,24 @@ class Orchestrator:
             logger.debug(
                 f"Calculating code updates based on {test_type} test priors..."
             )
+            code_evolved_prior = code_pop.probabilities.copy()
             code_evolved_post = self.bayesian_system.update_code_beliefs(
                 prior_code_probs=code_pop.probabilities,
                 prior_test_probs=test_pop.probabilities,
                 observation_matrix=test_obs_matrix,
                 code_update_mask_matrix=code_mask_for_this_test,
                 config=test_profile.bayesian_config,
+            )
+            logger.bind(is_evolution_event=True).info(
+                "BELIEF_UPDATE",
+                event_data={
+                    "generation": code_pop.generation,
+                    "population": "code",
+                    "based_on": test_type,
+                    "ids": code_ids,
+                    "prior": code_evolved_prior.tolist(),
+                    "posterior": code_evolved_post.tolist(),
+                },
             )
 
             logger.debug(
@@ -580,7 +636,7 @@ class Orchestrator:
                 logger.debug(f"Selected {len(test_elites)} {test_type} test elites.")
 
                 # Notify Elites
-                self._notify_elites(test_elites, test_pop.generation)
+                self._notify_elites(test_elites, test_pop.generation, test_type=test_type)
 
                 # Breed
                 test_offsprings = self._breed_tests(
@@ -622,10 +678,25 @@ class Orchestrator:
         private_interaction = self._get_interaction_data(code_pop, private_pop)
 
         logging_utils.log_observation_matrix(
-            private_interaction.observation_matrix, code_pop, private_pop, "private"
+            code_pop.generation,
+            private_interaction.observation_matrix,
+            code_pop,
+            private_pop,
+            "private",
+        )
+        logging_utils.log_evaluation_failures(
+            code_pop.generation, "private", private_interaction.execution_results
         )
 
-        logging_utils.log_final_survivors(code_pop, evolved_test_pops)
+        from coevolution.services.lifecycle import LifecycleEmitter
+
+        logging_utils.log_section_header("INFO", "Final Survivors")
+        for code_ind in code_pop:
+            LifecycleEmitter.log_survival(code_pop.generation, code_ind.id)
+        for test_type, test_pop in evolved_test_pops.items():
+            for test_ind in test_pop:
+                LifecycleEmitter.log_survival(test_pop.generation, test_ind.id)
+
         logging_utils.log_section_header("INFO", "CO-EVOLUTION RUN FINISHED.")
 
     # =========================================================================
@@ -643,6 +714,17 @@ class Orchestrator:
 
         # --- 1. Code Population ---
         code_individuals = self.code_profile.initializer.initialize(problem)
+        from coevolution.services.lifecycle import LifecycleEmitter
+
+        for ind in code_individuals:
+            LifecycleEmitter.log_creation(
+                generation=ind.generation_born,
+                individual_id=ind.id,
+                snippet=ind.snippet,
+                operation=getattr(ind, "creation_op", "INITIAL"),
+                probability=ind.probability,
+                parents=getattr(ind, "parents", None),
+            )
 
         code_population = CodePopulation(code_individuals, generation=0)
         logger.info(f"Created {code_population!r}")
@@ -661,6 +743,18 @@ class Orchestrator:
         test_profile = self.evolved_test_profiles[test_type]
 
         test_individuals = test_profile.initializer.initialize(problem)
+        from coevolution.services.lifecycle import LifecycleEmitter
+
+        for ind in test_individuals:
+            LifecycleEmitter.log_creation(
+                generation=ind.generation_born,
+                individual_id=ind.id,
+                snippet=ind.snippet,
+                operation=getattr(ind, "creation_op", "INITIAL"),
+                probability=ind.probability,
+                parents=getattr(ind, "parents", None),
+                test_type=test_type,
+            )
 
         test_population = TestPopulation(
             individuals=test_individuals,
@@ -687,9 +781,7 @@ class Orchestrator:
         """
         # Generate test functions directly from test cases
         test_functions = [
-            self.composer.generate_test_case(
-                tc.input, tc.output, starter_code, idx + 1
-            )
+            self.composer.generate_test_case(tc.input, tc.output, starter_code, idx + 1)
             for idx, tc in enumerate(test_cases)
         ]
 
@@ -765,13 +857,15 @@ class Orchestrator:
         return code_elites, test_elites_dict
 
     def _notify_elites[IndT: CodeIndividual | TestIndividual](
-        self, elites: list[IndT], generation: int
+        self, elites: list[IndT], generation: int, test_type: str | None = None
     ) -> None:
         """
         Helper to notify elite individuals about their selection.
         """
         for elite in elites:
-            elite.notify_selected_as_elite(generation=generation)
+            LifecycleEmitter.log_elite_selection(
+                generation=generation, individual_id=elite.id, test_type=test_type
+            )
 
     def _notify_removed_individuals[IndT: CodeIndividual | TestIndividual](
         self,
@@ -782,13 +876,6 @@ class Orchestrator:
         """
         Helper to log and notify individuals that were removed from the population
         (failed to survive to the next generation).
-
-        Logs the complete lifecycle record BEFORE notifying about death,
-        ensuring we capture the complete state before any modifications.
-
-        Args:
-            population: The current population before transition
-            next_gen_individuals: The list of individuals that will form the next generation
         """
         current_ids = {ind.id for ind in population}
         next_ids = {ind.id for ind in next_gen_individuals}
@@ -800,8 +887,9 @@ class Orchestrator:
             )
             for ind in population:
                 if ind.id in removed_ids:
-                    ind.notify_died(generation=population.generation)
-                    logging_utils.log_individual_complete(ind, population_type, "DIED")
+                    LifecycleEmitter.log_death(
+                        generation=population.generation, individual_id=ind.id
+                    )
 
     def _breed_code(
         self,
@@ -818,6 +906,16 @@ class Orchestrator:
         )
 
         code_offspring = self.code_profile.breeder.breed(context, num_code_offspring)
+
+        for ind in code_offspring:
+            LifecycleEmitter.log_creation(
+                generation=ind.generation_born,
+                individual_id=ind.id,
+                snippet=ind.snippet,
+                operation=getattr(ind, "creation_op", "UNKNOWN"),
+                probability=ind.probability,
+                parents=getattr(ind, "parents", None),
+            )
 
         logger.debug(f"Successfully bred {len(code_offspring)} code offspring")
         return code_offspring
@@ -836,6 +934,17 @@ class Orchestrator:
         )
 
         test_offsprings = test_profile.breeder.breed(context, num_test_offspring)
+
+        for ind in test_offsprings:
+            LifecycleEmitter.log_creation(
+                generation=ind.generation_born,
+                individual_id=ind.id,
+                snippet=ind.snippet,
+                operation=getattr(ind, "creation_op", "UNKNOWN"),
+                probability=ind.probability,
+                parents=getattr(ind, "parents", None),
+                test_type=test_type,
+            )
 
         logger.debug(f"Successfully bred {len(test_offsprings)} test offspring")
         return test_offsprings

@@ -55,7 +55,7 @@ def _execute_atomic_interaction(
         # CRITICAL: Reconfigure logging in child process
         from coevolution.utils.logging import setup_logging
 
-        setup_logging(console_level="DEBUG", file_level="TRACE")
+        setup_logging()
 
         # Create fresh sandbox instance in this worker process using the factory
         sandbox = create_sandbox(sandbox_config)

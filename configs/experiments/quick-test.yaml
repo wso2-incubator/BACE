@@ -43,13 +43,6 @@ differential_profile: "profiles/differential/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
 
-# Short schedule
-schedule:
-  total_duration: 3
-  code_step: 1
-  test_step: 1
-  start_with: "test"
-
 dataset:
   version: "release_v6"
   start_date: "2025-03-01"
@@ -65,3 +58,5 @@ logging:
   console_level: "INFO"
   file_level: "DEBUG"
   log_file_base_name: "quick_test"
+
+schedule: "schedules/quick-test.yaml"

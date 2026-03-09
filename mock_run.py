@@ -10,6 +10,7 @@ Run from the workspace root:
 
 from typing import Any
 
+import typer
 from loguru import logger
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
@@ -73,21 +74,59 @@ def create_profiles(
     return code_profile, evolved_test_profiles, public_test_profile
 
 
-def create_configurations() -> tuple[
+def create_configurations(
+    schedule_type: str = "simultaneous",
+) -> tuple[
     EvolutionConfig,
     PopulationConfig,
     dict[str, PopulationConfig],
     BayesianConfig,
 ]:
-    """Create all configuration objects for the experiment."""
+    """Create all configuration objects for the experiment based on schedule type."""
 
-    phase = EvolutionPhase(
-        name="evolution",
-        duration=5,
-        evolve_code=True,
-        evolve_tests=True,
-    )
-    schedule = EvolutionSchedule(phases=[phase])
+    if schedule_type == "alternating":
+        schedule = EvolutionSchedule(
+            phases=[
+                EvolutionPhase(
+                    name="test_warmup", duration=1, evolve_code=False, evolve_tests=True
+                ),
+                EvolutionPhase(
+                    name="code_catchup",
+                    duration=1,
+                    evolve_code=True,
+                    evolve_tests=False,
+                ),
+                EvolutionPhase(
+                    name="test_lead", duration=1, evolve_code=False, evolve_tests=True
+                ),
+                EvolutionPhase(
+                    name="code_follow", duration=2, evolve_code=True, evolve_tests=False
+                ),
+            ]
+        )
+    elif schedule_type == "warmup_only":
+        schedule = EvolutionSchedule(
+            phases=[
+                EvolutionPhase(
+                    name="test_warmup", duration=2, evolve_code=False, evolve_tests=True
+                ),
+                EvolutionPhase(
+                    name="code_evolution",
+                    duration=3,
+                    evolve_code=True,
+                    evolve_tests=False,
+                ),
+            ]
+        )
+    else:  # default simultaneous
+        schedule = EvolutionSchedule(
+            phases=[
+                EvolutionPhase(
+                    name="evolution", duration=5, evolve_code=True, evolve_tests=True
+                ),
+            ]
+        )
+
     evo_config = EvolutionConfig(schedule=schedule)
 
     code_pop_config = PopulationConfig(
@@ -244,13 +283,25 @@ def log_results(
             logger.info(f"  Generation {gen}: {gen_counts[gen]} individuals")
 
 
-def main() -> None:
+app = typer.Typer(help="Run a mock coevolution experiment.")
+
+
+@app.command()
+def main(
+    schedule: str = typer.Option(
+        "simultaneous",
+        "--schedule",
+        "-s",
+        help="Schedule type: 'simultaneous', 'alternating', or 'warmup_only'",
+    ),
+) -> None:
     """Main entry point for the mock coevolution run."""
 
-    logging_utils.setup_logging(
+    run_id = logging_utils.setup_logging(
         console_level="DEBUG",
         file_level="TRACE",
-        log_file_base_name="mock_coevolution",
+        run_id="mock",
+        problem_id="mock-problem",
     )
 
     logging_utils.log_section_header("INFO", "MOCK COEVOLUTION ORCHESTRATOR RUN")
@@ -268,7 +319,51 @@ def main() -> None:
         code_pop_config,
         test_pop_configs,
         bayesian_config,
-    ) = create_configurations()
+    ) = create_configurations(schedule_type=schedule)
+
+    # Save configuration to the run directory
+    logging_utils.save_run_config(
+        run_id,
+        {
+            "experiment": {
+                "name": "mock-coevolution",
+                "description": "Mock coevolution run for testing dashboard",
+                "language": "python",
+            },
+            "llm": {
+                "provider": "mock-provider",
+                "model": "mock-gpt-5-mini",
+            },
+            "evolution_config": evo_config,
+            "code_profile": {
+                "population_config": code_pop_config,
+                "operator_rates": {
+                    "crossover": 0.2,
+                    "mutation": 0.3,
+                    "edit": 0.5,
+                },
+            },
+            "test_profiles": {
+                "unittest": {
+                    "population_config": test_pop_configs["unittest"],
+                    "operator_rates": {
+                        "crossover": 0.1,
+                        "mutation": 0.4,
+                        "discovery": 0.5,
+                    },
+                },
+                "differential": {
+                    "population_config": test_pop_configs["differential"],
+                    "operator_rates": {
+                        "crossover": 0.2,
+                        "mutation": 0.2,
+                        "discovery": 0.6,
+                    },
+                },
+            },
+            "bayesian_config": bayesian_config,
+        },
+    )
 
     logger.info(f"Evolution: {evo_config.num_generations} generations")
     logger.info(
@@ -306,7 +401,7 @@ def main() -> None:
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION RUN")
 
     try:
-        with logger.contextualize(run_id="mock_run", problem_id=problem.question_id):
+        with logger.contextualize(run_id=run_id, problem_id=problem.question_id):
             code_population, test_populations = orchestrator.run(problem)
 
         log_results(code_population, test_populations)
@@ -321,4 +416,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    app()

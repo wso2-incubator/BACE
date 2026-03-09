@@ -201,12 +201,15 @@ def run(
         run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
 
     log_config = experiment_config.get("logging", {})
-    logging_utils.setup_logging(
+    run_id = logging_utils.setup_logging(
         console_level=log_config.get("console_level", "INFO"),
         file_level=log_config.get("file_level", "DEBUG"),
         log_file_base_name=log_config.get("log_file_base_name", "coevolution_run"),
         run_id=run_id,
     )
+
+    # Save run config for dashboard accessibility
+    logging_utils.save_run_config(run_id, experiment_config)
 
     logger.bind(run_id=run_id)
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
@@ -217,64 +220,14 @@ def run(
     )
 
     # =================================================================
-    # 6. SAVE RUN METADATA
-    # =================================================================
-    metadata_path = Path(f"logs/metadata/{run_id}_metadata.json")
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-
-    metadata = {
-        "run_id": run_id,
-        "timestamp_start": datetime.now().isoformat(),
-        "config_file": config,
-        "experiment_name": experiment_config.get("experiment", {}).get(
-            "name", "unnamed"
-        ),
-        "experiment_description": experiment_config.get("experiment", {}).get(
-            "description", ""
-        ),
-        "llm_model": config_utils.get_config_value(
-            experiment_config, "llm.model", "unknown"
-        ),
-        "dataset_version": config_utils.get_config_value(
-            experiment_config, "dataset.version", "unknown"
-        ),
-        "cli_overrides": overrides,
-        "status": "running",
-    }
-
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2, default=str)
-    logger.info(f"Metadata saved to: {metadata_path}")
-
-    # Save full resolved config for reproducibility
-    config_path = Path(f"logs/configs/{run_id}_config.yaml")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w") as f:
-        yaml.dump(experiment_config, f, default_flow_style=False, sort_keys=False)
-    logger.info(f"Full config saved to: {config_path}")
-
-    # =================================================================
     # 7. RUN EXPERIMENT
     # =================================================================
     try:
         _run_experiment(experiment_config, run_id)
 
-        # Update metadata with success
-        metadata["timestamp_end"] = datetime.now().isoformat()
-        metadata["status"] = "completed"
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2, default=str)
-
         logging_utils.log_section_header("INFO", "EXPERIMENT COMPLETED SUCCESSFULLY")
 
     except Exception as e:
-        # Update metadata with failure
-        metadata["timestamp_end"] = datetime.now().isoformat()
-        metadata["status"] = "failed"
-        metadata["error"] = str(e)
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2, default=str)
-
         logger.error(f"Experiment failed: {e}", exc_info=True)
         raise typer.Exit(code=1)
 
@@ -299,6 +252,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     schedule_config = config.get("schedule", {})
     dataset_config = config.get("dataset", {})
     subset_config = config.get("subset", {})
+    log_config = config.get("logging", {})
 
     # =========================================================================
     # PHASE 1: INFRASTRUCTURE INITIALIZATION
@@ -560,6 +514,15 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
 
     for i, problem in enumerate(selected_problems):
         global_idx = (start_index if not problem_ids else 0) + i
+
+        # Re-initialize logging for this specific problem context.
+        # This updates the global environment so child workers know which directory to log to.
+        run_id = logging_utils.setup_logging(
+            console_level=log_config.get("console_level", "INFO"),
+            file_level=log_config.get("file_level", "DEBUG"),
+            run_id=run_id,
+            problem_id=problem.question_id,
+        )
 
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
             logging_utils.log_section_header(

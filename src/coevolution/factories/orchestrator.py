@@ -229,9 +229,7 @@ class OrchestratorBuilder:
         self._ledger_factory = ledger_factory
         return self
 
-    def with_composer(
-        self, composer: IScriptComposer
-    ) -> "OrchestratorBuilder":
+    def with_composer(self, composer: IScriptComposer) -> "OrchestratorBuilder":
         """
         Set script composer.
 

@@ -10,8 +10,7 @@ from typing import Any, overload
 import numpy as np
 from loguru import logger
 
-from .data import LogEntry
-from .types import LifecycleEvent, Operation, ParentDict
+from .types import Operation, ParentDict
 
 
 class BaseIndividual(ABC):
@@ -48,7 +47,6 @@ class BaseIndividual(ABC):
             parents: Parent individuals grouped by type {"code": [ids], "test": [ids]}
             metadata: Additional operation-specific metadata
         """
-        self.lifecycle_log: list[LogEntry] = []
         self._snippet = snippet
         self._creation_op = creation_op
         self._generation_born = generation_born
@@ -57,141 +55,6 @@ class BaseIndividual(ABC):
 
         BaseIndividual._validate_probability(probability)
         self._probability = probability
-
-        # Log creation event
-        self._log_event(
-            generation=generation_born,
-            event=LifecycleEvent.CREATED,
-            creation_op=creation_op,
-            probability=probability,
-        )
-
-    def _log_event(
-        self, generation: int, event: LifecycleEvent, **details: Any
-    ) -> None:
-        """
-        Internal method to record structured lifecycle events.
-
-        Args:
-            generation: The generation number when this event occurred.
-            event: The type of lifecycle event.
-            **details: Additional event-specific information.
-        """
-        # Details are already serializable (Operations is now just a string)
-        entry = LogEntry(generation=generation, event=event, details=details)
-        self.lifecycle_log.append(entry)
-        logger.trace(f"Lifecycle event: {event.value} at gen {generation} - {details}")
-
-    def notify_parent_of(
-        self, offspring_id: str, operation: Operation, generation: int
-    ) -> None:
-        """
-        Called when this individual is used as a parent.
-        Logs the lifecycle event of producing offspring.
-
-        Args:
-            offspring_id: The ID of the offspring produced.
-            operation: The genetic operation used (e.g., crossover, edit, reproduction, mutation, det).
-            generation: The generation number when this parenting occurred.
-        """
-        self._log_event(
-            generation=generation,
-            event=LifecycleEvent.BECAME_PARENT,
-            offspring_id=offspring_id,
-            operation=operation,
-        )
-
-    def notify_selected_as_elite(self, generation: int) -> None:
-        """
-        Called when this individual is selected as an elite.
-
-        Args:
-            generation: The generation number when selected as elite.
-        """
-        self._log_event(
-            generation=generation,
-            event=LifecycleEvent.SELECTED_AS_ELITE,
-        )
-
-    def notify_died(self, generation: int) -> None:
-        """
-        Called when this individual is removed from the population.
-
-        Args:
-            generation: The generation number when this individual died.
-        """
-        self._log_event(
-            generation=generation,
-            event=LifecycleEvent.DIED,
-        )
-
-    def notify_survived(self, generation: int) -> None:
-        """
-        Called when this individual survives to the end of the evolutionary run.
-
-        Args:
-            generation: The final generation number.
-        """
-        self._log_event(
-            generation=generation,
-            event=LifecycleEvent.SURVIVED,
-        )
-
-    def notify_probability_updated(
-        self,
-        generation: int,
-        test_type: str | None = None,
-        probability_change: float | None = None,
-    ) -> None:
-        """
-        Called when this individual's probability is updated.
-
-        Args:
-            generation: The generation number when this update occurred.
-            test_type: The type of test that triggered the update (e.g., 'public', 'unittest', 'differential').
-            probability_change: The absolute change in probability (new - old). If None, change is not tracked.
-        """
-        details: dict[str, Any] = {"probability": self.probability}
-        if test_type is not None:
-            details["test_type"] = test_type
-        if probability_change is not None:
-            details["probability_change"] = probability_change
-
-        self._log_event(
-            generation=generation,
-            event=LifecycleEvent.PROBABILITY_UPDATED,
-            **details,
-        )
-
-    def get_complete_record(self) -> dict[str, Any]:
-        """
-        Returns a complete record of this individual for logging purposes.
-
-        This method is called when the individual's lifecycle ends (either by
-        dying or surviving to the end of the run) to capture all information
-        about the individual including its full lifecycle history.
-
-        Returns:
-            A dictionary containing all individual attributes and lifecycle events.
-        """
-        return {
-            "id": self.id,
-            "type": self.__class__.__name__,
-            "snippet": self.snippet,
-            "creation_op": self.creation_op,  # Already a string
-            "generation_born": self.generation_born,
-            "probability": self.probability,
-            "parents": self.parents,  # New dict format with types
-            "metadata": self.metadata,  # Operation-specific metadata
-            "lifecycle_events": [
-                {
-                    "generation": entry.generation,
-                    "event": entry.event.value,
-                    "details": entry.details,
-                }
-                for entry in self.lifecycle_log
-            ],
-        }
 
     # --- Abstract Properties (Must be implemented by subclasses) ---
 
@@ -505,15 +368,7 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         old_avg = self.compute_average_probability()
 
         for ind, new_prob in zip(self._individuals, new_probabilities, strict=False):
-            old_prob = ind.probability
             ind.probability = float(new_prob)
-            probability_change = float(new_prob) - old_prob
-
-            ind.notify_probability_updated(
-                generation=self._generation,
-                test_type=test_type,
-                probability_change=probability_change,
-            )
 
         new_avg = self.compute_average_probability()
         logger.info(
