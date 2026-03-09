@@ -113,7 +113,9 @@ def display_config(config: dict[str, Any]) -> None:
     metadata_table.add_row(
         "Experiment", f"[bold cyan]{exp_cfg.get('name', 'N/A')}[/bold cyan]"
     )
-    metadata_table.add_row("Description", f"[dim]{exp_cfg.get('description', '')}[/dim]")
+    metadata_table.add_row(
+        "Description", f"[dim]{exp_cfg.get('description', '')}[/dim]"
+    )
     metadata_table.add_row(
         "LLM Model",
         f"[green]{llm_cfg.get('provider', 'N/A')}/{llm_cfg.get('model', 'N/A')}[/green]",
@@ -126,32 +128,34 @@ def display_config(config: dict[str, Any]) -> None:
 
     # 2. Population Strategy (Detailed Panels)
     code_prof = config.get("code_profile", {})
-    
+
     # Collect all profiles
     profiles_to_show = [("Code", code_prof)]
-    
+
     # Check for test profiles
     test_profs_dict = config.get("test_profiles", {})
     for pt in ["unittest", "differential", "public"]:
         if f"{pt}_profile" in config:
             test_profs_dict[pt] = config[f"{pt}_profile"]
-    
+
     for t_type, t_prof in test_profs_dict.items():
         profiles_to_show.append((t_type.title(), t_prof))
 
     panels = []
     for name, prof in profiles_to_show:
         cfg = prof.get("population_config", prof)
-        
+
         # Base Settings
         settings_table = Table(show_header=False, box=None, padding=(0, 1))
-        
+
         # Population
         init_size = cfg.get("initial_population_size")
         max_size = cfg.get("max_population_size")
         settings_table.add_row("Pop Sizes", f"[bold]{init_size} → {max_size}[/bold]")
-        settings_table.add_row("Init Prior", f"[dim]{cfg.get('initial_prior', 'N/A')}[/dim]")
-        
+        settings_table.add_row(
+            "Init Prior", f"[dim]{cfg.get('initial_prior', 'N/A')}[/dim]"
+        )
+
         elitism = cfg.get("elitism_rate")
         if elitism is not None:
             settings_table.add_row("Elitism", f"{elitism:.1%}")
@@ -160,25 +164,27 @@ def display_config(config: dict[str, Any]) -> None:
         ops_str = extract_operator_rates(prof)
         if ops_str:
             settings_table.add_row("Op Rates", f"[yellow]{ops_str}[/yellow]")
-            
+
         # Strategy
         div = cfg.get("diversity_enabled")
         if div is not None:
-            settings_table.add_row("Diversity", "[green]ON[/green]" if div else "[red]OFF[/red]")
-        
+            settings_table.add_row(
+                "Diversity", "[green]ON[/green]" if div else "[red]OFF[/red]"
+            )
+
         strat = cfg.get("prob_assigner_strategy")
         if strat:
             settings_table.add_row("Prob Strat", f"[dim]{strat}[/dim]")
-            
+
         # Performance
         workers = cfg.get("llm_workers")
         if workers:
             settings_table.add_row("Workers", f"{workers}")
-            
+
         batch = cfg.get("init_pop_batch_size")
         if batch:
             settings_table.add_row("Batch Size", f"{batch}")
-            
+
         # Specific Settings (Bayesian/Special)
         for special in ["learning_rate", "alpha", "beta", "gamma", "k_failing_tests"]:
             val = cfg.get(special)
@@ -250,11 +256,13 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
 
         # Group test snippets
         test_creations = [
-            e for e in gen0_creations if not str(e.get("individual_id", "")).startswith("C")
+            e
+            for e in gen0_creations
+            if not str(e.get("individual_id", "")).startswith("C")
         ]
         if test_creations:
             # Group by test_type
-            by_type = {}
+            by_type: dict[str, list[dict[str, Any]]] = {}
             for e in test_creations:
                 tt = str(e.get("test_type", "Unknown")).upper()
                 if tt not in by_type:
@@ -511,14 +519,102 @@ def display_succession(events: list[dict[str, Any]], current_gen: int) -> None:
                 console.print(table)
 
 
+def display_population_overview(
+    gen: int,
+    gen_events: list[dict[str, Any]],
+    ind_metadata: dict[str, dict[str, Any]],
+    latest_probs: dict[str, float],
+) -> None:
+    """Displays tables of active individuals at the start of the generation."""
+    # Find all individuals being evaluated in this generation
+    matrices = [e for e in gen_events if e["event_type"] == "OBSERVATION_MATRIX"]
+    if not matrices:
+        return
+
+    code_ids = set()
+    test_pops: dict[str, set[str]] = {}
+
+    for m in matrices:
+        tt = str(m.get("test_type", "Test")).upper()
+        if tt in ("PRIVATE", "PUBLIC"):
+            continue  # Skip fixed tests in overview
+
+        for cid in m.get("code_ids", []):
+            code_ids.add(cid)
+        if tt not in test_pops:
+            test_pops[tt] = set()
+        for tid in m.get("test_ids", []):
+            test_pops[tt].add(tid)
+
+    if not code_ids and not test_pops:
+        return
+
+    # Render Code Pop
+    if code_ids:
+        table = Table(
+            title=f"Code Population (Gen {gen})", box=box.SIMPLE, border_style="cyan"
+        )
+        table.add_column("ID", style="bold cyan")
+        table.add_column("Created By", style="dim")
+        table.add_column("Born", justify="center")
+        table.add_column("Current Belief", justify="right")
+
+        sorted_code = sorted(
+            list(code_ids), key=lambda x: latest_probs.get(x, 0.0), reverse=True
+        )
+        for iid in sorted_code:
+            meta = ind_metadata.get(iid, {})
+            table.add_row(
+                fmt_id(iid),
+                str(meta.get("op", "initial")),
+                str(meta.get("gen", 0)),
+                f"{latest_probs.get(iid, 0.0):.4f}",
+            )
+        console.print(table)
+
+    # Render Test Pops
+    for tt, tids in test_pops.items():
+        table = Table(
+            title=f"{tt} Population (Gen {gen})", box=box.SIMPLE, border_style="magenta"
+        )
+        table.add_column("ID", style="bold magenta")
+        table.add_column("Created By", style="dim")
+        table.add_column("Born", justify="center")
+        table.add_column("Current Belief", justify="right")
+
+        sorted_tests = sorted(
+            list(tids),
+            key=lambda x: latest_probs.get(x, 1.0 if x.startswith("T") else 0.0),
+            reverse=True,
+        )
+        for iid in sorted_tests:
+            meta = ind_metadata.get(iid, {})
+            # Fixed tests (starts with T and not in ind_metadata) default to initial/0
+            table.add_row(
+                fmt_id(iid),
+                str(meta.get("op", "initial")),
+                str(meta.get("gen", 0)),
+                f"{latest_probs.get(iid, 1.0 if iid.startswith('T') else 0.0):.4f}",
+            )
+        console.print(table)
+    console.print()
+
+
 def render_generation(
-    events: list[dict[str, Any]], gen: int, show_errors: bool = False
+    events: list[dict[str, Any]],
+    gen: int,
+    ind_metadata: dict[str, dict[str, Any]],
+    latest_probs: dict[str, float],
+    show_errors: bool = False,
 ) -> None:
     gen_events = [e for e in events if e.get("generation") == gen]
     if not gen_events:
         return
 
     console.rule(f"[bold yellow]GENERATION {gen}[/bold yellow]", style="yellow")
+
+    # 0. Population Overview
+    display_population_overview(gen, gen_events, ind_metadata, latest_probs)
 
     # 1. Matrices & Failures (Work)
     # Filter to show only the LATEST matrix for each test_type in this generation
@@ -527,7 +623,7 @@ def render_generation(
     for m in all_matrices:
         tt = str(m.get("test_type", "Unknown")).upper()
         matrix_map[tt] = m
-    
+
     matrices = list(matrix_map.values())
     failures = [e for e in gen_events if e["event_type"] == "EVALUATION_FAILED"]
 
@@ -551,12 +647,13 @@ def render_generation(
                     for f_row in type_failures:
                         c_id = fmt_id(str(f_row.get("code_id")))
                         t_id = fmt_id(str(f_row.get("test_id")))
-                        err = f_row.get("error_log", "")
-                        clean_err = (
-                            err.split("\n")[0][:120] + "..." if err else "Unknown Error"
+                        err = f_row.get("error_log", "Unknown Error")
+
+                        console.print(
+                            f"  [red]✖[/red] [bold]{c_id}[/bold] vs [bold]{t_id}[/bold]:"
                         )
                         console.print(
-                            f"  [red]✖[/red] [bold]{c_id}[/bold] vs [bold]{t_id}[/bold]: [dim]{clean_err}[/dim]"
+                            Panel(err, border_style="dim red", padding=(0, 1))
                         )
             elif type_failures:
                 num_fails = len(type_failures)
@@ -650,20 +747,30 @@ def main(
     if not events:
         return
 
-    # Snippets & Probability cache
-    snippets: dict[str, str] = {}
+    # Metadata & snippets cache
+    ind_metadata: dict[str, dict[str, Any]] = {}
     latest_probs: dict[str, float] = {}
+    snippets: dict[str, str] = {}
+
     for e in events:
-        ind_id = e.get("individual_id")
-        if not ind_id:
+        iid = e.get("individual_id")
+        if not iid:
             continue
-        
-        if e["event_type"] == "CREATED" and "snippet" in e:
-            snippets[ind_id] = e["snippet"]
-        
+
+        if e["event_type"] == "CREATED":
+            ind_metadata[iid] = {
+                "op": e.get("creation_op", "initial"),
+                "gen": e.get("generation", 0),
+            }
+            if "snippet" in e:
+                snippets[iid] = e["snippet"]
+
         prob = e.get("probability")
         if prob is not None:
-            latest_probs[ind_id] = float(prob)
+            latest_probs[iid] = float(prob)
+        elif iid.startswith("T") and "PUBLIC" in e.get("event_type", ""):
+            # Fallback for older logs where public tests didn't have explicit probabilities
+            latest_probs[iid] = 1.0
 
     # Phase 0: Configuration
     config = load_config(run_id)
@@ -681,7 +788,9 @@ def main(
             max_gen = g
 
     for gen in range(0, max_gen + 1):
-        render_generation(events, gen, show_errors=show_errors)
+        render_generation(
+            events, gen, ind_metadata, latest_probs, show_errors=show_errors
+        )
 
     # Final Summary (Champions)
     survivors = [e for e in events if e["event_type"] == "SURVIVED"]
@@ -716,7 +825,9 @@ def main(
                 champion_meta = code_survivors[0]  # Sorted by prob
                 champion_id = champion_meta["individual_id"]
                 # Use cached latest probability which is more reliable
-                champion_prob = latest_probs.get(champion_id, champion_meta.get("probability", 0.0))
+                champion_prob = latest_probs.get(
+                    champion_id, champion_meta.get("probability", 0.0)
+                )
 
                 # Find its row in the matrix
                 try:

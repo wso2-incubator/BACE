@@ -798,6 +798,18 @@ class Orchestrator:
             for function in test_functions
         ]
 
+        from coevolution.services.lifecycle import LifecycleEmitter
+        for ind in test_individuals:
+            LifecycleEmitter.log_creation(
+                generation=ind.generation_born,
+                individual_id=ind.id,
+                snippet=ind.snippet,
+                operation=ind.creation_op,
+                probability=ind.probability,
+                parents=ind.parents, # type: ignore
+                test_type="fixed", # Generic marker for public/private
+            )
+
         # Create and return the test population
         test_population = TestPopulation(
             individuals=test_individuals,
