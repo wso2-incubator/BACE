@@ -17,4 +17,5 @@ class _CodeLLMHelpers:
     def _validated_code(self, code: str, starter_code: str, op: str) -> str:
         if not self._contains_starter_code(code, starter_code):
             raise ValueError(f"{op} result does not contain starter code structure.")
-        return code
+        # Strip main blocks to keep snippets clean
+        return self.parser.remove_main_block(code)
