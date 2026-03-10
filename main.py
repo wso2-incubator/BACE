@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import typer
-import yaml
 from loguru import logger
 
 from coevolution.dataset import get_adapter
@@ -173,7 +172,7 @@ def run(
         overrides["logging.console_level"] = console_level
 
     if language:
-        overrides["experiment.language"] = language
+        overrides["language"] = language
 
     # Apply overrides
     if overrides:
@@ -274,7 +273,11 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     #  1) CLI argument (applied into `experiment.language` via overrides)
     #  2) `experiment.language` in the config
     #  3) default to "python"
-    language = config.get("experiment", {}).get("language") or "python"
+    language = (
+        config.get("language")
+        or config.get("experiment", {}).get("language")
+        or "python"
+    )
     logger.info(f"Target Language: {language}")
 
     sandbox_diff_config = sandbox_config.get("differential", {})
