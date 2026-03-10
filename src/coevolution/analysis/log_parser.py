@@ -123,7 +123,9 @@ class StructuredJSONLParser:
     """Parses new-style directory-based JSONL telemetry."""
     
     def parse(self, log_dir: str, run_id: str, problem_id: str) -> ParsedLog:
-        history_path = Path(log_dir) / run_id / problem_id / "evolutionary_history.jsonl"
+        from coevolution.utils.paths import sanitize_problem_id
+        sanitized_pid = sanitize_problem_id(problem_id)
+        history_path = Path(log_dir) / run_id / sanitized_pid / "evolutionary_history.jsonl"
         if not history_path.exists():
             return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
 
@@ -235,7 +237,9 @@ def parse_coevolution_log(
     # 1. Detection: Structured (New) Format
     # If problem_id is provided, check the specific path
     if target_problem_id:
-        structured_path = Path(log_dir) / target_run_id / target_problem_id / "evolutionary_history.jsonl"
+        from coevolution.utils.paths import sanitize_problem_id
+        sanitized_pid = sanitize_problem_id(target_problem_id)
+        structured_path = Path(log_dir) / target_run_id / sanitized_pid / "evolutionary_history.jsonl"
         if structured_path.exists():
             logger.info(f"Detected structured log format for {target_run_id}/{target_problem_id}")
             return StructuredJSONLParser().parse(log_dir, target_run_id, target_problem_id)
@@ -289,8 +293,12 @@ def get_problem_ids(
     # 1. Structured Scan (Fast)
     run_path = Path(log_dir) / run_id
     if run_path.exists() and run_path.is_dir():
+        from coevolution.utils.paths import sanitize_problem_id
         for p_dir in run_path.iterdir():
             if p_dir.is_dir() and (p_dir / "evolutionary_history.jsonl").exists():
+                # Note: Directory name is sanitized version, but the logs inside 
+                # might still reference the original ID. However, for discovery 
+                # we return the directory name which is used as target_problem_id.
                 problem_ids.add(p_dir.name)
 
     # 2. Legacy Scan (Slow - only if requested)

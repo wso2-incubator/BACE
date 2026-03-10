@@ -139,9 +139,12 @@ def setup_logging(
         return not bool(record["extra"].get("is_evolution_event", False))
 
     if is_main_process:
+        from coevolution.utils.paths import sanitize_problem_id
+        sanitized_pid = sanitize_problem_id(problem_id)
+        
         # MAIN PROCESS: Writes to the master trace log and the evolutionary history
         trace_path = f"logs/{run_id}/trace.jsonl"
-        history_path = f"logs/{run_id}/{problem_id}/evolutionary_history.jsonl"
+        history_path = f"logs/{run_id}/{sanitized_pid}/evolutionary_history.jsonl"
 
         logger.add(
             trace_path,
