@@ -60,6 +60,9 @@ def main(
         "*.log", help="Pattern to match legacy log files"
     ),
     problem_id: str = typer.Option(None, help="Specific Problem ID to analyze (optional)"),
+    legacy: bool = typer.Option(
+        False, "--legacy", help="Whether to scan legacy flat log files"
+    ),
 ) -> None:
     """
     Analyze Private observation matrices for multiple Run IDs.
@@ -69,7 +72,7 @@ def main(
     logger.add(sys.stderr, format="<level>{message}</level>", level="INFO")
 
     # 0. Expand Globs for run_ids
-    all_available_runs = get_run_ids(log_dir, file_pattern)
+    all_available_runs = get_run_ids(log_dir, file_pattern, use_legacy=legacy)
     expanded_run_ids = set()
     for pattern in run_ids:
         if any(c in pattern for c in "*?[]"):
@@ -88,16 +91,16 @@ def main(
     console.rule(f"[bold magenta]ANALYZING RUNS: {', '.join(final_run_ids)}[/bold magenta]")
 
     # 1. Discover problems across all Run IDs
-    # Map of problem_id -> list of source_dicts
+    # Map of problem_id -> list of (run_id, legacy_files)
     from collections import defaultdict
     all_problems = defaultdict(list)
     
     for rid in final_run_ids:
-        problem_map = get_problem_ids(log_dir, file_pattern, rid)
-        for pid, sources in problem_map.items():
+        pids, lfiles = get_problem_ids(log_dir, file_pattern, rid, use_legacy=legacy)
+        for pid in pids:
             if problem_id and pid != problem_id:
                 continue
-            all_problems[pid].extend(sources)
+            all_problems[pid].append((rid, lfiles))
 
     if not all_problems:
         logger.error(f"No problems found for Run IDs: {', '.join(run_ids)}")
@@ -114,20 +117,16 @@ def main(
         candidates = all_problems[pid]
         problem_candidates_data = []
 
-        # Analyze each candidate source for this problem to find the "best" (completed) one
-        for source_info in candidates:
-            rid = source_info["run_id"]
-            stype = source_info["type"]
-            sfiles = source_info["files"]
-
+        # Analyze each candidate run for this problem to find the "best" (completed) one
+        for rid, lfiles in candidates:
             # Parse the specific logs
             parsed_data = parse_coevolution_log(
                 log_dir=log_dir,
                 log_filename_pattern=file_pattern,
                 target_run_id=rid,
                 target_problem_id=pid,
-                source_type=stype,
-                legacy_files=sfiles
+                use_legacy=legacy,
+                legacy_files=lfiles
             )
             
             # Determine if this run is "complete" (has a champion)
@@ -153,7 +152,6 @@ def main(
 
             problem_candidates_data.append({
                 "run_id": rid,
-                "type": stype,
                 "parsed_data": parsed_data,
                 "is_complete": has_champion,
                 "problem_id": pid,
@@ -170,19 +168,17 @@ def main(
             rprint("[red]Please resolve this ambiguity by isolating the correct run.[/red]")
             raise typer.Exit(code=1)
         
-        # Selection: Use the completed one, or prefer structured
+        # Selection: Use the completed one, or the only one, or the "latest" one
         if completed_candidates:
             selected = completed_candidates[0]
         else:
-            # If none are complete, prefer structured if available
-            structured_cands = [c for c in problem_candidates_data if c["type"] == "structured"]
-            selected = structured_cands[0] if structured_cands else problem_candidates_data[0]
+            # If none are complete, use the first one (arbitrary but consistent)
+            selected = problem_candidates_data[0]
 
         rid = selected["run_id"]
-        stype = selected["type"]
         parsed_data = selected["parsed_data"]
         
-        rprint(f"\n[bold green]PROBLEM:[/bold green] [bold white]{pid}[/bold white] [dim](from {rid} [{stype}])[/dim]")
+        rprint(f"\n[bold green]PROBLEM:[/bold green] [bold white]{pid}[/bold white] [dim](from {rid})[/dim]")
         rprint("[dim]" + "─" * 40 + "[/dim]")
 
         matrices = parsed_data["matrices"].get("private", [])
