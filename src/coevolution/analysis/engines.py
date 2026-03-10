@@ -40,7 +40,7 @@ def group_events_into_cycles(events: list[dict[str, Any]]) -> list[list[dict[str
     return cycles
 
 
-def get_active_ids_in_cycle(cycle_events: list[dict[str, Any]]) -> dict[str, set[str]]:
+def get_active_ids_in_cycle(cycle_events: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Extracts all code and test IDs that were active in a specific interaction cycle.
     Returns: {"code": {id1, id2}, "test_types": {"UNITTEST": {id3, id4}, ...}}

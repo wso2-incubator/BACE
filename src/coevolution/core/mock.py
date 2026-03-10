@@ -1,6 +1,7 @@
 # /path/to/your/project/mock.py
 from dataclasses import dataclass
-from typing import Literal, cast
+import typing
+from typing import Literal, cast, Any
 
 import numpy as np
 from loguru import logger
@@ -112,7 +113,7 @@ class MockCodeOperator:
 
         # Generate offspring snippet
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
-        parents = {"code": [parent.id], "test": []}
+        parents: dict[Literal["code", "test"], list[str]] = {"code": [parent.id], "test": []}
         
         if op == OPERATION_MUTATION:
             snippet = f"# mutated code snippet v{np.random.randint(100)}"
@@ -133,7 +134,9 @@ class MockCodeOperator:
                     evolved_tests.extend(list(t_pop.individuals))
             
             if evolved_tests:
-                test_p = np.random.choice(evolved_tests)
+                # Use index selection to avoid mypy confusion with np.random.choice on objects
+                idx = int(np.random.randint(len(evolved_tests)))
+                test_p = evolved_tests[idx]
                 parents["test"].append(test_p.id)
                 prob = float(np.mean([parent.probability, test_p.probability]))
             else:
@@ -191,7 +194,7 @@ class MockTestOperator:
         parent = test_pop[parent_idx]
 
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
-        parents = {"code": [], "test": [parent.id]}
+        parents: dict[Literal["code", "test"], list[str]] = {"code": [], "test": [parent.id]}
         
         if op == OPERATION_MUTATION:
             snippet = f"def test_mutated_{np.random.randint(1000)}(): pass  # mutated"
@@ -207,7 +210,9 @@ class MockTestOperator:
             # Select a random code individual as a cross-species parent
             code_pop = context.code_population
             if code_pop.size > 0:
-                code_p = np.random.choice(list(code_pop.individuals))
+                code_inds = list(code_pop.individuals)
+                idx = int(np.random.randint(len(code_inds)))
+                code_p = code_inds[idx]
                 parents["code"].append(code_p.id)
                 prob = float(np.mean([parent.probability, code_p.probability]))
             else:

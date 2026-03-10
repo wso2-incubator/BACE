@@ -21,7 +21,7 @@ class ParsedLog(TypedDict):
 # --- The Stream Reader (IO Abstraction for Legacy) ---
 
 def _log_line_generator(
-    log_dir: str, log_filename_pattern: str, limit_to_files: list[str] = None
+    log_dir: str, log_filename_pattern: str, limit_to_files: list[str] | None = None
 ) -> Generator[tuple[str, str], None, None]:
     """
     Yields (file_path, line) one by one from matching log files.
@@ -60,7 +60,7 @@ def _log_line_generator(
 class LegacyLogParser:
     """Parses old-style flat-file .log files."""
     
-    def parse(self, log_dir: str, file_pattern: str, run_id: str, problem_id: str, limit_to_files: list[str] = None) -> ParsedLog:
+    def parse(self, log_dir: str, file_pattern: str, run_id: str, problem_id: str, limit_to_files: list[str] | None = None) -> ParsedLog:
         gen_data = []
         ind_data = []
         matrix_store: dict[str, list[pd.DataFrame]] = defaultdict(list)
@@ -103,7 +103,7 @@ class LegacyLogParser:
 
         return self._finalize(gen_data, ind_data, matrix_store, run_id)
 
-    def _finalize(self, gen_data, ind_data, matrix_store, run_id) -> ParsedLog:
+    def _finalize(self, gen_data: list[dict[str, Any]], ind_data: list[dict[str, Any]], matrix_store: dict[str, list[pd.DataFrame]], run_id: str) -> ParsedLog:
         gen_df = pd.DataFrame(gen_data)
         if not gen_df.empty and "generation" in gen_df.columns:
             gen_df = gen_df.set_index("generation").sort_index()
@@ -199,7 +199,7 @@ class StructuredJSONLParser:
 
         return self._finalize(gen_data, ind_data, matrix_store, run_id)
 
-    def _finalize(self, gen_data, ind_data, matrix_store, run_id) -> ParsedLog:
+    def _finalize(self, gen_data: list[dict[str, Any]], ind_data: list[dict[str, Any]], matrix_store: dict[str, list[pd.DataFrame]], run_id: str) -> ParsedLog:
         gen_df = pd.DataFrame(gen_data)
         if not gen_df.empty and "generation" in gen_df.columns:
             gen_df = gen_df.set_index("generation").sort_index()
@@ -220,7 +220,7 @@ class StructuredJSONLParser:
 def parse_coevolution_log(
     log_dir: str = "logs",
     log_filename_pattern: str = "*.log",
-    target_run_id: str = None,
+    target_run_id: str | None = None,
     target_problem_id: str | None = None,
     use_legacy: bool = False,
     legacy_files: list[str] | None = None,
@@ -258,13 +258,15 @@ def parse_coevolution_log(
     # 3. Fallback to Legacy discovery (only if requested)
     if use_legacy:
         if target_problem_id is None:
-            problem_ids = get_problem_ids(log_dir, log_filename_pattern, target_run_id, use_legacy=True)
+            problem_ids, current_legacy_files = get_problem_ids(log_dir, log_filename_pattern, target_run_id, use_legacy=True)
             if not problem_ids:
                 return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
             target_problem_id = sorted(list(problem_ids))[0]
+            if legacy_files is None:
+                legacy_files = current_legacy_files
             
         logger.info(f"Falling back to legacy flat log parser for {target_run_id}/{target_problem_id}")
-        return LegacyLogParser().parse(log_dir, log_filename_pattern, target_run_id, target_problem_id, limit_to_files=legacy_files)
+        return LegacyLogParser().parse(log_dir, log_filename_pattern, target_run_id, target_problem_id or "", limit_to_files=legacy_files)
 
     return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
 
