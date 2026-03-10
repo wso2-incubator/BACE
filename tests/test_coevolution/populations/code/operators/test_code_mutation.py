@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -10,7 +10,7 @@ from coevolution.populations.code.operators.mutation import CodeMutationOperator
 
 
 @pytest.fixture
-def mock_context():
+def mock_context() -> MagicMock:
     context = MagicMock(spec=CoevolutionContext)
     context.code_population = MagicMock()
     context.code_population.generation = 1
@@ -21,7 +21,7 @@ def mock_context():
 
 
 @pytest.fixture
-def mock_parent():
+def mock_parent() -> CodeIndividual:
     return CodeIndividual(
         snippet="def add(a, b):\n    return a + b",
         probability=0.5,
@@ -32,7 +32,7 @@ def mock_parent():
 
 
 @pytest.fixture
-def mutation_operator():
+def mutation_operator() -> CodeMutationOperator:
     mock_llm = MagicMock()
     mock_parser = MagicMock()
     mock_selector = MagicMock()
@@ -48,7 +48,9 @@ def mutation_operator():
     return op
 
 
-def test_code_mutation_execute_success(mutation_operator, mock_context, mock_parent):
+def test_code_mutation_execute_success(
+    mutation_operator: MagicMock, mock_context: MagicMock, mock_parent: MagicMock
+) -> None:
     # Setup
     mutation_operator.parent_selector.select_parents.return_value = [mock_parent]
     mutation_operator._llm.generate.return_value = (
@@ -57,6 +59,10 @@ def test_code_mutation_execute_success(mutation_operator, mock_context, mock_par
     mutation_operator.parser.extract_code_blocks.return_value = [
         "def add(a, b):\n    return a + b + 0"
     ]
+    mutation_operator.parser.contains_starter_code.return_value = True
+    mutation_operator.parser.remove_main_block.return_value = (
+        "def add(a, b):\n    return a + b + 0"
+    )
     mutation_operator.prob_assigner.assign_probability.return_value = 0.6
 
     # Execute
@@ -82,7 +88,9 @@ def test_code_mutation_execute_success(mutation_operator, mock_context, mock_par
     )
 
 
-def test_code_mutation_no_parents(mutation_operator, mock_context):
+def test_code_mutation_no_parents(
+    mutation_operator: MagicMock, mock_context: MagicMock
+) -> None:
     # Setup
     mutation_operator.parent_selector.select_parents.return_value = []
 

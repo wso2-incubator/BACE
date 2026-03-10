@@ -10,7 +10,7 @@ from coevolution.populations.code.operators.crossover import CodeCrossoverOperat
 
 
 @pytest.fixture
-def mock_context():
+def mock_context() -> MagicMock:
     context = MagicMock(spec=CoevolutionContext)
     context.code_population = MagicMock()
     context.code_population.generation = 1
@@ -21,7 +21,7 @@ def mock_context():
 
 
 @pytest.fixture
-def mock_parents():
+def mock_parents() -> list[CodeIndividual]:
     p1 = CodeIndividual(
         snippet="p1",
         probability=0.4,
@@ -40,7 +40,7 @@ def mock_parents():
 
 
 @pytest.fixture
-def crossover_operator():
+def crossover_operator() -> CodeCrossoverOperator:
     mock_llm = MagicMock()
     mock_parser = MagicMock()
     mock_selector = MagicMock()
@@ -56,13 +56,17 @@ def crossover_operator():
     return op
 
 
-def test_code_crossover_execute_success(crossover_operator, mock_context, mock_parents):
+def test_code_crossover_execute_success(
+    crossover_operator: MagicMock,
+    mock_context: MagicMock,
+    mock_parents: list[CodeIndividual],
+) -> None:
     # Setup
     crossover_operator.parent_selector.select_parents.return_value = mock_parents
     crossover_operator._llm.generate.return_value = "```python\nchild code\n```"
-    crossover_operator.parser.extract_code_blocks.return_value = [
-        "child code"
-    ]
+    crossover_operator.parser.extract_code_blocks.return_value = ["child code"]
+    crossover_operator.parser.contains_starter_code.return_value = True
+    crossover_operator.parser.remove_main_block.return_value = "child code"
     crossover_operator.prob_assigner.assign_probability.return_value = 0.5
 
     # Execute
@@ -78,7 +82,9 @@ def test_code_crossover_execute_success(crossover_operator, mock_context, mock_p
     assert set(child.parents["code"]) == {mock_parents[0].id, mock_parents[1].id}
 
 
-def test_code_crossover_insufficient_parents(crossover_operator, mock_context):
+def test_code_crossover_insufficient_parents(
+    crossover_operator: MagicMock, mock_context: MagicMock
+) -> None:
     # Setup
     crossover_operator.parent_selector.select_parents.return_value = [MagicMock()]
 
