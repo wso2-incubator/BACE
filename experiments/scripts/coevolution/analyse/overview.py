@@ -1,5 +1,6 @@
 # experiments/scripts/coevolution/analyse/overview.py
 import sys
+import fnmatch
 
 import pandas as pd
 import typer
@@ -10,7 +11,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import print as rprint
 
-from coevolution.analysis.log_parser import get_problem_ids, parse_coevolution_log
+from coevolution.analysis.log_parser import get_problem_ids, parse_coevolution_log, get_run_ids
 
 app = typer.Typer()
 console = Console()
@@ -70,14 +71,31 @@ def main(
     logger.remove()
     logger.add(sys.stderr, format="<level>{message}</level>", level="INFO")
 
-    console.rule(f"[bold magenta]ANALYZING RUNS: {', '.join(run_ids)}[/bold magenta]")
+    # 0. Expand Globs for run_ids
+    all_available_runs = get_run_ids(log_dir, file_pattern, use_legacy=legacy)
+    expanded_run_ids = set()
+    for pattern in run_ids:
+        if any(c in pattern for c in "*?[]"):
+            matches = [r for r in all_available_runs if fnmatch.fnmatch(r, pattern)]
+            if not matches:
+                logger.warning(f"No runs matched pattern: {pattern}")
+            expanded_run_ids.update(matches)
+        else:
+            expanded_run_ids.add(pattern)
+    
+    final_run_ids = sorted(list(expanded_run_ids))
+    if not final_run_ids:
+        logger.error(f"No valid Run IDs found after expansion of: {', '.join(run_ids)}")
+        return
+
+    console.rule(f"[bold magenta]ANALYZING RUNS: {', '.join(final_run_ids)}[/bold magenta]")
 
     # 1. Discover problems across all Run IDs
     # Map of problem_id -> list of (run_id, legacy_files)
     from collections import defaultdict
     all_problems = defaultdict(list)
     
-    for rid in run_ids:
+    for rid in final_run_ids:
         pids, lfiles = get_problem_ids(log_dir, file_pattern, rid, use_legacy=legacy)
         for pid in pids:
             if problem_id and pid != problem_id:
