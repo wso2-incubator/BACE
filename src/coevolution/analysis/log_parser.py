@@ -21,7 +21,7 @@ class ParsedLog(TypedDict):
 # --- The Stream Reader (IO Abstraction for Legacy) ---
 
 def _log_line_generator(
-    log_dir: str, log_filename_pattern: str, limit_to_files: list[str] = None
+    log_dir: str, log_filename_pattern: str, limit_to_files: list[str] = None, max_lines: int | None = None
 ) -> Generator[tuple[str, str], None, None]:
     """
     Yields (file_path, line) one by one from matching log files.
@@ -45,11 +45,15 @@ def _log_line_generator(
                 with zipfile.ZipFile(file_path, "r") as z:
                     for internal_name in z.namelist():
                         with z.open(internal_name) as binary_f:
-                            for raw_line in binary_f:
+                            for i, raw_line in enumerate(binary_f):
+                                if max_lines is not None and i >= max_lines:
+                                    break
                                 yield file_path, raw_line.decode("utf-8")
             else:
                 with open(file_path, "r", encoding="utf-8") as text_f:
-                    for line in text_f:
+                    for i, line in enumerate(text_f):
+                        if max_lines is not None and i >= max_lines:
+                            break
                         yield file_path, line
         except Exception as e:
             logger.error(f"Failed to read {file_path}: {e}")
@@ -222,51 +226,27 @@ def parse_coevolution_log(
     log_filename_pattern: str = "*.log",
     target_run_id: str = None,
     target_problem_id: str | None = None,
-    use_legacy: bool = False,
+    source_type: str | None = None, # "structured" or "legacy"
     legacy_files: list[str] | None = None,
 ) -> ParsedLog:
     """
-    Unified entry point. Automatically detects if a run is Structured (New)
-    or Legacy (Flat) and dispatches to the correct parser.
+    Unified entry point. Parses a specific run/problem from a given source.
     """
-    if not target_run_id:
-        raise ValueError("target_run_id is required.")
+    if not target_run_id or not target_problem_id:
+        raise ValueError("target_run_id and target_problem_id are required.")
 
-    # 1. Detection: Structured (New) Format
-    # If problem_id is provided, check the specific path
-    if target_problem_id:
-        structured_path = Path(log_dir) / target_run_id / target_problem_id / "evolutionary_history.jsonl"
-        if structured_path.exists():
-            logger.info(f"Detected structured log format for {target_run_id}/{target_problem_id}")
-            return StructuredJSONLParser().parse(log_dir, target_run_id, target_problem_id)
-
-    # 2. Discovery for New format
-    if not use_legacy or target_problem_id is None:
-        run_path = Path(log_dir) / target_run_id
-        if run_path.exists() and run_path.is_dir():
-            # Find all subfolders with evolutionary_history.jsonl
-            pids = []
-            for p_dir in run_path.iterdir():
-                if p_dir.is_dir() and (p_dir / "evolutionary_history.jsonl").exists():
-                    pids.append(p_dir.name)
-            
-            if pids:
-                actual_pid = target_problem_id if target_problem_id in pids else sorted(pids)[0]
-                logger.info(f"Using structured log format for {target_run_id}/{actual_pid}")
-                return StructuredJSONLParser().parse(log_dir, target_run_id, actual_pid)
-
-    # 3. Fallback to Legacy discovery (only if requested)
-    if use_legacy:
-        if target_problem_id is None:
-            problem_ids = get_problem_ids(log_dir, log_filename_pattern, target_run_id, use_legacy=True)
-            if not problem_ids:
-                return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
-            target_problem_id = sorted(list(problem_ids))[0]
-            
-        logger.info(f"Falling back to legacy flat log parser for {target_run_id}/{target_problem_id}")
+    # 1. Selection: If source_type is explicit, use it
+    if source_type == "structured":
+        return StructuredJSONLParser().parse(log_dir, target_run_id, target_problem_id)
+    elif source_type == "legacy":
         return LegacyLogParser().parse(log_dir, log_filename_pattern, target_run_id, target_problem_id, limit_to_files=legacy_files)
 
-    return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
+    # 2. Auto-Discovery (Fallback)
+    structured_path = Path(log_dir) / target_run_id / target_problem_id / "evolutionary_history.jsonl"
+    if structured_path.exists():
+        return StructuredJSONLParser().parse(log_dir, target_run_id, target_problem_id)
+    
+    return LegacyLogParser().parse(log_dir, log_filename_pattern, target_run_id, target_problem_id, limit_to_files=legacy_files)
 
 
 # --- Helper Utilities (Shared) ---
@@ -274,45 +254,59 @@ def parse_coevolution_log(
 def get_problem_ids(
     log_dir: str, 
     log_filename_pattern: str, 
-    run_id: str, 
-    use_legacy: bool = False
-) -> tuple[set[str], list[str]]:
+    run_id: str
+) -> dict[str, list[dict]]:
     """
-    Scans for problem IDs.
-    Returns: (Set of problem_ids, List of legacy files containing the run_id)
+    Scans for problem IDs across both structured and legacy sources.
+    Returns: { problem_id: [{"run_id": str, "type": "structured"|"legacy", "files": [str]}] }
     """
-    problem_ids = set()
-    legacy_run_files = set()
+    results = defaultdict(list)
+    HeadReadCount = 10
 
     # 1. Structured Scan (Fast)
     run_path = Path(log_dir) / run_id
     if run_path.exists() and run_path.is_dir():
         for p_dir in run_path.iterdir():
             if p_dir.is_dir() and (p_dir / "evolutionary_history.jsonl").exists():
-                problem_ids.add(p_dir.name)
+                results[p_dir.name].append({
+                    "run_id": run_id,
+                    "type": "structured",
+                    "files": [str(p_dir / "evolutionary_history.jsonl")]
+                })
 
-    # 2. Legacy Scan (Slow - only if requested)
-    if use_legacy:
-        for fpath, line_str in _log_line_generator(log_dir, log_filename_pattern):
-            try:
-                log_entry = json.loads(line_str)
-                extra = log_entry.get("record", {}).get("extra", {})
-                if extra.get("run_id") == run_id:
-                    legacy_run_files.add(fpath)
-                    pid = extra.get("problem_id")
-                    if pid: problem_ids.add(pid)
-            except Exception: continue
+    # 2. Legacy Scan (Slow)
+    legacy_run_files = set()
+    legacy_problem_map = defaultdict(set)
+    
+    for fpath, line_str in _log_line_generator(log_dir, log_filename_pattern, max_lines=HeadReadCount):
+        try:
+            log_entry = json.loads(line_str)
+            extra = log_entry.get("record", {}).get("extra", {})
+            if extra.get("run_id") == run_id:
+                legacy_run_files.add(fpath)
+                pid = extra.get("problem_id")
+                if pid:
+                    legacy_problem_map[pid].add(fpath)
+        except Exception: continue
 
-    return problem_ids, sorted(list(legacy_run_files))
+    # Merge legacy results
+    for pid, files in legacy_problem_map.items():
+        results[pid].append({
+            "run_id": run_id,
+            "type": "legacy",
+            "files": sorted(list(files)) # The specific files for THIS problem
+        })
+
+    return dict(results)
 
 
 def get_run_ids(
     log_dir: str, 
-    log_filename_pattern: str, 
-    use_legacy: bool = False
+    log_filename_pattern: str
 ) -> set[str]:
-    """Scans for run IDs in structured directories and optionally legacy logs."""
+    """Scans for run IDs in both structured directories and legacy logs."""
     run_ids = set()
+    HeadReadCount = 10
 
     # 1. Structured Scan (Fast)
     root_path = Path(log_dir)
@@ -321,13 +315,12 @@ def get_run_ids(
             if r_dir.is_dir() and (r_dir / "run_config.json").exists():
                 run_ids.add(r_dir.name)
 
-    # 2. Legacy Scan (Slow - only if requested)
-    if use_legacy:
-        for fpath, line_str in _log_line_generator(log_dir, log_filename_pattern):
-            try:
-                log_entry = json.loads(line_str)
-                rid = log_entry.get("record", {}).get("extra", {}).get("run_id")
-                if rid: run_ids.add(rid)
-            except Exception: continue
+    # 2. Legacy Scan (Slow)
+    for fpath, line_str in _log_line_generator(log_dir, log_filename_pattern, max_lines=HeadReadCount):
+        try:
+            log_entry = json.loads(line_str)
+            rid = log_entry.get("record", {}).get("extra", {}).get("run_id")
+            if rid: run_ids.add(rid)
+        except Exception: continue
 
     return run_ids
