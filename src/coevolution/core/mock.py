@@ -96,7 +96,7 @@ class MockCodeOperator:
 
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
         """
-        Select a parent, generate a mutated snippet, return one CodeIndividual.
+        Select parents, generate an offspring snippet, return one CodeIndividual.
         """
         logger.trace("MockCodeOperator.execute called")
 
@@ -104,7 +104,7 @@ class MockCodeOperator:
         if code_pop.size == 0:
             return []
 
-        # Select a parent by probability
+        # Select a primary parent by probability
         probs = code_pop.probabilities
         p_normalized = probs / probs.sum()
         parent_idx = int(np.random.choice(len(probs), p=p_normalized))
@@ -112,14 +112,32 @@ class MockCodeOperator:
 
         # Generate offspring snippet
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
+        parents = {"code": [parent.id], "test": []}
+        
         if op == OPERATION_MUTATION:
             snippet = f"# mutated code snippet v{np.random.randint(100)}"
+            prob = float(parent.probability)
         elif op == OPERATION_CROSSOVER:
             snippet = f"# crossover code snippet v{np.random.randint(100)}"
-        else:
+            # Select second parent
+            p2_idx = int(np.random.choice(len(probs), p=p_normalized))
+            p2 = code_pop[p2_idx]
+            parents["code"].append(p2.id)
+            prob = float(np.mean([parent.probability, p2.probability]))
+        else: # OPERATION_EDIT
             snippet = f"# edited code snippet v{np.random.randint(100)}"
-
-        prob = float(np.mean([parent.probability]))
+            # Select a random evolved test as a cross-species parent
+            evolved_tests = []
+            for t_pop in context.test_populations.values():
+                if t_pop.size > 0:
+                    evolved_tests.extend(list(t_pop.individuals))
+            
+            if evolved_tests:
+                test_p = np.random.choice(evolved_tests)
+                parents["test"].append(test_p.id)
+                prob = float(np.mean([parent.probability, test_p.probability]))
+            else:
+                prob = float(parent.probability)
 
         return [
             CodeIndividual(
@@ -127,7 +145,7 @@ class MockCodeOperator:
                 probability=prob,
                 creation_op=op,
                 generation_born=code_pop.generation + 1,
-                parents={"code": [parent.id], "test": []},
+                parents=parents,
             )
         ]
 
@@ -154,13 +172,15 @@ class MockTestOperator:
         test_pop = context.test_populations.get(self.test_type)
         if test_pop is None or test_pop.size == 0:
             # No population yet (generation 0 start) — generate a fresh test
+            # If it's being created during an evolution phase, it's bootstrapped (Gen 1+)
             snippet = f"def test_mock_{np.random.randint(1000)}(): assert True"
+            gen = (test_pop.generation + 1) if test_pop else 1
             return [
                 TestIndividual(
                     snippet=snippet,
                     probability=0.5,
                     creation_op=OPERATION_INITIAL,
-                    generation_born=0,
+                    generation_born=gen,
                     parents={"code": [], "test": []},
                 )
             ]
@@ -171,16 +191,27 @@ class MockTestOperator:
         parent = test_pop[parent_idx]
 
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
+        parents = {"code": [], "test": [parent.id]}
+        
         if op == OPERATION_MUTATION:
             snippet = f"def test_mutated_{np.random.randint(1000)}(): pass  # mutated"
+            prob = float(parent.probability)
         elif op == OPERATION_CROSSOVER:
-            snippet = (
-                f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
-            )
-        else:
+            snippet = f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
+            p2_idx = int(np.random.choice(len(probs), p=p_normalized))
+            p2 = test_pop[p2_idx]
+            parents["test"].append(p2.id)
+            prob = float(np.mean([parent.probability, p2.probability]))
+        else: # OPERATION_EDIT
             snippet = f"def test_edited_{np.random.randint(1000)}(): pass  # edited"
-
-        prob = float(np.mean([parent.probability]))
+            # Select a random code individual as a cross-species parent
+            code_pop = context.code_population
+            if code_pop.size > 0:
+                code_p = np.random.choice(list(code_pop.individuals))
+                parents["code"].append(code_p.id)
+                prob = float(np.mean([parent.probability, code_p.probability]))
+            else:
+                prob = float(parent.probability)
 
         return [
             TestIndividual(
@@ -188,7 +219,7 @@ class MockTestOperator:
                 probability=prob,
                 creation_op=op,
                 generation_born=test_pop.generation + 1,
-                parents={"code": [], "test": [parent.id]},
+                parents=parents,
             )
         ]
 

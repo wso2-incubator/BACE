@@ -98,6 +98,37 @@ def extract_operator_rates(prof: dict[str, Any]) -> str:
     return ", ".join([f"{k}:{v:.1f}" for k, v in rates.items()])
 
 
+def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the evolution schedule into a list of epoch definitions."""
+    schedule_data = config.get("evolution_config", {}).get("schedule", {})
+    phases = schedule_data.get("phases", [])
+    epochs = []
+    for p in phases:
+        for _ in range(p.get("duration", 0)):
+            epochs.append(
+                {
+                    "phase_name": p.get("name", "Unknown"),
+                    "evolve_code": p.get("evolve_code", False),
+                    "evolve_tests": p.get("evolve_tests", False),
+                }
+            )
+    return epochs
+
+
+def group_events_into_cycles(events: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group events into cycles delimited by GENERATION_SUMMARY."""
+    cycles = []
+    current_cycle = []
+    for e in events:
+        current_cycle.append(e)
+        if e["event_type"] == "GENERATION_SUMMARY":
+            cycles.append(current_cycle)
+            current_cycle = []
+    if current_cycle:
+        cycles.append(current_cycle)
+    return cycles
+
+
 # ─── RENDERERS ────────────────────────────────────────────────────────────────
 
 
@@ -368,159 +399,11 @@ def render_observation_matrix(matrix_event: dict[str, Any]) -> None:
         console.print(table)
 
 
-def display_succession(events: list[dict[str, Any]], current_gen: int) -> None:
-    """Renders elites selected from current_gen and newborns bred for current_gen + 1."""
 
-    # 1. Elites from current_gen (who survive into current_gen + 1)
-    elites = [
-        e
-        for e in events
-        if e["event_type"] == "SELECTED_AS_ELITE" and e.get("generation") == current_gen
-    ]
-
-    # 2. Newborns for next_gen
-    next_gen = current_gen + 1
-    newborns = [
-        e
-        for e in events
-        if e["event_type"] == "CREATED" and e.get("generation") == next_gen
-    ]
-
-    if not elites and not newborns:
-        console.print(
-            f"\n[bold dim yellow]SUCCESSION: PREPARING GENERATION {next_gen} (ALL POPULATIONS FROZEN)[/bold dim yellow]"
-        )
-        return
-
-    console.print(
-        f"\n[bold underline yellow]SUCCESSION: PREPARING GENERATION {next_gen}[/bold underline yellow]"
-    )
-
-    # Check which populations were frozen
-    code_elites = [e for e in elites if str(e.get("individual_id", "")).startswith("C")]
-    test_elites = [
-        e for e in elites if not str(e.get("individual_id", "")).startswith("C")
-    ]
-    code_newborns = [
-        n for n in newborns if str(n.get("individual_id", "")).startswith("C")
-    ]
-    test_newborns = [
-        n for n in newborns if not str(n.get("individual_id", "")).startswith("C")
-    ]
-
-    code_frozen = not code_elites and not code_newborns
-    tests_frozen = not test_elites and not test_newborns
-
-    if code_frozen:
-        console.print(
-            "[dim cyan]Code Population: Frozen (No selection or breeding this generation)[/dim cyan]"
-        )
-    if tests_frozen:
-        console.print(
-            "[dim magenta]Test Populations: Frozen (No selection or breeding this generation)[/dim magenta]"
-        )
-
-    # --- ELITE SELECTION (BANNERS) ---
-    if elites:
-        if code_elites:
-            ids_str = ", ".join(
-                fmt_id(str(e.get("individual_id"))) for e in code_elites
-            )
-            console.print(
-                Panel(
-                    Text.from_markup(
-                        f"[bold cyan]Elite Code Kept:[/bold cyan] {ids_str}"
-                    ),
-                    border_style="cyan",
-                    padding=(0, 1),
-                )
-            )
-
-        # Separate each test type elite collection
-        if test_elites:
-            test_types = sorted(
-                list(set(e.get("test_type", "Evolved Tests") for e in test_elites))
-            )
-            for tt in test_types:
-                tt_elites = [
-                    e for e in test_elites if e.get("test_type", "Evolved Tests") == tt
-                ]
-                ids_str = ", ".join(
-                    fmt_id(str(e.get("individual_id"))) for e in tt_elites
-                )
-                console.print(
-                    Panel(
-                        Text.from_markup(
-                            f"[bold magenta]Elite {tt.title()} Kept:[/bold magenta] {ids_str}"
-                        ),
-                        border_style="magenta",
-                        padding=(0, 1),
-                    )
-                )
-
-    # --- BREEDING OPERATIONS (TABLES) ---
-    if newborns:
-        if code_newborns:
-            table = Table(
-                title=f"Bred Code Offspring (for Gen {next_gen})",
-                box=box.ROUNDED,
-                border_style="cyan",
-            )
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Operator", style="magenta")
-            table.add_column("Parents", style="dim")
-            table.add_column("Initial Belief", justify="right")
-            for row in code_newborns:
-                ind_id = str(row.get("individual_id", ""))
-                op = row.get("creation_op", "UNKNOWN")
-                prob = row.get("probability", 0.0)
-                parents_dict = row.get("parents", {})
-                parents_list = parents_dict.get("code", []) + parents_dict.get(
-                    "test", []
-                )
-                parents_str = (
-                    ", ".join(map(fmt_id, parents_list)) if parents_list else "—"
-                )
-                table.add_row(fmt_id(ind_id), str(op), parents_str, f"{prob:.4f}")
-            console.print(table)
-
-        if test_newborns:
-            # Strictly separate each test type's breeding table
-            test_types = sorted(
-                list(set(n.get("test_type", "Evolved Tests") for n in test_newborns))
-            )
-            for tt in test_types:
-                tt_newborns = [
-                    n
-                    for n in test_newborns
-                    if n.get("test_type", "Evolved Tests") == tt
-                ]
-                table = Table(
-                    title=f"Bred {tt.title()} Offspring (for Gen {next_gen})",
-                    box=box.ROUNDED,
-                    border_style="magenta",
-                )
-                table.add_column("ID", style="magenta", no_wrap=True)
-                table.add_column("Operator", style="magenta")
-                table.add_column("Parents", style="dim")
-                table.add_column("Initial Belief", justify="right")
-                for row in tt_newborns:
-                    ind_id = str(row.get("individual_id", ""))
-                    op = row.get("creation_op", "UNKNOWN")
-                    prob = row.get("probability", 0.0)
-                    parents_dict = row.get("parents", {})
-                    parents_list = parents_dict.get("code", []) + parents_dict.get(
-                        "test", []
-                    )
-                    parents_str = (
-                        ", ".join(map(fmt_id, parents_list)) if parents_list else "—"
-                    )
-                    table.add_row(fmt_id(ind_id), str(op), parents_str, f"{prob:.4f}")
-                console.print(table)
 
 
 def display_population_overview(
-    gen: int,
+    title: str,
     gen_events: list[dict[str, Any]],
     ind_metadata: dict[str, dict[str, Any]],
     latest_probs: dict[str, float],
@@ -552,7 +435,7 @@ def display_population_overview(
     # Render Code Pop
     if code_ids:
         table = Table(
-            title=f"Code Population (Gen {gen})", box=box.SIMPLE, border_style="cyan"
+            title=f"Code Population ({title})", box=box.SIMPLE, border_style="cyan"
         )
         table.add_column("ID", style="bold cyan")
         table.add_column("Created By", style="dim")
@@ -575,7 +458,7 @@ def display_population_overview(
     # Render Test Pops
     for tt, tids in test_pops.items():
         table = Table(
-            title=f"{tt} Population (Gen {gen})", box=box.SIMPLE, border_style="magenta"
+            title=f"{tt} Population ({title})", box=box.SIMPLE, border_style="magenta"
         )
         table.add_column("ID", style="bold magenta")
         table.add_column("Created By", style="dim")
@@ -600,32 +483,33 @@ def display_population_overview(
     console.print()
 
 
-def render_generation(
+def render_cycle(
     events: list[dict[str, Any]],
-    gen: int,
+    cycle_index: int,
+    epoch_meta: dict[str, Any],
+    code_gen: int,
+    test_gen: int,
     ind_metadata: dict[str, dict[str, Any]],
     latest_probs: dict[str, float],
     show_errors: bool = False,
 ) -> None:
-    gen_events = [e for e in events if e.get("generation") == gen]
-    if not gen_events:
-        return
-
-    console.rule(f"[bold yellow]GENERATION {gen}[/bold yellow]", style="yellow")
+    phase_name = epoch_meta.get("phase_name", "Unknown")
+    title_meta = f"Epoch {cycle_index} [{phase_name}] | Code Gen {code_gen} | Test Gen {test_gen}"
+    console.rule(f"[bold yellow]{title_meta}[/bold yellow]", style="yellow")
 
     # 0. Population Overview
-    display_population_overview(gen, gen_events, ind_metadata, latest_probs)
+    display_population_overview(f"Gen {code_gen if epoch_meta.get('evolve_code') else code_gen}", events, ind_metadata, latest_probs)
 
     # 1. Matrices & Failures (Work)
-    # Filter to show only the LATEST matrix for each test_type in this generation
-    all_matrices = [e for e in gen_events if e["event_type"] == "OBSERVATION_MATRIX"]
+    # Filter to show only the LATEST matrix for each test_type in this cycle
+    all_matrices = [e for e in events if e["event_type"] == "OBSERVATION_MATRIX"]
     matrix_map = {}
     for m in all_matrices:
         tt = str(m.get("test_type", "Unknown")).upper()
         matrix_map[tt] = m
 
     matrices = list(matrix_map.values())
-    failures = [e for e in gen_events if e["event_type"] == "EVALUATION_FAILED"]
+    failures = [e for e in events if e["event_type"] == "EVALUATION_FAILED"]
 
     if matrices:
         for row in matrices:
@@ -663,7 +547,7 @@ def render_generation(
                     )
 
     # 2. Belief Updates (Learning)
-    belief_updates = [e for e in gen_events if e["event_type"] == "BELIEF_UPDATE"]
+    belief_updates = [e for e in events if e["event_type"] == "BELIEF_UPDATE"]
     if belief_updates:
         console.print(
             "\n[bold underline yellow]BAYESIAN BELIEF PROGRESSION (BACE)[/bold underline yellow]"
@@ -713,8 +597,67 @@ def render_generation(
                 )
                 display_belief_update(update, i)
 
-    # 3. Succession (Succession planning for N + 1)
-    display_succession(events, gen)
+    # 3. Succession
+    # Show selection/breeding events present in this cycle
+    display_succession_in_cycle(events)
+
+
+def display_succession_in_cycle(events: list[dict[str, Any]]) -> None:
+    elites = [e for e in events if e["event_type"] == "SELECTED_AS_ELITE"]
+    newborns = [e for e in events if e["event_type"] == "CREATED" and e.get("creation_op") != "INITIAL"]
+
+    if not elites and not newborns:
+        return
+
+    console.print("\n[bold underline yellow]SUCCESSION & BREEDING[/bold underline yellow]")
+
+    if elites:
+        code_elites = [e for e in elites if str(e.get("individual_id", "")).startswith("C")]
+        test_elites = [e for e in elites if not str(e.get("individual_id", "")).startswith("C")]
+
+        if code_elites:
+            ids_str = ", ".join(fmt_id(str(e.get("individual_id"))) for e in code_elites)
+            console.print(Panel(Text.from_markup(f"[bold cyan]Elite Code Kept:[/bold cyan] {ids_str}"), border_style="cyan", padding=(0, 1)))
+
+        if test_elites:
+            test_types = sorted(list(set(e.get("test_type", "Evolved Tests") for e in test_elites)))
+            for tt in test_types:
+                tt_elites = [e for e in test_elites if e.get("test_type", "Evolved Tests") == tt]
+                ids_str = ", ".join(fmt_id(str(e.get("individual_id"))) for e in tt_elites)
+                console.print(Panel(Text.from_markup(f"[bold magenta]Elite {tt.title()} Kept:[/bold magenta] {ids_str}"), border_style="magenta", padding=(0, 1)))
+
+    if newborns:
+        code_newborns = [n for n in newborns if str(n.get("individual_id", "")).startswith("C")]
+        test_newborns = [n for n in newborns if not str(n.get("individual_id", "")).startswith("C")]
+
+        if code_newborns:
+            table = Table(title="Bred Code Offspring", box=box.ROUNDED, border_style="cyan")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Operator", style="magenta")
+            table.add_column("Parents", style="dim")
+            table.add_column("Initial Belief", justify="right")
+            for row in code_newborns:
+                parents_dict = row.get("parents", {})
+                parents_list = parents_dict.get("code", []) + parents_dict.get("test", [])
+                parents_str = ", ".join(map(fmt_id, parents_list)) if parents_list else "—"
+                table.add_row(fmt_id(str(row.get("individual_id"))), str(row.get("creation_op")), parents_str, f"{row.get('probability', 0.0):.4f}")
+            console.print(table)
+
+        if test_newborns:
+            test_types = sorted(list(set(n.get("test_type", "Evolved Tests") for n in test_newborns)))
+            for tt in test_types:
+                tt_newborns = [n for n in test_newborns if n.get("test_type", "Evolved Tests") == tt]
+                table = Table(title=f"Bred {tt.title()} Offspring", box=box.ROUNDED, border_style="magenta")
+                table.add_column("ID", style="magenta", no_wrap=True)
+                table.add_column("Operator", style="magenta")
+                table.add_column("Parents", style="dim")
+                table.add_column("Initial Belief", justify="right")
+                for row in tt_newborns:
+                    parents_dict = row.get("parents", {})
+                    parents_list = parents_dict.get("code", []) + parents_dict.get("test", [])
+                    parents_str = ", ".join(map(fmt_id, parents_list)) if parents_list else "—"
+                    table.add_row(fmt_id(str(row.get("individual_id"))), str(row.get("creation_op")), parents_str, f"{row.get('probability', 0.0):.4f}")
+                console.print(table)
 
 
 # ─── CLI ENTRY ────────────────────────────────────────────────────────────────
@@ -780,17 +723,47 @@ def main(
     # Phase 1: Initialization
     display_initialization(events)
 
-    # Phase 2: Generations
-    max_gen = 0
-    for e in events:
-        g = e.get("generation")
-        if isinstance(g, int) and g > max_gen:
-            max_gen = g
+    # Phase 2: Epoch-Centric Cycles
+    config = load_config(run_id)
+    if not config:
+        console.print("[red]Error: Could not load run config for schedule reconstruction.[/red]")
+        return
 
-    for gen in range(0, max_gen + 1):
-        render_generation(
-            events, gen, ind_metadata, latest_probs, show_errors=show_errors
+    expected_epochs = reconstruct_schedule(config)
+    cycles = group_events_into_cycles(events)
+
+    # Filter initialization events from Cycle 0 if it exists
+    # Cycle 0 starts with CREATED(0) but initialization is handled separately
+    # so we might need to skip or re-process.
+    # Actually, Orchestrator logs a SUMMARY after init. So Cycle 0 is Init.
+
+    code_gen = 0
+    test_gen = 0
+
+    for i, cycle_events in enumerate(cycles):
+        if i == 0:
+            continue # Initialization handled by display_initialization
+
+        # Determine epoch meta (fallback if logs exceed config schedule)
+        epoch_idx = i - 1
+        meta = expected_epochs[epoch_idx] if epoch_idx < len(expected_epochs) else {"phase_name": "Final Evaluation", "evolve_code": False, "evolve_tests": False}
+
+        render_cycle(
+            cycle_events,
+            epoch_idx,
+            meta,
+            code_gen,
+            test_gen,
+            ind_metadata,
+            latest_probs,
+            show_errors=show_errors
         )
+
+        # Update generations after the cycle according to the schedule
+        if meta.get("evolve_code"):
+            code_gen += 1
+        if meta.get("evolve_tests"):
+            test_gen += 1
 
     # Final Summary (Champions)
     survivors = [e for e in events if e["event_type"] == "SURVIVED"]
