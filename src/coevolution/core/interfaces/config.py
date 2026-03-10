@@ -231,8 +231,12 @@ class EvolutionSchedule:
     phases: list[EvolutionPhase]
 
     @property
-    def total_generations(self) -> int:
-        """Derived property: Sum of all phase durations."""
+    def total_epochs(self) -> int:
+        """Derived property: Total number of evaluate-update loop iterations (sum of all phase durations).
+
+        Note: This counts loop *iterations*, not breeding cycles. Breeding occurs on every epoch
+        except the last, so the number of breeding steps = total_epochs - 1.
+        """
         return sum(p.duration for p in self.phases)
 
 
@@ -246,6 +250,10 @@ class EvolutionConfig:
     schedule: EvolutionSchedule
 
     @property
-    def num_generations(self) -> int:
-        """Derived property: Total generations in the schedule."""
-        return self.schedule.total_generations
+    def num_epochs(self) -> int:
+        """Total evaluate-update loop iterations across all schedule phases.
+
+        Each epoch consists of: Execute → Update Beliefs → (Breed, if not final epoch).
+        Population.generation (breeding counter) ends at num_epochs - 1.
+        """
+        return self.schedule.total_epochs

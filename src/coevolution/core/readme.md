@@ -752,7 +752,7 @@ ALGORITHM: Co-Evolutionary Code and Test Generation
 
 INPUT:
   - problem: Problem specification with starter code and test cases
-  - evo_config: Evolution configuration (num_generations, schedule)
+  - evo_config: Evolution configuration (num_epochs, schedule)
   - code_profile: Code population configuration and strategies
   - evolved_test_profiles: Dict of test type → test population configuration
   - public_test_profile: Configuration for ground-truth tests
@@ -812,9 +812,9 @@ MAIN PROCEDURE: run(problem)
      
      5. FOR generation_num from 0 to phase.duration - 1:
         
-        global_gen ← current generation across all phases
+        epoch ← current loop iteration index across all phases
         
-        LOG "═══ GENERATION {global_gen} / {total_gens} [Phase: {phase.name}] ═══"
+        LOG "═══ EPOCH {epoch} / {last_epoch} [Phase: {phase.name}] ═══"
         
         # ────────────────────────────────────────────────────────
         # STEP A: EXECUTION
@@ -930,9 +930,9 @@ MAIN PROCEDURE: run(problem)
         # STEP D: EVOLUTION (Selection + Breeding)
         # ────────────────────────────────────────────────────────
         
-        9. IF global_gen < total_generations:
+        9. IF epoch < last_epoch:  # last_epoch = num_epochs - 1
            
-           # Only evolve if not final generation
+           # Only breed if not the final epoch (last epoch is read-only evaluation).
            # Phase rules control whether code/tests evolve
            
            a. IF phase.evolve_code == TRUE:
@@ -1037,7 +1037,7 @@ MAIN PROCEDURE: run(problem)
               - Pareto front information
             - Generation transition summary
         
-        11. INCREMENT global_gen
+        11. INCREMENT epoch
   
   # ═══════════════════════════════════════════════════════════════
   # PHASE 3: FINALIZATION

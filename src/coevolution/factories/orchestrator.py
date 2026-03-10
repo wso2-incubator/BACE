@@ -27,7 +27,7 @@ Example Usage:
     >>> builder = OrchestratorBuilder()
     >>> config = (
     ...     builder
-    ...     .with_evolution_config(num_generations=10, max_workers=4)
+    ...     .with_evolution_config(schedule=EvolutionSchedule.simultaneous(10))
     ...     .with_code_profile(code_profile)
     ...     .add_test_profile("unittest", unittest_profile)
     ...     .with_public_test_profile(public_profile)
@@ -318,7 +318,9 @@ class OrchestratorBuilder:
         )
 
         logger.info("OrchestratorConfig built successfully")
-        logger.info(f"  Generations: {config.evo_config.num_generations}")
+        logger.info(
+            f"  Epochs: {config.evo_config.num_epochs}  (loop iterations; breeding steps = {config.evo_config.num_epochs - 1})"
+        )
         logger.info(
             f"  Code population size: {config.code_profile.population_config.initial_population_size} → "
             f"{config.code_profile.population_config.max_population_size}"

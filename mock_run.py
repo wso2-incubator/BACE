@@ -363,7 +363,9 @@ def main(
         },
     )
 
-    logger.info(f"Evolution: {evo_config.num_generations} generations")
+    logger.info(
+        f"Evolution: {evo_config.num_epochs} epochs ({evo_config.num_epochs - 1} breeding steps)"
+    )
     logger.info(
         f"Code Population: {code_pop_config.initial_population_size} → {code_pop_config.max_population_size} individuals"
     )

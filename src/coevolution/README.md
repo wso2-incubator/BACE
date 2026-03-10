@@ -31,7 +31,7 @@ from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
 config = CoevolutionConfig(
     initial_code_population_size=10,
     initial_test_population_size=20,
-    num_generations=50,
+    num_epochs=50,
     code_crossover_rate=0.7,
     code_mutation_rate=0.2,
 )
@@ -130,7 +130,7 @@ Configuration classes for coevolutionary algorithms.
 
 *Evolution Strategy:*
 
-- `num_generations`: Number of evolutionary cycles (default: 50)
+- `num_epochs`: Number of evaluate-update loop iterations (default: 50). Breeding occurs on all epochs except the last, so breeding steps = num_epochs - 1.
 - `selection_strategy`: Selection method to use (default: "binary_tournament")
 
 *Code Population Genetic Operators:*
@@ -190,7 +190,7 @@ config = CoevolutionConfig(
     learning_rate=1.0,
     use_intermediate_updates=False,
     # Evolution strategy
-    num_generations=50,
+    num_epochs=50,
     selection_strategy="binary_tournament",
     # Code genetic operators
     code_crossover_rate=0.7,
@@ -372,7 +372,7 @@ def new_method(population: BasePopulation) -> tuple[str, float]:
     pass
 ```
 
-2. Update the `_get_selection_function()` method to include your new method:
+1. Update the `_get_selection_function()` method to include your new method:
 
 ```python
 methods: dict[str, Callable[[BasePopulation], tuple[str, float]]] = {
@@ -384,7 +384,7 @@ methods: dict[str, Callable[[BasePopulation], tuple[str, float]]] = {
 }
 ```
 
-3. Add the method name to `get_available_methods()`:
+1. Add the method name to `get_available_methods()`:
 
 ```python
 return [
@@ -396,7 +396,7 @@ return [
 ]
 ```
 
-4. The method will now be available through `select_parents(population, method="new_method")`.
+1. The method will now be available through `select_parents(population, method="new_method")`.
 
 ## Usage
 
@@ -452,7 +452,7 @@ config = CoevolutionConfig(
     beta=0.2, 
     gamma=0.5,
     learning_rate=1.0,
-    num_generations=50,
+    num_epochs=50,
     selection_strategy="binary_tournament",
     code_crossover_rate=0.7,
     code_mutation_rate=0.2,

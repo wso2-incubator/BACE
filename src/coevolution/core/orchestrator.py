@@ -154,9 +154,10 @@ class Orchestrator:
         # Create ledger for tracking interactions
         ledger = self.ledger_factory()
 
-        # Global counters
-        global_gen = 0
-        total_gens = self.evo_config.num_generations - 1
+        # Epoch counter: tracks loop iterations (evaluate-update cycles).
+        # Distinct from population.generation which only increments on breeding.
+        epoch = 0
+        last_epoch = self.evo_config.num_epochs - 1  # 0-based index of the final epoch
         schedule = self.evo_config.schedule
 
         # 2. Main Loop: Iterate over Phases -> Generations
@@ -171,7 +172,7 @@ class Orchestrator:
             for _ in range(phase.duration):
                 logging_utils.log_subsection_header(
                     "INFO",
-                    f"GENERATION {global_gen} / {total_gens} [Phase: {phase.name}]",
+                    f"EPOCH {epoch} / {last_epoch} [Phase: {phase.name}]",
                 )
 
                 # A. Execute - returns new interaction data (pure function)
@@ -193,7 +194,8 @@ class Orchestrator:
                 )  # FIXME: ABLATION STUDY
 
                 # C. Evolve - mutates population individuals in context
-                if global_gen < total_gens:
+                # Skip breeding on the final epoch: it is a read-only evaluation step.
+                if epoch < last_epoch:
                     self._produce_next_generation(
                         context,
                         evolve_code=phase.evolve_code,
@@ -210,7 +212,7 @@ class Orchestrator:
                     },
                 )
 
-                global_gen += 1
+                epoch += 1
 
         # 3. Finalization
         self._finalize_evolution(code_pop, evolved_test_pops, public_pop, private_pop)
@@ -636,7 +638,9 @@ class Orchestrator:
                 logger.debug(f"Selected {len(test_elites)} {test_type} test elites.")
 
                 # Notify Elites
-                self._notify_elites(test_elites, test_pop.generation, test_type=test_type)
+                self._notify_elites(
+                    test_elites, test_pop.generation, test_type=test_type
+                )
 
                 # Breed
                 test_offsprings = self._breed_tests(
@@ -799,6 +803,7 @@ class Orchestrator:
         ]
 
         from coevolution.services.lifecycle import LifecycleEmitter
+
         for ind in test_individuals:
             LifecycleEmitter.log_creation(
                 generation=ind.generation_born,
@@ -806,8 +811,8 @@ class Orchestrator:
                 snippet=ind.snippet,
                 operation=ind.creation_op,
                 probability=ind.probability,
-                parents=ind.parents, # type: ignore
-                test_type="fixed", # Generic marker for public/private
+                parents=ind.parents,  # type: ignore
+                test_type="fixed",  # Generic marker for public/private
             )
 
         # Create and return the test population
