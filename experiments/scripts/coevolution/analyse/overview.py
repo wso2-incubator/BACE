@@ -239,6 +239,11 @@ def main(
 
     # 5. Print summary table
     print("\n")
+    
+    # Separate complete and incomplete
+    complete_runs = [r for r in summary_data if r["champion_code_ids"] != "N/A"]
+    incomplete_runs = [r for r in summary_data if r["champion_code_ids"] == "N/A"]
+
     table = Table(title=f"RUN SUMMARY: {run_id}", title_style="bold underline magenta", show_header=True, header_style="bold cyan")
     table.add_column("Problem", style="white")
     table.add_column("Solved", justify="center")
@@ -249,7 +254,7 @@ def main(
     table.add_column("Final P@10", justify="center", style="bold green")
     table.add_column("Final P@15", justify="center", style="dim")
 
-    for row in summary_data:
+    for row in complete_runs:
         solved_str = "[bold green]Yes[/bold green]" if row["solved"] else "[bold red]No[/bold red]"
         table.add_row(
             row["problem_id"],
@@ -264,15 +269,22 @@ def main(
     
     console.print(table)
 
-    # Overall summary statistics: total problems, passed, and pass rate
+    if incomplete_runs:
+        rprint("\n[bold yellow]Incomplete Problems (No Champion Found):[/bold yellow]")
+        rprint(", ".join([f"[red]{r['problem_id']}[/red]" for r in incomplete_runs]))
+
     total_problems = len(summary_data)
-    total_passed = sum(1 for r in summary_data if r.get("solved"))
-    pass_rate = (total_passed / total_problems * 100) if total_problems else 0.0
+    total_incomplete = len(incomplete_runs)
+    total_completed = len(complete_runs)
+    total_passed = sum(1 for r in complete_runs if r.get("solved"))
+    pass_rate = (total_passed / total_completed * 100) if total_completed else 0.0
 
     stats_text = Text.assemble(
         ("Total Problems: ", "bold"), (f"{total_problems}\n", "white"),
+        ("Incomplete:     ", "bold"), (f"{total_incomplete}\n", "yellow"),
+        ("Completed:      ", "bold"), (f"{total_completed}\n", "cyan"),
         ("Passed:         ", "bold"), (f"{total_passed}\n", "green" if total_passed > 0 else "red"),
-        ("Pass Rate:      ", "bold"), (f"{pass_rate:.2f}%", "bold yellow")
+        ("Pass Rate:      ", "bold"), (f"{pass_rate:.2f}% (of completed)", "bold yellow")
     )
     console.print("\n", Panel(stats_text, title="Overall Statistics", border_style="magenta", expand=False))
     console.rule("[bold magenta]End of Report[/bold magenta]")
