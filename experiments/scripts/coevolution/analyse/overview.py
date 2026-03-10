@@ -53,7 +53,7 @@ def analyze_matrix(df: pd.DataFrame, label: str) -> None:
 
 @app.command()
 def main(
-    run_id: str = typer.Option(..., help="The Run ID to analyze"),
+    run_ids: list[str] = typer.Option(..., "--run-id", help="Run IDs to analyze (can be multiple)"),
     log_dir: str = typer.Option("logs", help="Directory containing log files"),
     file_pattern: str = typer.Option(
         "*.log", help="Pattern to match legacy log files"
@@ -64,75 +64,118 @@ def main(
     ),
 ) -> None:
     """
-    Analyze the Private observation matrices for a specific Run ID.
-    Calculates solution counts and best performers based on ground-truth.
+    Analyze Private observation matrices for multiple Run IDs.
+    Merges results, ensuring no problem is completed in multiple runs.
     """
     logger.remove()
     logger.add(sys.stderr, format="<level>{message}</level>", level="INFO")
 
-    console.rule(f"[bold magenta]SCANNING: {run_id}[/bold magenta]")
+    console.rule(f"[bold magenta]ANALYZING RUNS: {', '.join(run_ids)}[/bold magenta]")
 
-    # 1. Find all problems associated with this Run ID
-    legacy_files = [] # Initialize to ensure it's always defined
-    if problem_id:
-        # For legacy, we still want to find which files contain the run_id to avoid scanning everything
-        _, legacy_files = get_problem_ids(log_dir, file_pattern, run_id, use_legacy=legacy)
-        problem_ids = {problem_id}
-    else:
-        problem_ids, legacy_files = get_problem_ids(log_dir, file_pattern, run_id, use_legacy=legacy)
+    # 1. Discover problems across all Run IDs
+    # Map of problem_id -> list of (run_id, legacy_files)
+    from collections import defaultdict
+    all_problems = defaultdict(list)
+    
+    for rid in run_ids:
+        pids, lfiles = get_problem_ids(log_dir, file_pattern, rid, use_legacy=legacy)
+        for pid in pids:
+            if problem_id and pid != problem_id:
+                continue
+            all_problems[pid].append((rid, lfiles))
 
-    if not problem_ids:
-        logger.error(f"No problems found for Run ID: {run_id}")
+    if not all_problems:
+        logger.error(f"No problems found for Run IDs: {', '.join(run_ids)}")
         return
-
-    logger.info(f"Found {len(problem_ids)} problems. Starting analysis...\n")
 
     # Track summary data for final table
     summary_data = []
 
-    # 2. Iterate through each problem
-    for pid in sorted(list(problem_ids)):
+    # 2. Iterate through each discovered problem
+    for pid in sorted(all_problems.keys()):
         if pid == "SETUP":
             continue
         
-        rprint(f"\n[bold green]PROBLEM:[/bold green] [bold white]{pid}[/bold white]")
+        candidates = all_problems[pid]
+        problem_candidates_data = []
+
+        # Analyze each candidate run for this problem to find the "best" (completed) one
+        for rid, lfiles in candidates:
+            # Parse the specific logs
+            parsed_data = parse_coevolution_log(
+                log_dir=log_dir,
+                log_filename_pattern=file_pattern,
+                target_run_id=rid,
+                target_problem_id=pid,
+                use_legacy=legacy,
+                legacy_files=lfiles
+            )
+            
+            # Determine if this run is "complete" (has a champion)
+            matrices = parsed_data["matrices"].get("private", [])
+            has_champion = False
+            champion_id_list = []
+            
+            if matrices:
+                last_matrix = matrices[-1]
+                active_ids = last_matrix.index.tolist()
+                individuals_df = parsed_data.get("individuals", pd.DataFrame())
+                
+                if not individuals_df.empty:
+                    code_data = individuals_df[individuals_df["type"] == "code"].copy()
+                    if not code_data.empty:
+                        # Check if any probability exists for these IDs
+                        latest_beliefs = code_data.dropna(subset=["probability"]).groupby("id")["probability"].last()
+                        valid_beliefs = {str(iid): latest_beliefs.get(iid) for iid in active_ids if iid in latest_beliefs.index}
+                        if valid_beliefs:
+                            has_champion = True
+                            max_belief = max(valid_beliefs.values())
+                            champion_id_list = [iid for iid, b in valid_beliefs.items() if b == max_belief]
+
+            problem_candidates_data.append({
+                "run_id": rid,
+                "parsed_data": parsed_data,
+                "is_complete": has_champion,
+                "problem_id": pid,
+                "champion_ids": champion_id_list
+            })
+
+        # --- Collision Detection & Selection ---
+        completed_candidates = [c for c in problem_candidates_data if c["is_complete"]]
+        
+        if len(completed_candidates) > 1:
+            # Raise error as requested: completed in multiple runs
+            run_names = [c["run_id"] for c in completed_candidates]
+            rprint(f"\n[bold red]ERROR:[/bold red] Problem [bold]{pid}[/bold] is COMPLETED in multiple runs: {', '.join(run_names)}")
+            rprint("[red]Please resolve this ambiguity by isolating the correct run.[/red]")
+            raise typer.Exit(code=1)
+        
+        # Selection: Use the completed one, or the only one, or the "latest" one
+        if completed_candidates:
+            selected = completed_candidates[0]
+        else:
+            # If none are complete, use the first one (arbitrary but consistent)
+            selected = problem_candidates_data[0]
+
+        rid = selected["run_id"]
+        parsed_data = selected["parsed_data"]
+        
+        rprint(f"\n[bold green]PROBLEM:[/bold green] [bold white]{pid}[/bold white] [dim](from {rid})[/dim]")
         rprint("[dim]" + "─" * 40 + "[/dim]")
 
-        # Parse the specific logs for this problem
-        parsed_data = parse_coevolution_log(
-            log_dir=log_dir,
-            log_filename_pattern=file_pattern,
-            target_run_id=run_id,
-            target_problem_id=pid,
-            use_legacy=legacy,
-            legacy_files=legacy_files
-        )
-
-        # We strictly use 'private' for evaluation metrics
-        matrix_type = "private"
-        matrices = parsed_data["matrices"].get(matrix_type, [])
-
+        matrices = parsed_data["matrices"].get("private", [])
         if not matrices:
-            logger.warning(f"No '{matrix_type}' matrices found for {pid}")
-            # Add N/A entry to summary
-
             summary_data.append({
-                "run_id": run_id, "problem_id": pid, "solved": False,
+                "run_id": rid, "problem_id": pid, "solved": False,
                 "champion_code_ids": "N/A", "champion_passing": "N/A",
                 "champion_probability": 0.0, "initial_pass_at_10": "N/A",
                 "final_pass_at_15": "N/A", "final_pass_at_10": "N/A",
             })
             continue
 
-        # 3. Analyze First and Last Matrix
-        first_matrix = matrices[0]
-        last_matrix = matrices[-1]
-
-        analyze_matrix(first_matrix, "START")
-
-        # Only print 'End' if it's different from 'Start'
+        analyze_matrix(matrices[0], "START")
         if len(matrices) > 1:
-            analyze_matrix(last_matrix, "END  ")
+            analyze_matrix(matrices[-1], "END  ")
         else:
             rprint("[dim]Run had not progressed; only one matrix present.[/dim]")
 
@@ -144,93 +187,57 @@ def main(
         num_final_pass_at_10 = 0
         num_final_pass_at_15 = 0
 
-        if not last_matrix.empty:
-            num_tests = last_matrix.shape[1]
-            pass_counts = last_matrix.sum(axis=1)
-
-            # Map of ID -> latest probability
-            belief_map = {}
-            individuals_df = parsed_data.get("individuals", pd.DataFrame())
-
-            # Get all IDs present in the matrix
-            active_ids = last_matrix.index.tolist()
-
-            if not individuals_df.empty:
-                # Filter for code entries
-                code_data = individuals_df[individuals_df["type"] == "code"].copy()
-                if not code_data.empty:
-                    # Group by ID and get the latest non-NaN probability
-                    # This is crucial because some events (like 'survived') don't carry probabilities
-                    latest_beliefs = (
-                        code_data.dropna(subset=["probability"])
-                        .groupby("id")["probability"]
-                        .last()
-                    )
-
-                    # Map IDs to their latest known beliefs
-                    belief_map = {
-                        str(iid): latest_beliefs.get(iid, 0.0) for iid in active_ids
-                    }
-                else:
-                    belief_map = {str(iid): 0.0 for iid in active_ids}
+        last_matrix = matrices[-1]
+        num_tests = last_matrix.shape[1]
+        pass_counts = last_matrix.sum(axis=1)
+        
+        active_ids = last_matrix.index.tolist()
+        individuals_df = parsed_data.get("individuals", pd.DataFrame())
+        
+        belief_map = {}
+        if not individuals_df.empty:
+            code_data = individuals_df[individuals_df["type"] == "code"].copy()
+            if not code_data.empty:
+                latest_beliefs = code_data.dropna(subset=["probability"]).groupby("id")["probability"].last()
+                belief_map = {str(iid): latest_beliefs.get(iid, 0.0) for iid in active_ids}
             else:
-                # If no belief data, treat all as 0.0
                 belief_map = {str(iid): 0.0 for iid in active_ids}
+        else:
+            belief_map = {str(iid): 0.0 for iid in active_ids}
 
-            # Sort active IDs by belief
-            sorted_by_belief = sorted(
-                active_ids, key=lambda x: belief_map.get(str(x), 0.0), reverse=True
-            )
+        sorted_by_belief = sorted(active_ids, key=lambda x: belief_map.get(str(x), 0.0), reverse=True)
+        
+        if sorted_by_belief and any(v > 0 for v in belief_map.values()):
+            max_belief = belief_map[str(sorted_by_belief[0])]
+            champion_probability = max_belief
+            champions = [iid for iid in sorted_by_belief if belief_map[str(iid)] == max_belief]
+            
+            any_champ_solved = False
+            for cid in champions:
+                c_pass = int(pass_counts.loc[cid]) if cid in pass_counts.index else 0
+                champion_ids.append(str(cid))
+                champion_passing_info.append(f"{c_pass}/{num_tests}")
+                if c_pass == num_tests:
+                    any_champ_solved = True
+            
+            solved = any_champ_solved
+            
+            def count_perfect_in_top(k: int) -> int:
+                perfect = 0
+                for cid in sorted_by_belief[:k]:
+                    if cid in pass_counts.index and int(pass_counts.loc[cid]) == num_tests:
+                        perfect += 1
+                return perfect
 
-            if sorted_by_belief:
-                # 1. Champion logic (Top individual(s) by belief)
-                max_belief = belief_map[str(sorted_by_belief[0])]
-                champion_probability = max_belief
-                champions = [
-                    iid
-                    for iid in sorted_by_belief
-                    if belief_map[str(iid)] == max_belief
-                ]
+            num_final_pass_at_10 = count_perfect_in_top(10)
+            num_final_pass_at_15 = count_perfect_in_top(15)
 
-                any_champ_solved = False
-                for cid in champions:
-                    c_pass = (
-                        int(pass_counts.loc[cid]) if cid in pass_counts.index else 0
-                    )
-                    champion_ids.append(str(cid))
-                    champion_passing_info.append(f"{c_pass}/{num_tests}")
-                    if c_pass == num_tests:
-                        any_champ_solved = True
-
-                solved = any_champ_solved
-
-                # 2. Pass@N counts (How many of Top K pass ALL tests?)
-                def count_perfect_in_top(k: int) -> int:
-                    perfect = 0
-                    for cid in sorted_by_belief[:k]:
-                        if (
-                            cid in pass_counts.index
-                            and int(pass_counts.loc[cid]) == num_tests
-                        ):
-                            perfect += 1
-                    return perfect
-
-                num_final_pass_at_10 = count_perfect_in_top(10)
-                num_final_pass_at_15 = count_perfect_in_top(15)
-
-        # Count initial perfect solutions
         num_initial_passing = len(matrices[0].sum(axis=1)[matrices[0].sum(axis=1) == matrices[0].shape[1]])
 
-        # Format champion code IDs and passing info
-        champion_ids_str = ", ".join(champion_ids) if champion_ids else "N/A"
-        champion_passing_str = (
-            ", ".join(champion_passing_info) if champion_passing_info else "N/A"
-        )
-
         summary_data.append({
-            "run_id": run_id, "problem_id": pid, "solved": solved,
-            "champion_code_ids": champion_ids_str,
-            "champion_passing": champion_passing_str,
+            "run_id": rid, "problem_id": pid, "solved": solved,
+            "champion_code_ids": ", ".join(champion_ids) if champion_ids else "N/A",
+            "champion_passing": ", ".join(champion_passing_info) if champion_passing_info else "N/A",
             "champion_probability": champion_probability,
             "initial_pass_at_10": num_initial_passing,
             "final_pass_at_15": num_final_pass_at_15,
@@ -244,34 +251,32 @@ def main(
     complete_runs = [r for r in summary_data if r["champion_code_ids"] != "N/A"]
     incomplete_runs = [r for r in summary_data if r["champion_code_ids"] == "N/A"]
 
-    table = Table(title=f"RUN SUMMARY: {run_id}", title_style="bold underline magenta", show_header=True, header_style="bold cyan")
+    table = Table(title=f"AGGREGATED RUNS SUMMARY", title_style="bold underline magenta", show_header=True, header_style="bold cyan")
     table.add_column("Problem", style="white")
+    table.add_column("Run ID", style="dim")
     table.add_column("Solved", justify="center")
     table.add_column("Champion ID", style="yellow")
     table.add_column("Score", justify="center")
     table.add_column("Prob", justify="right")
-    table.add_column("Init P@10", justify="center", style="dim")
     table.add_column("Final P@10", justify="center", style="bold green")
-    table.add_column("Final P@15", justify="center", style="dim")
 
     for row in complete_runs:
         solved_str = "[bold green]Yes[/bold green]" if row["solved"] else "[bold red]No[/bold red]"
         table.add_row(
             row["problem_id"],
+            row["run_id"],
             solved_str,
             row["champion_code_ids"],
             row["champion_passing"],
             f"{row['champion_probability']:.4f}",
-            str(row["initial_pass_at_10"]),
-            str(row["final_pass_at_10"]),
-            str(row["final_pass_at_15"])
+            str(row["final_pass_at_10"])
         )
     
     console.print(table)
 
     if incomplete_runs:
-        rprint("\n[bold yellow]Incomplete Problems (No Champion Found):[/bold yellow]")
-        rprint(", ".join([f"[red]{r['problem_id']}[/red]" for r in incomplete_runs]))
+        rprint("\n[bold yellow]Incomplete Problems (No Champion Found in any Run):[/bold yellow]")
+        rprint(", ".join([f"[red]{r['problem_id']}[/red] [dim]({r['run_id']})[/dim]" for r in incomplete_runs]))
 
     total_problems = len(summary_data)
     total_incomplete = len(incomplete_runs)
@@ -280,14 +285,14 @@ def main(
     pass_rate = (total_passed / total_completed * 100) if total_completed else 0.0
 
     stats_text = Text.assemble(
-        ("Total Problems: ", "bold"), (f"{total_problems}\n", "white"),
-        ("Incomplete:     ", "bold"), (f"{total_incomplete}\n", "yellow"),
-        ("Completed:      ", "bold"), (f"{total_completed}\n", "cyan"),
-        ("Passed:         ", "bold"), (f"{total_passed}\n", "green" if total_passed > 0 else "red"),
-        ("Pass Rate:      ", "bold"), (f"{pass_rate:.2f}% (of completed)", "bold yellow")
+        ("Total Unique Problems: ", "bold"), (f"{total_problems}\n", "white"),
+        ("Incomplete Items:     ", "bold"), (f"{total_incomplete}\n", "yellow"),
+        ("Completed Items:      ", "bold"), (f"{total_completed}\n", "cyan"),
+        ("Successful Solutions: ", "bold"), (f"{total_passed}\n", "green" if total_passed > 0 else "red"),
+        ("Pass Rate (Completed):", "bold"), (f"{pass_rate:.2f}%", "bold yellow")
     )
-    console.print("\n", Panel(stats_text, title="Overall Statistics", border_style="magenta", expand=False))
-    console.rule("[bold magenta]End of Report[/bold magenta]")
+    console.print("\n", Panel(stats_text, title="Aggregated Statistics", border_style="magenta", expand=False))
+    console.rule("[bold magenta]End of Aggregated Report[/bold magenta]")
 
 
 if __name__ == "__main__":
