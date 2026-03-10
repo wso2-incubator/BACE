@@ -202,7 +202,7 @@ def run(
     log_config = experiment_config.get("logging", {})
     run_id = logging_utils.setup_logging(
         console_level=log_config.get("console_level", "INFO"),
-        file_level=log_config.get("file_level", "DEBUG"),
+        file_level=log_config.get("file_level", "TRACE"),
         log_file_base_name=log_config.get("log_file_base_name", "coevolution_run"),
         run_id=run_id,
     )
