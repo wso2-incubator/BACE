@@ -12,8 +12,11 @@ import os
 import numpy as np
 from loguru import logger
 
-from coevolution.core.interfaces.language import IScriptComposer, ILanguageRuntime
-from coevolution.core.interfaces.language import ITestAnalyzer
+from coevolution.core.interfaces.language import (
+    ILanguageRuntime,
+    IScriptComposer,
+    ITestAnalyzer,
+)
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from ..core.interfaces import (
@@ -247,6 +250,10 @@ class ExecutionSystem(IExecutionSystem):
         try:
             with multiprocessing.Pool(processes=num_workers) as pool:
                 results = pool.starmap(_execute_atomic_interaction, tasks)
+            # Pool.__exit__ calls terminate() but NOT join(), so worker processes
+            # are signalled but not reaped. Calling join() here prevents OS
+            # semaphore accumulation (the root cause of the resource_tracker warning).
+            pool.join()
             return results
         except Exception as e:
             logger.error(

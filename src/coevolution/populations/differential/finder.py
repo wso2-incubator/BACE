@@ -12,8 +12,8 @@ from loguru import logger
 
 from coevolution.core.interfaces.language import (
     ICodeParser,
-    IScriptComposer,
     ILanguageRuntime,
+    IScriptComposer,
 )
 from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
@@ -46,6 +46,7 @@ def _worker_entry(
 
     try:
         from coevolution.utils.logging import setup_logging
+
         setup_logging()
 
         sandbox = create_sandbox(config)
@@ -55,8 +56,8 @@ def _worker_entry(
             script = composer.compose_evaluation_script(
                 snippet, str(test_input_formatted)
             )
-            import tempfile
             import os
+            import tempfile
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
@@ -120,8 +121,8 @@ class DifferentialFinder(IDifferentialFinder):
             logger.warning("Input generator script produced invalid Python code.")
             return []
 
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = os.path.join(tmpdir, "generator.py")
@@ -184,8 +185,8 @@ class DifferentialFinder(IDifferentialFinder):
         script = self.composer.compose_evaluation_script(
             code, str(test_input_formatted)
         )
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             file_ext = ".bal" if hasattr(self.runtime, "bal_executable") else ".py"
@@ -207,23 +208,31 @@ class DifferentialFinder(IDifferentialFinder):
         ]
         chunk_size = max(1, len(inputs) // (self.cpu_workers * 4))
 
+        # Use an explicit pool reference so we can always call join() — even on
+        # the early-exit path — to ensure workers are reaped and OS semaphores
+        # are released synchronously.
+        pool = multiprocessing.Pool(processes=self.cpu_workers)
         try:
-            with multiprocessing.Pool(processes=self.cpu_workers) as pool:
-                result_iterator = pool.imap_unordered(
-                    _worker_entry, tasks, chunksize=chunk_size
-                )
-                for idx, result in result_iterator:
-                    if isinstance(result, DifferentialResult):
-                        found_divergences.append(result)
-                        logger.debug(f"Discrepancy found at input {idx} (Parallel)")
-                        if len(found_divergences) >= limit:
-                            pool.terminate()
-                            break
-                    elif isinstance(result, ExecutionError):
-                        pass
+            result_iterator = pool.imap_unordered(
+                _worker_entry, tasks, chunksize=chunk_size
+            )
+            for idx, result in result_iterator:
+                if isinstance(result, DifferentialResult):
+                    found_divergences.append(result)
+                    logger.debug(f"Discrepancy found at input {idx} (Parallel)")
+                    if len(found_divergences) >= limit:
+                        pool.terminate()
+                        break
+                elif isinstance(result, ExecutionError):
+                    pass
         except Exception as e:
             logger.error(f"Parallel execution pool failed: {e}", exc_info=True)
             return found_divergences
+        finally:
+            # terminate() is idempotent; calling it here covers the normal-exit
+            # path where __exit__ was previously the only termination point.
+            pool.terminate()
+            pool.join()
 
         return found_divergences
 

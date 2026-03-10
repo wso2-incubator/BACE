@@ -115,7 +115,10 @@ class Breeder[T: BaseIndividual]:
                     logger.critical(
                         f"Breeder aborting: {consecutive_failures} consecutive failures."
                     )
-                    executor.shutdown(wait=False, cancel_futures=True)
+                    # Do not call executor.shutdown() here — the `with` block's
+                    # __exit__ will call shutdown(wait=True), which is the correct
+                    # single teardown path. Calling shutdown() twice with different
+                    # `wait` flags races in Python ≤3.8.
                     break
 
                 needed = num_offsprings - len(offspring)

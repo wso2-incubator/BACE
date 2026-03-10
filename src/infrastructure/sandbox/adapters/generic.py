@@ -6,7 +6,6 @@ import tempfile
 import time
 from typing import Optional
 
-
 from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.memory import MemoryMonitor
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
@@ -123,6 +122,10 @@ class SubprocessSandbox(ISandbox):
             )
 
         except subprocess.TimeoutExpired:
+            # Kill the child and drain both pipes so no zombie or orphaned
+            # file-descriptors (PIPE handles) are left behind.
+            proc.kill()
+            proc.communicate()  # reaps the zombie and flushes stdout/stderr buffers
             return BasicExecutionResult(
                 success=False,
                 output="",
