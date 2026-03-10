@@ -8,6 +8,7 @@ Usage:
 """
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,15 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+
+# Add src to sys.path to allow imports from coevolution package
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+
+from coevolution.analysis.engines import (
+    get_active_ids_in_cycle,
+    group_events_into_cycles,
+    reconstruct_schedule,
+)
 
 app = typer.Typer(help="Visualize coevolutionary progress with a premium terminal UI.")
 console = Console()
@@ -98,35 +108,6 @@ def extract_operator_rates(prof: dict[str, Any]) -> str:
     return ", ".join([f"{k}:{v:.1f}" for k, v in rates.items()])
 
 
-def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Flatten the evolution schedule into a list of epoch definitions."""
-    schedule_data = config.get("evolution_config", {}).get("schedule", {})
-    phases = schedule_data.get("phases", [])
-    epochs = []
-    for p in phases:
-        for _ in range(p.get("duration", 0)):
-            epochs.append(
-                {
-                    "phase_name": p.get("name", "Unknown"),
-                    "evolve_code": p.get("evolve_code", False),
-                    "evolve_tests": p.get("evolve_tests", False),
-                }
-            )
-    return epochs
-
-
-def group_events_into_cycles(events: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    """Group events into cycles delimited by GENERATION_SUMMARY."""
-    cycles = []
-    current_cycle = []
-    for e in events:
-        current_cycle.append(e)
-        if e["event_type"] == "GENERATION_SUMMARY":
-            cycles.append(current_cycle)
-            current_cycle = []
-    if current_cycle:
-        cycles.append(current_cycle)
-    return cycles
 
 
 # ─── RENDERERS ────────────────────────────────────────────────────────────────
@@ -409,25 +390,9 @@ def display_population_overview(
     latest_probs: dict[str, float],
 ) -> None:
     """Displays tables of active individuals at the start of the generation."""
-    # Find all individuals being evaluated in this generation
-    matrices = [e for e in gen_events if e["event_type"] == "OBSERVATION_MATRIX"]
-    if not matrices:
-        return
-
-    code_ids = set()
-    test_pops: dict[str, set[str]] = {}
-
-    for m in matrices:
-        tt = str(m.get("test_type", "Test")).upper()
-        if tt in ("PRIVATE", "PUBLIC"):
-            continue  # Skip fixed tests in overview
-
-        for cid in m.get("code_ids", []):
-            code_ids.add(cid)
-        if tt not in test_pops:
-            test_pops[tt] = set()
-        for tid in m.get("test_ids", []):
-            test_pops[tt].add(tid)
+    active = get_active_ids_in_cycle(gen_events)
+    code_ids = active["code"]
+    test_pops = active["test_pops"]
 
     if not code_ids and not test_pops:
         return
