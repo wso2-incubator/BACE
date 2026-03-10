@@ -85,8 +85,8 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             return []
 
         feedback_parts = []
-        for idx, (test_ind, _pop_type) in enumerate(failing, start=1):
-            exec_result = context.interactions["unittest"].execution_results
+        for idx, (test_ind, test_pop_type) in enumerate(failing, start=1):
+            exec_result = context.interactions[test_pop_type].execution_results
             trace = "No trace available"
             if parent.id in exec_result and test_ind.id in exec_result[parent.id]:
                 trace = exec_result[parent.id][test_ind.id].error_log or trace
@@ -124,5 +124,4 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         ]
 
 
-__all__ = ["CodeEditOperator", "IFailingTestSelector"]
 __all__ = ["CodeEditOperator", "IFailingTestSelector"]
