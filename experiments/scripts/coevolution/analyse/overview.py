@@ -1,6 +1,7 @@
 # experiments/scripts/coevolution/analyse/overview.py
 import fnmatch
 import sys
+from typing import Any, cast
 
 import pandas as pd
 import typer
@@ -16,8 +17,6 @@ from coevolution.analysis.log_parser import (
     get_run_ids,
     parse_coevolution_log,
 )
-from coevolution.utils.paths import sanitize_problem_id
-
 app = typer.Typer()
 console = Console()
 
@@ -104,16 +103,20 @@ def main(
         f"[bold magenta]ANALYZING RUNS: {', '.join(final_run_ids)}[/bold magenta]"
     )
 
+    # 0.5 Sanitize problem_id filter if provided
+    from coevolution.utils.paths import sanitize_id
+    target_pid = sanitize_id(problem_id) if problem_id else None
+
     # 1. Discover problems across all Run IDs
     # Map of problem_id -> list of (run_id, legacy_files)
     from collections import defaultdict
 
-    all_problems = defaultdict(list)
+    all_problems: dict[str, list[tuple[str, list[str] | None]]] = defaultdict(list)
 
     for rid in final_run_ids:
         pids, lfiles = get_problem_ids(log_dir, file_pattern, rid, use_legacy=legacy)
         for pid in pids:
-            if problem_id and pid != problem_id:
+            if target_pid and pid != target_pid:
                 continue
             all_problems[pid].append((rid, lfiles))
 
@@ -122,7 +125,7 @@ def main(
         return
 
     # Track summary data for final table
-    summary_data = []
+    summary_data: list[dict[str, Any]] = []
 
     # 2. Iterate through each discovered problem
     for pid in sorted(all_problems.keys()):
@@ -130,10 +133,10 @@ def main(
             continue
 
         candidates = all_problems[pid]
-        problem_candidates_data = []
+        problem_candidates_data: list[dict[str, Any]] = []
 
         # Analyze each candidate run for this problem to find the "best" (completed) one
-        for rid, lfiles in candidates:
+        for rid, cand_lfiles in candidates:
             # Parse the specific logs
             parsed_data = parse_coevolution_log(
                 log_dir=log_dir,
@@ -141,7 +144,7 @@ def main(
                 target_run_id=rid,
                 target_problem_id=pid,
                 use_legacy=legacy,
-                legacy_files=lfiles,
+                legacy_files=cand_lfiles,
             )
 
             # Determine if this run is "complete" (has a champion)
@@ -164,9 +167,9 @@ def main(
                             .last()
                         )
                         valid_beliefs = {
-                            str(iid): latest_beliefs.get(iid)
+                            str(iid): float(cast(Any, latest_beliefs.get(iid)))
                             for iid in active_ids
-                            if iid in latest_beliefs.index
+                            if iid in latest_beliefs.index and latest_beliefs.get(iid) is not None
                         }
                         if valid_beliefs:
                             has_champion = True
@@ -333,7 +336,7 @@ def main(
     incomplete_runs = [r for r in summary_data if r["champion_code_ids"] == "N/A"]
 
     table = Table(
-        title=f"AGGREGATED RUNS SUMMARY",
+        title="AGGREGATED RUNS SUMMARY",
         title_style="bold underline magenta",
         show_header=True,
         header_style="bold cyan",
@@ -353,11 +356,11 @@ def main(
             else "[bold red]No[/bold red]"
         )
         table.add_row(
-            row["problem_id"],
-            row["run_id"],
+            str(row["problem_id"]),
+            str(row["run_id"]),
             solved_str,
-            row["champion_code_ids"],
-            row["champion_passing"],
+            str(row["champion_code_ids"]),
+            str(row["champion_passing"]),
             f"{row['champion_probability']:.4f}",
             str(row["final_pass_at_10"]),
         )
