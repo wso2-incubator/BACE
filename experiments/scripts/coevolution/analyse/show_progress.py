@@ -7,6 +7,7 @@ Usage:
     python experiments/scripts/coevolution/analyse/show_progress.py --run-id <ID> --problem-id <ID>
 """
 
+import fnmatch
 import json
 import sys
 from pathlib import Path
@@ -22,13 +23,16 @@ from rich.table import Table
 from rich.text import Text
 
 # Add src to sys.path to allow imports from coevolution package
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+# APR/experiments/scripts/coevolution/analyse/show_progress.py -> parents[4] is APR root
+sys.path.append(str(Path(__file__).resolve().parents[4] / "src"))
 
 from coevolution.analysis.engines import (
     get_active_ids_in_cycle,
     group_events_into_cycles,
     reconstruct_schedule,
 )
+from coevolution.analysis.log_parser import get_run_ids
+from coevolution.utils.paths import sanitize_id
 
 app = typer.Typer(help="Visualize coevolutionary progress with a premium terminal UI.")
 console = Console()
@@ -48,7 +52,9 @@ def fmt_id(s: str, max_len: int = 16) -> str:
 
 
 def load_events(run_id: str, problem_id: str) -> list[dict[str, Any]]:
-    log_path = Path("logs") / run_id / problem_id / "evolutionary_history.jsonl"
+    sanitized_run = sanitize_id(run_id)
+    sanitized_pid = sanitize_id(problem_id)
+    log_path = Path("logs") / sanitized_run / sanitized_pid / "evolutionary_history.jsonl"
     if not log_path.exists():
         console.print(f"[red]Error: Found no history at {log_path}[/red]")
         raise typer.Exit(1)
@@ -80,7 +86,8 @@ def load_events(run_id: str, problem_id: str) -> list[dict[str, Any]]:
 
 
 def load_config(run_id: str) -> dict[str, Any] | None:
-    config_path = Path("logs") / run_id / "run_config.json"
+    sanitized_run = sanitize_id(run_id)
+    config_path = Path("logs") / sanitized_run / "run_config.json"
     if not config_path.exists():
         return None
     try:
@@ -378,6 +385,17 @@ def render_observation_matrix(matrix_event: dict[str, Any]) -> None:
             ]
             table.add_row(code_id, *colored_row)
         console.print(table)
+    else:
+        # Provide feedback when the matrix is empty
+        reason = ""
+        if not test_ids:
+            reason = "No tests were executed (test_ids is empty)."
+        elif not code_ids:
+            reason = "No code individuals were evaluated (code_ids is empty)."
+        elif not matrix_data:
+            reason = "No evaluation data was recorded (matrix is empty)."
+            
+        console.print(f"[dim yellow]  (Matrix is empty: {reason})[/dim yellow]")
 
 
 
@@ -459,7 +477,7 @@ def render_cycle(
     show_errors: bool = False,
 ) -> None:
     phase_name = epoch_meta.get("phase_name", "Unknown")
-    title_meta = f"Epoch {cycle_index} [{phase_name}] | Code Gen {code_gen} | Test Gen {test_gen}"
+    title_meta = f"Epoch {cycle_index} ({phase_name}) | Code Gen {code_gen} | Test Gen {test_gen}"
     console.rule(f"[bold yellow]{title_meta}[/bold yellow]", style="yellow")
 
     # 0. Population Overview
@@ -640,6 +658,34 @@ def main(
 ) -> None:
     """Historical narrative and dashboard for a coevolution problem."""
 
+    # Expand Run IDs if globs are provided
+    all_available_runs = get_run_ids("logs", "*.log", use_legacy=False)
+    matched_runs = []
+    if any(c in run_id for c in "*?[]"):
+        matched_runs = sorted([r for r in all_available_runs if fnmatch.fnmatch(r, run_id)])
+        if not matched_runs:
+            console.print(f"[red]Error: No runs matched pattern: {run_id}[/red]")
+            raise typer.Exit(1)
+        
+        if len(matched_runs) > 1:
+            # Try to narrow down by problem_id if possible
+            sanitized_pid = sanitize_id(problem_id)
+            with_problem = []
+            for r in matched_runs:
+                if (Path("logs") / sanitize_id(r) / sanitized_pid).exists():
+                    with_problem.append(r)
+            
+            if len(with_problem) == 1:
+                run_id = with_problem[0]
+            elif len(with_problem) > 1:
+                run_id = with_problem[-1]
+                console.print(f"[yellow]Ambigious run-id pattern. Found {len(with_problem)} runs with this problem. Picking latest: {run_id}[/yellow]")
+            else:
+                run_id = matched_runs[-1]
+                console.print(f"[yellow]No runs with this pattern contain problem {problem_id}. Picking latest run: {run_id}[/yellow]")
+        else:
+            run_id = matched_runs[0]
+    
     console.print(
         Panel(
             Text.from_markup(
@@ -696,11 +742,6 @@ def main(
 
     expected_epochs = reconstruct_schedule(config)
     cycles = group_events_into_cycles(events)
-
-    # Filter initialization events from Cycle 0 if it exists
-    # Cycle 0 starts with CREATED(0) but initialization is handled separately
-    # so we might need to skip or re-process.
-    # Actually, Orchestrator logs a SUMMARY after init. So Cycle 0 is Init.
 
     code_gen = 0
     test_gen = 0
@@ -773,10 +814,10 @@ def main(
                     results = matrix[c_idx]
                     passed = sum(results)
 
-                    is_solved = passed == num_tests
+                    is_solved = num_tests > 0 and passed == num_tests
 
-                    banner_style = "bold green" if is_solved else "bold red"
-                    banner_msg = "SOLUTION FOUND" if is_solved else "SOLUTION NOT FOUND"
+                    banner_style = "bold green" if is_solved else "bold yellow" if num_tests == 0 else "bold red"
+                    banner_msg = "SOLUTION FOUND" if is_solved else "UNVERIFIED (NO TESTS)" if num_tests == 0 else "SOLUTION NOT FOUND"
 
                     console.print("\n")
                     console.print(
@@ -804,7 +845,7 @@ def main(
                                 word_wrap=True,
                             ),
                             title=f"[bold]Champion {fmt_id(champion_id)}[/bold] (Belief: {champion_prob:.4f})",
-                            border_style="cyan",
+                            border_style="cyan" if is_solved else "yellow" if num_tests == 0 else "red",
                         )
                     )
 

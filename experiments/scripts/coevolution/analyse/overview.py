@@ -286,12 +286,18 @@ def main(
             ]
 
             any_champ_solved = False
-            for cid in champions:
-                c_pass = int(pass_counts.loc[cid]) if cid in pass_counts.index else 0
-                champion_ids.append(str(cid))
-                champion_passing_info.append(f"{c_pass}/{num_tests}")
-                if c_pass == num_tests:
-                    any_champ_solved = True
+            if num_tests > 0:
+                for cid in champions:
+                    c_pass = int(pass_counts.loc[cid]) if cid in pass_counts.index else 0
+                    champion_ids.append(str(cid))
+                    champion_passing_info.append(f"{c_pass}/{num_tests}")
+                    if c_pass == num_tests:
+                        any_champ_solved = True
+            else:
+                for cid in champions:
+                    champion_ids.append(str(cid))
+                    champion_passing_info.append(f"0/0")
+                any_champ_solved = False # Cannot be "Solved" with 0 tests
 
             solved = any_champ_solved
 

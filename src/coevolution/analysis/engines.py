@@ -4,25 +4,44 @@ from typing import Any
 def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten the evolution schedule into a list of epoch definitions."""
     schedule_data = config.get("evolution_config", {}).get("schedule", {})
-    phases = schedule_data.get("phases", [])
+    if not schedule_data:
+        # Fallback to root-level schedule
+        schedule_data = config.get("schedule", {})
+
     epochs = []
-    for p in phases:
-        duration = p.get("duration", 0)
-        # Handle string durations if any
-        if isinstance(duration, str):
-            try:
-                duration = int(duration)
-            except ValueError:
-                duration = 0
-                
-        for _ in range(duration):
-            epochs.append(
-                {
+    
+    # CASE 1: List of phases (modern format)
+    phases = schedule_data.get("phases", []) if isinstance(schedule_data, dict) else []
+    if phases:
+        for p in phases:
+            duration = p.get("duration", 0)
+            if isinstance(duration, str):
+                try: duration = int(duration)
+                except ValueError: duration = 0
+            
+            for _ in range(duration):
+                epochs.append({
                     "phase_name": p.get("name", "Unknown"),
                     "evolve_code": p.get("evolve_code", False),
                     "evolve_tests": p.get("evolve_tests", False),
-                }
-            )
+                })
+    
+    # CASE 2: Dictionary of phases (e.g. {"warmup": {"duration": 5}})
+    elif isinstance(schedule_data, dict):
+        for name, p in schedule_data.items():
+            if not isinstance(p, dict): continue
+            duration = p.get("duration", 0)
+            if isinstance(duration, str):
+                try: duration = int(duration)
+                except ValueError: duration = 0
+                
+            for _ in range(duration):
+                epochs.append({
+                    "phase_name": name,
+                    "evolve_code": p.get("evolve_code", True), # Default to True for simple schedules
+                    "evolve_tests": p.get("evolve_tests", False),
+                })
+
     return epochs
 
 
