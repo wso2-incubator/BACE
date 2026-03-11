@@ -1,5 +1,7 @@
 """Memory monitoring utilities for sandboxes."""
 
+import os
+import signal
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
@@ -34,8 +36,11 @@ class MemoryMonitor:
                 rss_mb = mem_info.rss / (1024 * 1024)
                 if rss_mb > self.max_memory_mb:
                     self.exceeded = True
-                    # Kill the process if it exceeds the memory limit
-                    self.proc.kill()
+                    # Kill the whole process group if it exceeds the memory limit
+                    try:
+                        os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     break
             except psutil.NoSuchProcess:
                 break

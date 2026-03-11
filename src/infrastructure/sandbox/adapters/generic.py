@@ -1,6 +1,8 @@
 """Generic subprocess implementation of the ISandbox protocol."""
 
+import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -81,12 +83,15 @@ class SubprocessSandbox(ISandbox):
         """Helper to manage the actual Popen execution and resource monitoring."""
         try:
             start_time = time.time()
+            # Create a new process group/session so we can kill orphaned children.
+            # On macOS/Unix, start_new_session=True uses os.setsid().
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=cwd,
+                start_new_session=True,
             )
 
             monitor = MemoryMonitor(proc, self.config.max_memory_mb)
@@ -122,9 +127,13 @@ class SubprocessSandbox(ISandbox):
             )
 
         except subprocess.TimeoutExpired:
-            # Kill the child and drain both pipes so no zombie or orphaned
-            # file-descriptors (PIPE handles) are left behind.
-            proc.kill()
+            # Kill the entire process group to ensure no orphaned children 
+            # (e.g. test runner subprocesses) hold open the pipes indefinitely.
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            
             proc.communicate()  # reaps the zombie and flushes stdout/stderr buffers
             return BasicExecutionResult(
                 success=False,
