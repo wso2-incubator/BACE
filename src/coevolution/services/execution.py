@@ -144,6 +144,12 @@ class ExecutionSystem(IExecutionSystem):
         # (multiprocessing workers will create their own)
         self._local_sandbox = create_sandbox(sandbox_config)
 
+        # Internal result cache keyed on (code_id, test_id).
+        # IDs are globally unique sequential counters (C0, C1, T0, T1, …) that are
+        # never reused for different content within a single process run, so this
+        # key unambiguously identifies a past execution result.
+        self._cache: dict[tuple[str, str], EvaluationResult] = {}
+
     def _get_num_workers(self, num_tasks: int) -> int:
         """Determine optimal number of workers based on CPU count and task count."""
         if not self.enable_multiprocessing:
@@ -168,10 +174,16 @@ class ExecutionSystem(IExecutionSystem):
         """
         Execute each code snippet against all tests and build the atomic InteractionData.
 
+        Checks the internal result cache before dispatching work: pairs whose
+        (code_id, test_id) key already exists in self._cache are resolved instantly
+        without spawning a subprocess. Only genuinely new pairs are dispatched to
+        the sandbox workers.
+
         Ensures strict alignment between matrix columns and test population indices.
         """
         num_codes = code_population.size
         num_tests = test_population.size
+        total_evaluations = num_codes * num_tests
 
         # 1. Pre-allocate the Matrix
         observation_matrix = np.zeros((num_codes, num_tests), dtype=int)
@@ -182,49 +194,79 @@ class ExecutionSystem(IExecutionSystem):
         for code in code_population:
             execution_results.results[code.id] = {}
 
-        total_evaluations = num_codes * num_tests
-        num_workers = self._get_num_workers(total_evaluations)
+        # 3. Split pairs into cache hits and genuinely new tasks
+        tasks: list[
+            tuple[
+                int,
+                int,
+                str,
+                str,
+                SandboxConfig,
+                IScriptComposer,
+                ILanguageRuntime,
+                ITestAnalyzer,
+            ]
+        ] = []
 
+        for i, code in enumerate(code_population):
+            for j, test in enumerate(test_population):
+                cache_key = (code.id, test.id)
+                cached = self._cache.get(cache_key)
+                if cached is not None:
+                    # Resolve from cache — no subprocess needed
+                    if cached.status == "passed":
+                        observation_matrix[i, j] = 1
+                    execution_results.results[code.id][test.id] = cached
+                else:
+                    tasks.append(
+                        (
+                            i,
+                            j,
+                            code.snippet,
+                            test.snippet,
+                            self.sandbox_config,
+                            self.composer,
+                            self.runtime,
+                            self.analyzer,
+                        )
+                    )
+
+        cache_hits = total_evaluations - len(tasks)
         logger.info(
             f"Executing code against tests: {num_codes} code × {num_tests} tests = "
-            f"{total_evaluations} evaluations using {num_workers} workers."
+            f"{total_evaluations} evaluations. "
+            f"Cache hits: {cache_hits}/{total_evaluations}, new: {len(tasks)}."
         )
 
-        # 3. Run the workers (atomic tasks: (code_snippet, test_snippet))
-        tasks = [
-            (
-                i,
-                j,
-                code.snippet,
-                test.snippet,
-                self.sandbox_config,
-                self.composer,
-                self.runtime,
-                self.analyzer,
+        # 4. Run the workers only for new pairs
+        if tasks:
+            num_workers = self._get_num_workers(len(tasks))
+            logger.debug(
+                f"Dispatching {len(tasks)} new evaluations using {num_workers} workers."
             )
-            for i, code in enumerate(code_population)
-            for j, test in enumerate(test_population)
-        ]
 
-        if self.enable_multiprocessing and num_workers > 1:
-            raw_results = self._execute_with_multiprocessing(tasks, num_workers)
-        else:
-            raw_results = self._execute_sequentially(tasks)
+            if self.enable_multiprocessing and num_workers > 1:
+                raw_results = self._execute_with_multiprocessing(tasks, num_workers)
+            else:
+                raw_results = self._execute_sequentially(tasks)
 
-        # 4. THE ADAPTER LOOP: Unify the data
-        for code_idx, test_idx, sb_test_res in raw_results:
-            # Update matrix
-            if sb_test_res.status == "passed":
-                observation_matrix[code_idx, test_idx] = 1
+            # 5. THE ADAPTER LOOP: Unify the data and populate the cache
+            for code_idx, test_idx, sb_test_res in raw_results:
+                # Update matrix
+                if sb_test_res.status == "passed":
+                    observation_matrix[code_idx, test_idx] = 1
 
-            # Update results dictionary
-            code_id = code_population[code_idx].id
-            test_id = test_population[test_idx].id
+                # Update results dictionary
+                code_id = code_population[code_idx].id
+                test_id = test_population[test_idx].id
 
-            # We know execution_results.results[code_id] exists because we initialized it
-            execution_results.results[code_id][test_id] = sb_test_res
+                # We know execution_results.results[code_id] exists because we initialized it
+                execution_results.results[code_id][test_id] = sb_test_res
 
-        # 5. Return the Atomic Artifact
+                # Persist to cache so future generations skip this pair
+                self._cache[(code_id, test_id)] = sb_test_res
+
+        # 6. Return the Atomic Artifact
         return InteractionData(
             execution_results=execution_results,
             observation_matrix=observation_matrix,

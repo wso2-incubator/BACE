@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from coevolution.core.interfaces.language import ILanguage
 from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.services.execution import ExecutionSystem, _execute_atomic_interaction
 from infrastructure.languages.python import PythonLanguage
@@ -78,7 +77,13 @@ class TestExecutionSystemLogic:
         """
         code_pop, test_pop = mock_populations
         lang = PythonLanguage()
-        system = ExecutionSystem(basic_config, composer=lang.composer, runtime=lang.runtime, analyzer=lang.analyzer, enable_multiprocessing=False)
+        system = ExecutionSystem(
+            basic_config,
+            composer=lang.composer,
+            runtime=lang.runtime,
+            analyzer=lang.analyzer,
+            enable_multiprocessing=False,
+        )
 
         # We mock the atomic executor to return a specific pattern
         # Let's say: Code 0 passes everything, Code 1 fails everything.
@@ -96,7 +101,7 @@ class TestExecutionSystemLogic:
                 runtime: Any,
                 analyzer: Any,
             ) -> tuple[int, int, EvaluationResult]:
-                status: Literal["passed"] | Literal["failed"] = (
+                status: Literal["passed", "failed"] = (
                     "passed" if c_idx == 0 else "failed"
                 )
                 return (
@@ -128,18 +133,188 @@ class TestWorkerResilience:
         the worker catches it and returns an Error result, preventing the pool from hanging.
         """
         # We simulate a catastrophic failure in the sandbox creation
-        with patch(
-            "coevolution.services.execution.create_sandbox"
-        ) as mock_sandbox:
+        with patch("coevolution.services.execution.create_sandbox") as mock_sandbox:
             mock_sandbox.side_effect = RuntimeError("Docker Daemon unresponsive")
 
             lang = PythonLanguage()
             c_idx, t_idx, result = _execute_atomic_interaction(
-                0, 0, "code", "test", basic_config, lang.composer, lang.runtime, lang.analyzer
+                0,
+                0,
+                "code",
+                "test",
+                basic_config,
+                lang.composer,
+                lang.runtime,
+                lang.analyzer,
             )
 
             assert result.status == "error"
             assert "Docker Daemon unresponsive" in (result.error_log or "")
+
+
+class TestExecutionCache:
+    def test_second_call_with_same_populations_skips_workers(
+        self, mock_populations: tuple[MagicMock, MagicMock], basic_config: SandboxConfig
+    ) -> None:
+        """
+        After a first call that executes all 2×3=6 pairs, a second call with the
+        same populations must resolve every pair from cache and never invoke the
+        atomic worker again.
+        """
+        code_pop, test_pop = mock_populations
+        lang = PythonLanguage()
+        system = ExecutionSystem(
+            basic_config,
+            composer=lang.composer,
+            runtime=lang.runtime,
+            analyzer=lang.analyzer,
+            enable_multiprocessing=False,
+        )
+
+        with patch(
+            "coevolution.services.execution._execute_atomic_interaction"
+        ) as mock_worker:
+            mock_worker.return_value = (
+                0,
+                0,
+                EvaluationResult(status="passed", execution_time=0.1),
+            )
+
+            def side_effect(
+                c_idx: int, t_idx: int, *args: Any, **kwargs: Any
+            ) -> tuple[int, int, EvaluationResult]:
+                return (
+                    c_idx,
+                    t_idx,
+                    EvaluationResult(status="passed", execution_time=0.1),
+                )
+
+            mock_worker.side_effect = side_effect
+
+            # First call: all 6 pairs must be dispatched
+            system.execute_tests(code_pop, test_pop)
+            assert mock_worker.call_count == 6
+
+            # Reset the iterator so the population is iterable again
+            code_pop.__iter__.return_value = (
+                list(code_pop.__iter__.return_value)
+                if not isinstance(code_pop.__iter__.return_value, list)
+                else code_pop.__iter__.return_value
+            )
+
+            # Second call: all pairs are cached — worker must not be called again
+            system.execute_tests(code_pop, test_pop)
+            assert mock_worker.call_count == 6  # unchanged
+
+    def test_partial_miss_dispatches_only_new_pairs(
+        self, mock_populations: tuple[MagicMock, MagicMock], basic_config: SandboxConfig
+    ) -> None:
+        """
+        After warming the cache with 2 code individuals, introducing a third code
+        individual (c3) should result in exactly 3 new worker calls (c3×t1, c3×t2,
+        c3×t3) and the existing 6 pairs served from cache.
+        """
+        code_pop, test_pop = mock_populations
+
+        # Build a third code individual with a fresh ID not present in the cache
+        c3 = MagicMock()
+        c3.id = "c3"
+        c3.snippet = "def f(): return 3"
+
+        # c1/c2 share the same IDs as the fixture population so their pairs are already cached
+        c1 = MagicMock()
+        c1.id = "c1"
+        c1.snippet = "def f(): return 1"
+        c2 = MagicMock()
+        c2.id = "c2"
+        c2.snippet = "def f(): return 2"
+
+        code_pop_extended = MagicMock()
+
+        code_pop_extended.__iter__.return_value = [c1, c2, c3]
+        code_pop_extended.__getitem__ = MagicMock(side_effect=lambda i: [c1, c2, c3][i])
+        code_pop_extended.size = 3
+
+        lang = PythonLanguage()
+        system = ExecutionSystem(
+            basic_config,
+            composer=lang.composer,
+            runtime=lang.runtime,
+            analyzer=lang.analyzer,
+            enable_multiprocessing=False,
+        )
+
+        with patch(
+            "coevolution.services.execution._execute_atomic_interaction"
+        ) as mock_worker:
+
+            def side_effect(
+                c_idx: int, t_idx: int, *args: Any, **kwargs: Any
+            ) -> tuple[int, int, EvaluationResult]:
+                return (
+                    c_idx,
+                    t_idx,
+                    EvaluationResult(status="passed", execution_time=0.1),
+                )
+
+            mock_worker.side_effect = side_effect
+
+            # First call: warm cache with c1, c2 vs t1, t2, t3 (6 pairs)
+            system.execute_tests(code_pop, test_pop)
+            assert mock_worker.call_count == 6
+
+            # Refresh iterator for extended population
+            code_pop_extended.__iter__.return_value = [c1, c2, c3]
+
+            # Second call with extended population: only c3's 3 pairs are new
+            system.execute_tests(code_pop_extended, test_pop)
+            assert mock_worker.call_count == 9  # 6 cached + 3 new
+
+    def test_cache_returns_consistent_results(
+        self, mock_populations: tuple[MagicMock, MagicMock], basic_config: SandboxConfig
+    ) -> None:
+        """
+        The observation_matrix and execution_results returned on the second (cached)
+        call must be identical in values to the first call.
+        """
+        code_pop, test_pop = mock_populations
+        lang = PythonLanguage()
+        system = ExecutionSystem(
+            basic_config,
+            composer=lang.composer,
+            runtime=lang.runtime,
+            analyzer=lang.analyzer,
+            enable_multiprocessing=False,
+        )
+
+        with patch(
+            "coevolution.services.execution._execute_atomic_interaction"
+        ) as mock_worker:
+
+            def side_effect(
+                c_idx: int, t_idx: int, *args: Any, **kwargs: Any
+            ) -> tuple[int, int, EvaluationResult]:
+                # Code 0 always passes, code 1 always fails
+                status: Literal["passed"] | Literal["failed"] = (
+                    "passed" if c_idx == 0 else "failed"
+                )
+                return (
+                    c_idx,
+                    t_idx,
+                    EvaluationResult(status=status, execution_time=0.1),
+                )
+
+            mock_worker.side_effect = side_effect
+
+            first = system.execute_tests(code_pop, test_pop)
+            second = system.execute_tests(code_pop, test_pop)
+
+        assert np.array_equal(first.observation_matrix, second.observation_matrix)
+        for code_id in first.execution_results.keys():
+            for test_id, result in first.execution_results[code_id].items():
+                assert (
+                    second.execution_results[code_id][test_id].status == result.status
+                )
 
 
 class TestIntegrationConcurrency:
@@ -156,7 +331,12 @@ class TestIntegrationConcurrency:
         # to be pickleable. We verify that here.
         lang = PythonLanguage()
         system = ExecutionSystem(
-            basic_config, composer=lang.composer, runtime=lang.runtime, analyzer=lang.analyzer, enable_multiprocessing=True, cpu_workers=2
+            basic_config,
+            composer=lang.composer,
+            runtime=lang.runtime,
+            analyzer=lang.analyzer,
+            enable_multiprocessing=True,
+            cpu_workers=2,
         )
 
         # We patch the sandbox inside the worker process to avoid needing real Docker
