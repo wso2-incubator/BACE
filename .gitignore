@@ -227,3 +227,4 @@ __marimo__/
 # ignore datasets
 data/*.jsonl
 data/*.json
+data/*.txt
