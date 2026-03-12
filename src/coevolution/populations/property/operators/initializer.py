@@ -75,22 +75,30 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
             return
 
         if not self._python_lang.parser.is_syntax_valid(script):
-            raise LLMSyntaxError("gen_inputs produced invalid Python")
+            logger.warning(
+                "PropertyTestInitializer: gen_inputs produced invalid Python after retries. "
+                "Input-generator script omitted; property tests may not run effectively."
+            )
+            return
 
         self.io_pair_cache.store_generator_script(script)
         logger.debug("PropertyTestInitializer: generator script cached.")
 
-    @llm_retry((LLMGenerationError, ValueError))
+    @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _call_gen_inputs(self, problem: Problem) -> str:
         prompt = self.prompt_manager.render_prompt(
             "operators/property/gen_inputs.j2",
             question_content=problem.question_content,
+            starter_code=problem.starter_code,
         )
         response = self._generate(prompt)
         blocks = self._python_lang.parser.extract_code_blocks(response)
         if not blocks:
             raise LLMGenerationError("gen_inputs: no code block found in LLM response.")
-        return blocks[0]
+        script = blocks[0]
+        if not self._python_lang.parser.is_syntax_valid(script):
+            raise LLMSyntaxError("gen_inputs produced invalid Python")
+        return script
 
     # ── LLM call 2 ───────────────────────────────────────────────────────────
 

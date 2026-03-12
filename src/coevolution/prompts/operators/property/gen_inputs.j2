@@ -3,11 +3,12 @@
 {{ roles.tester_role() }}
 
 <task>
+- You are an expert Python programmer.
 - You are given a programming problem described in a <problem> block.
+- You are also given the starter code in a <starter_code> block — use its parameter names as the dict keys.
 - Your task is to write a Python function that generates diverse and valid test inputs for the problem.
-- The function must have the exact signature shown in <output_format>.
 - The inputs should cover typical cases, edge cases, boundary conditions, and varied data structures as implied by the specification.
-- Each input must be a single string representing the raw text that the solution function receives as its argument (i.e. the string form of the input).
+- Each input must be a dict mapping the solution function's parameter names (as string keys) to their Python values.
 - The number of inputs to generate is controlled by the `num_inputs` parameter — do not hardcode this value.
 - You are allowed to use standard Python libraries.
 - You are NOT allowed to manually hardcode any specific test inputs inside the function.
@@ -17,11 +18,21 @@
 {{ question_content }}
 </problem>
 
-<output_format>
-Provide only the Python function inside a single code block. 
+<starter_code>
 ```python
-def generate_inputs(num_inputs: int) -> list[str]:
-    # Your code to generate diverse test inputs.
-    # Each entry is the raw string representation of one input.
+{{ starter_code }}
 ```
+</starter_code>
+
+<output_format>
+Provide only the python script inside a code block as follows:
+```python
+def generate_inputs(num_inputs: int) -> list[dict]:
+    # Your code to generate inputs
+}
+```
+If input is via stdin/json, each entry should be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry should be of the form:
+{"param1": value1, "param2": value2, ...}
 </output_format>

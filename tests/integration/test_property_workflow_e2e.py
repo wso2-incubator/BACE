@@ -389,6 +389,125 @@ class TestPropertyEvaluatorE2E:
             )
 
 
+# ── IOPairCache E2E ────────────────────────────────────────────────────────────
+
+
+@REQUIRES_OPENAI
+class TestIOPairCacheE2E:
+    """Verify all three caching layers of IOPairCache.
+
+    Layer 1 — generator script: written by the initializer, read once by the
+              evaluator to produce inputs.
+    Layer 2 — generated inputs: the input strings produced by running the
+              generator script; cached so the script is never re-run.
+    Layer 3 — per-code IOPairs: (inputdata, output) pairs for each code
+              individual; cached so code is never re-executed in later epochs.
+    """
+
+    def test_generated_inputs_populated_after_first_execute(
+        self,
+        initialized_individuals: IndividualsList,
+        evaluator: PropertyTestEvaluator,
+    ) -> None:
+        """Layer 2: generated inputs must be cached after the first execute_tests call.
+
+        The evaluator runs the generator script on the first call and stores the
+        resulting input strings in the cache.  Subsequent calls skip execution
+        entirely and reuse this list.
+        """
+        # initialized_individuals already triggered the LLM; now run the evaluator.
+        code_pop = _make_code_pop([CORRECT_SORT])
+        test_pop = TestPopulation(initialized_individuals)
+        evaluator.execute_tests(code_pop, test_pop)
+
+        inputs = evaluator.io_pair_cache.get_generated_inputs()
+        assert len(inputs) >= 1, (
+            "Expected at least one generated input in the cache after execute_tests, "
+            f"got {inputs!r}"
+        )
+        print(f"\n[IOPairCache] Generated inputs ({len(inputs)}):")
+        for i, inp in enumerate(inputs, 1):
+            print(f"  {i}: {inp}")
+
+    def test_io_pairs_cached_per_code_individual(
+        self,
+        initialized_individuals: IndividualsList,
+        evaluator: PropertyTestEvaluator,
+    ) -> None:
+        """Layer 3: after execute_tests, every code individual has its IOPairs cached.
+
+        cache.has(code_id) must be True and cache.get(code_id) must return at
+        least one (inputdata, output) pair for each individual that ran.
+        """
+        code_pop = _make_code_pop([CORRECT_SORT])
+        test_pop = TestPopulation(initialized_individuals)
+        evaluator.execute_tests(code_pop, test_pop)
+
+        cache = evaluator.io_pair_cache
+        for ind in code_pop:
+            assert cache.has(ind.id), (
+                f"IOPairCache missing entry for code individual {ind.id!r}"
+            )
+            pairs = cache.get(ind.id)
+            assert len(pairs) >= 1, (
+                f"IOPairCache has empty pairs list for code individual {ind.id!r}"
+            )
+        print(f"\n[IOPairCache] Cached IO pairs for {list(code_pop)[0].id}:")
+        first_pairs = cache.get(list(code_pop)[0].id)
+        for pair in first_pairs[:3]:
+            print(f"  input={pair['inputdata']!r}  output={pair['output']!r}")
+
+    def test_second_execute_with_same_individuals_is_identical(
+        self,
+        initialized_individuals: IndividualsList,
+        evaluator: PropertyTestEvaluator,
+    ) -> None:
+        """Layer 3 reuse: a second execute_tests with the same code individuals must
+        return a bit-for-bit identical observation matrix.
+
+        Because the IOPairs are cached by code_id, no code execution occurs on
+        the second call — the matrix is rebuilt purely from cached data.
+        """
+        import numpy as np
+
+        code_pop = _make_code_pop([CORRECT_SORT, BUGGY_SORT])
+        test_pop = TestPopulation(initialized_individuals)
+
+        result_1 = evaluator.execute_tests(code_pop, test_pop)
+
+        # Second call with the SAME code population instance (same .id values).
+        result_2 = evaluator.execute_tests(code_pop, test_pop)
+
+        assert np.array_equal(
+            result_1.observation_matrix, result_2.observation_matrix
+        ), (
+            "Observation matrix changed between two calls with the same code individuals.\n"
+            f"First call:\n{result_1.observation_matrix}\n"
+            f"Second call:\n{result_2.observation_matrix}"
+        )
+
+    def test_new_individual_not_in_cache_before_first_run(
+        self,
+        initialized_individuals: IndividualsList,
+        evaluator: PropertyTestEvaluator,
+    ) -> None:
+        """Layer 3 miss: a brand-new CodeIndividual (unseen id) must not be in the cache
+        before execute_tests is called, but must be present afterwards.
+        """
+        code_pop = _make_code_pop([CORRECT_SORT])
+        ind = list(code_pop)[0]
+
+        assert not evaluator.io_pair_cache.has(ind.id), (
+            f"Brand-new individual {ind.id!r} was unexpectedly already in the cache."
+        )
+
+        evaluator.execute_tests(code_pop, TestPopulation(initialized_individuals))
+
+        assert evaluator.io_pair_cache.has(ind.id), (
+            f"Individual {ind.id!r} was not added to the cache after execute_tests."
+        )
+
+
 # ── Full pipeline smoke test ───────────────────────────────────────────────────
 
 

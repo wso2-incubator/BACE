@@ -284,16 +284,17 @@ class PropertyTestEvaluator(IExecutionSystem):
     def _run_generator_script(self, generator_code: str) -> list[str]:
         """Compose and run the generator script in the Python sandbox.
 
-        The cache stores the raw ``generate_inputs`` function body (no top-level
-        call).  ``remove_main_block`` strips any ``if __name__ == '__main__':``
-        guard the LLM may have included, then the framework appends a controlled
-        call with ``self.num_inputs`` — matching the differential generator pattern.
+        Follows the same pattern as ``DifferentialFinder._generate_test_inputs``:
+
+        1. Print the entire list at once so ``parse_test_inputs`` can parse it
+           as a proper Python literal (handles multi-line dicts, floats, etc.).
+        2. Each element is a ``dict`` mapping the solution's parameter names to
+           their values, e.g. ``{"lst": [3, 1, 2]}``.
+        3. Wrap each dict in ``{"inputdata": d}`` and stringify it so the result
+           is directly consumable by ``composer.compose_evaluation_script``.
         """
         clean_code = self._python_lang.parser.remove_main_block(generator_code)
-        runnable = (
-            clean_code
-            + f"\n\nfor _inp in generate_inputs({self.num_inputs}):\n    print(_inp)\n"
-        )
+        runnable = clean_code + f"\n\nprint(generate_inputs({self.num_inputs}))\n"
         try:
             result = self._python_sandbox.execute_code(
                 runnable, self._python_lang.runtime
@@ -305,11 +306,20 @@ class PropertyTestEvaluator(IExecutionSystem):
                 )
                 return []
 
-            lines = [ln for ln in result.output.splitlines() if ln.strip()]
+            parsed = self._python_lang.parser.parse_test_inputs(result.output.strip())
+            if not parsed:
+                logger.warning(
+                    "PropertyTestEvaluator: generator produced no parseable inputs."
+                )
+                return []
+
+            # Wrap each dict as compose_evaluation_script expects:
+            # str({"inputdata": {"lst": [3, 1, 2]}}) → one entry per input
+            formatted = [str({"inputdata": d}) for d in parsed if isinstance(d, dict)]
             logger.debug(
-                f"PropertyTestEvaluator: generator produced {len(lines)} inputs."
+                f"PropertyTestEvaluator: generator produced {len(formatted)} inputs."
             )
-            return lines
+            return formatted
         except Exception as e:
             logger.error(f"PropertyTestEvaluator: generator script raised: {e}")
             return []
