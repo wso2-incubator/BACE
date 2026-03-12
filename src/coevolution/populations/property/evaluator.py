@@ -105,7 +105,7 @@ def _property_eval_worker(
                         "result": f"error: {exc}",
                     }
                 )
-                continue
+                break
 
             exec_result = sandbox.execute_code(script, python.runtime)
 
@@ -117,7 +117,7 @@ def _property_eval_worker(
                         "result": f"error: {exec_result.error}",
                     }
                 )
-                continue
+                break
 
             stdout = exec_result.output.strip()
             result_line = stdout.splitlines()[-1] if stdout else ""
@@ -129,6 +129,7 @@ def _property_eval_worker(
                         "result": result_line if result_line else "False",
                     }
                 )
+                break
 
         if not failures:
             return code_id, test_id, EvaluationResult(status="passed")
@@ -425,6 +426,7 @@ class PropertyTestEvaluator(IExecutionSystem):
                     observation_matrix[ci, ti] = 1 if result.status == "passed" else 0
                 else:
                     pairs = self.io_pair_cache.get(code.id)
+                    sorted_pairs = sorted(pairs, key=lambda p: len(str(p["inputdata"])))
                     tasks.append(
                         (
                             ci,
@@ -432,7 +434,7 @@ class PropertyTestEvaluator(IExecutionSystem):
                             code.id,
                             test.id,
                             test.snippet,
-                            pairs,
+                            sorted_pairs,
                             self._python_sandbox_config,
                         )
                     )
