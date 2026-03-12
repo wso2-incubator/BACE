@@ -11,7 +11,7 @@ code_profile: "profiles/code/standard.yaml"
 property_profile: "profiles/property/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
-schedule: "schedules/code-only-5gen.yaml"
+schedule: "schedules/code-only-3gen.yaml"
 
 # Dataset configuration
 dataset:
@@ -24,7 +24,7 @@ subset:
   problem_ids: null
 
 logging:
-  console_level: "INFO"
+  console_level: "DEBUG"
   file_level: "DEBUG"
   log_file_base_name: "property_"
 
