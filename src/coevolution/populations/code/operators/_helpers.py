@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from coevolution.core.interfaces.language import ICodeParser
+from coevolution.strategies.llm_base import LLMSyntaxError
 
 
 class _CodeLLMHelpers:
@@ -17,5 +18,9 @@ class _CodeLLMHelpers:
     def _validated_code(self, code: str, starter_code: str, op: str) -> str:
         if not self._contains_starter_code(code, starter_code):
             raise ValueError(f"{op} result does not contain starter code structure.")
+        
+        if not self.parser.is_syntax_valid(code):
+            raise LLMSyntaxError("Generated code has invalid syntax")
+
         # Strip main blocks to keep snippets clean
         return self.parser.remove_main_block(code)

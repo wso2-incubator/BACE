@@ -16,6 +16,7 @@ from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 from infrastructure.languages import PythonLanguage
@@ -74,11 +75,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
             return
 
         if not self._python_lang.parser.is_syntax_valid(script):
-            logger.warning(
-                "PropertyTestInitializer: gen_inputs produced invalid Python. "
-                "Input-generator script discarded."
-            )
-            return
+            raise LLMSyntaxError("gen_inputs produced invalid Python")
 
         self.io_pair_cache.store_generator_script(script)
         logger.debug("PropertyTestInitializer: generator script cached.")
@@ -157,9 +154,9 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         candidates: list[str] = []
         for block in blocks:
             try:
-                if self._python_lang.parser.is_syntax_valid(block):
-                    candidates.append(block)
-            except LanguageTransformationError:
+                self._python_lang.parser.is_syntax_valid(block)
+                candidates.append(block)
+            except (LanguageTransformationError, LLMSyntaxError):
                 pass
 
         return candidates

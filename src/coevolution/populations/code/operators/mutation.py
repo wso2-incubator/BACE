@@ -14,6 +14,7 @@ from coevolution.core.interfaces import (
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 
@@ -32,6 +33,7 @@ class CodeMutationOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             LanguageParsingError,
             LanguageTransformationError,
             LLMGenerationError,
+            LLMSyntaxError,
         )
     )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:

@@ -19,6 +19,7 @@ from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 from .edit import AgentCoderEditOperator
@@ -54,6 +55,7 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
             LanguageParsingError,
             LanguageTransformationError,
             LLMGenerationError,
+            LLMSyntaxError,
         )
     )
     def _generate_initial(self, problem: Problem) -> CodeIndividual:
@@ -74,6 +76,7 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
         if not code_blocks:
             raise ValueError("AgentCoderInitializer: no code block in LLM response")
         code = code_blocks[-1]
+        self._validate_syntax(code)
 
         if not self.parser.contains_starter_code(code, problem.starter_code):
             raise ValueError(

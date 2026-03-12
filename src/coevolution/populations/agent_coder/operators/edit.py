@@ -21,6 +21,7 @@ from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 
@@ -57,6 +58,7 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
             LanguageParsingError,
             LanguageTransformationError,
             LLMGenerationError,
+            LLMSyntaxError,
         )
     )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
@@ -113,6 +115,7 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
         self._conversation_history.append({"role": "assistant", "content": response})
 
         edited_code = self._extract_code_block(response)
+        self._validate_syntax(edited_code)
         if not self.parser.contains_starter_code(edited_code, problem.starter_code):
             raise ValueError("AgentCoder edit result does not contain starter code")
 

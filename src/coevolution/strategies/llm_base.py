@@ -53,6 +53,10 @@ class LLMGenerationError(Exception):
     """Raised when LLM fails to generate output."""
 
 
+class LLMSyntaxError(Exception):
+    """Raised when LLM generates code with invalid syntax."""
+
+
 class BaseLLMService:
     """Abstract base service providing LLM orchestration.
 
@@ -105,6 +109,19 @@ class BaseLLMService:
         if blocks:
             return blocks[0]
         return response
+
+    def _validate_syntax(self, code: str) -> None:
+        """
+        Validate syntax of the provided code using the language parser.
+
+        Args:
+            code: The code to validate
+
+        Raises:
+            LLMSyntaxError: If the syntax is invalid
+        """
+        if not self.parser.is_syntax_valid(code):
+            raise LLMSyntaxError("Generated code has invalid syntax")
 
 
 class BaseLLMOperator[T: BaseIndividual](BaseLLMService, IOperator[T], ABC):
@@ -163,6 +180,7 @@ __all__ = [
     "ILanguageModel",
     "llm_retry",
     "LLMGenerationError",
+    "LLMSyntaxError",
     "BaseLLMService",
     "BaseLLMOperator",
     "BaseLLMInitializer",

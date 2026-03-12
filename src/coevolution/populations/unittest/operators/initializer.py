@@ -20,6 +20,7 @@ from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 from ._helpers import _TestLLMHelpers
@@ -66,6 +67,7 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
             LanguageParsingError,
             LanguageTransformationError,
             LLMGenerationError,
+            LLMSyntaxError,
         )
     )
     def _generate_test_functions(self, problem: Problem, target: int) -> list[str]:
@@ -76,6 +78,7 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
             starter_code=problem.starter_code,
         )
         response = self._generate(prompt)
+        self._validate_test_syntax(response)
 
         code_blocks = self.parser.extract_code_blocks(response)
         test_functions: list[str] = []

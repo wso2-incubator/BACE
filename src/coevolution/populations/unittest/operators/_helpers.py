@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from coevolution.core.interfaces.language import ICodeParser, LanguageParsingError
+from coevolution.strategies.llm_base import LLMSyntaxError
 
 
 class _TestLLMHelpers:
@@ -18,3 +19,8 @@ class _TestLLMHelpers:
         if not functions:
             raise LanguageParsingError("No test functions found in generated code")
         return functions[0]
+
+    def _validate_test_syntax(self, code: str) -> None:
+        """New: validate syntax of the test code."""
+        if not self.parser.is_syntax_valid(code):
+            raise LLMSyntaxError("Generated test code has invalid syntax")

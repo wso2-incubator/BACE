@@ -20,6 +20,7 @@ from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
 
@@ -125,6 +126,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 LanguageParsingError,
                 LanguageTransformationError,
                 LLMGenerationError,
+                LLMSyntaxError,
             )
         )
         def _make_plan() -> str:
@@ -141,6 +143,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 LanguageParsingError,
                 LanguageTransformationError,
                 LLMGenerationError,
+                LLMSyntaxError,
             )
         )
         def _code_from_plan(plan: str) -> tuple[str, str]:
