@@ -289,7 +289,13 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
                 by_type[tt].append(e)
 
             for tt, creations in by_type.items():
-                console.print(f"\n[bold]Initial {tt} Population[/bold]")
+                if tt.lower() == "private":
+                    continue # Skip private snippets during initialization as requested
+
+                # Rename FIXED -> PUBLIC for consistency
+                display_tt = "PUBLIC" if tt.upper() in ["FIXED", "PUBLIC"] else tt.upper()
+                
+                console.print(f"\n[bold]Initial {display_tt} Population[/bold]")
                 test_panels = []
                 for e in creations:
                     snippet = e.get("snippet", "")

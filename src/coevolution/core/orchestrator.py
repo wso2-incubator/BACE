@@ -250,10 +250,10 @@ class Orchestrator:
 
         # Create Fixed Test Populations
         public_pop = self._create_fixed_test_population_from_test_cases(
-            problem.public_test_cases, problem.starter_code
+            problem.public_test_cases, problem.starter_code, test_type="public"
         )
         private_pop = self._create_fixed_test_population_from_test_cases(
-            problem.private_test_cases, problem.starter_code
+            problem.private_test_cases, problem.starter_code, test_type="private"
         )
 
         # Initial Private Run (Baseline) - executor returns atomic InteractionData
@@ -770,7 +770,7 @@ class Orchestrator:
         return test_population
 
     def _create_fixed_test_population_from_test_cases(
-        self, test_cases: list[Test], starter_code: str
+        self, test_cases: list[Test], starter_code: str, test_type: str = "fixed"
     ) -> TestPopulation:
         """
         Create a fixed test population from dataset test cases.
@@ -814,7 +814,7 @@ class Orchestrator:
                 operation=ind.creation_op,
                 probability=ind.probability,
                 parents=ind.parents,  # type: ignore
-                test_type="fixed",  # Generic marker for public/private
+                test_type=test_type,
             )
 
         # Create and return the test population
