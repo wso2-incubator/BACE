@@ -36,12 +36,9 @@ from loguru import logger
 from coevolution.dataset import get_adapter
 from coevolution.factories import (
     OrchestratorBuilder,
+    PopulationDiscoveryService,
     ScheduleBuilder,
     build_orchestrator_from_config,
-    create_default_code_profile,
-    create_differential_test_profile,
-    create_public_test_profile,
-    create_unittest_test_profile,
 )
 from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
@@ -243,10 +240,6 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
 
     # Extract config sections
     llm_config = config.get("llm", {})
-    code_profile_config = config.get("code_profile", {})
-    unittest_profile_config = config.get("unittest_profile", {})
-    differential_profile_config = config.get("differential_profile", {})
-    public_profile_config = config.get("public_profile", {})
     sandbox_config = config.get("sandbox", {})
     schedule_config = config.get("schedule", {})
     dataset_config = config.get("dataset", {})
@@ -329,91 +322,28 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     # =========================================================================
     logger.info("Configuring Coevolution Strategy from config...")
 
-    # 1. Code Profile
-    code_profile = create_default_code_profile(
+    # 1. Discovery Service
+    discovery_service = PopulationDiscoveryService(
         llm_client=llm_client,
         language_adapter=language_adapter,
-        initial_prior=code_profile_config.get("initial_prior", 0.2),
-        initial_population_size=code_profile_config.get("initial_population_size", 10),
-        max_population_size=code_profile_config.get("max_population_size", 15),
-        offspring_rate=code_profile_config.get("offspring_rate", 0.3),
-        elitism_rate=code_profile_config.get("elitism_rate", 0.3),
-        mutation_rate=code_profile_config.get("mutation_rate", 0.2),
-        crossover_rate=code_profile_config.get("crossover_rate", 0.2),
-        edit_rate=code_profile_config.get("edit_rate", 0.6),
-        init_pop_batch_size=code_profile_config.get("init_pop_batch_size", 2),
-        llm_workers=code_profile_config.get("llm_workers", 10),
-        diversity_enabled=code_profile_config.get("diversity_enabled", True),
-        prob_assigner_strategy=code_profile_config.get("prob_assigner_strategy", "min"),
-        k_failing_tests=code_profile_config.get("k_failing_tests", 10),
-        planning_enabled=code_profile_config.get("planning_enabled", False),
-    )
-
-    # 2. Unittest Profile
-    unittest_profile = create_unittest_test_profile(
-        llm_client=llm_client,
-        language_adapter=language_adapter,
-        initial_prior=unittest_profile_config.get("initial_prior", 0.2),
-        initial_population_size=unittest_profile_config.get(
-            "initial_population_size", 20
-        ),
-        max_population_size=unittest_profile_config.get("max_population_size", 20),
-        offspring_rate=unittest_profile_config.get("offspring_rate", 0.8),
-        elitism_rate=unittest_profile_config.get("elitism_rate", 0.4),
-        mutation_rate=unittest_profile_config.get("mutation_rate", 0.3),
-        crossover_rate=unittest_profile_config.get("crossover_rate", 0.2),
-        prob_assigner_strategy=unittest_profile_config.get(
-            "prob_assigner_strategy", "min"
-        ),
-        edit_rate=unittest_profile_config.get("edit_rate", 0.5),
-        alpha=unittest_profile_config.get("alpha", 0.05),
-        beta=unittest_profile_config.get("beta", 0.2),
-        gamma=unittest_profile_config.get("gamma", 0.3),
-        learning_rate=unittest_profile_config.get("learning_rate", 0.1),
-        llm_workers=unittest_profile_config.get("llm_workers", cpu_count),
-        diversity_enabled=unittest_profile_config.get("diversity_enabled", True),
-    )
-
-    # 3. Differential Profile
-    differential_profile = create_differential_test_profile(
-        llm_client=llm_client,
-        language_adapter=language_adapter,
+        execution_system=execution_system,
         sandbox_config=differential_sandbox_config,
-        initial_prior=differential_profile_config.get("initial_prior", 0.2),
-        initial_population_size=differential_profile_config.get(
-            "initial_population_size", 0
-        ),
-        max_population_size=differential_profile_config.get("max_population_size", 100),
-        offspring_rate=differential_profile_config.get("offspring_rate", 0.5),
-        elitism_rate=differential_profile_config.get("elitism_rate", 0.3),
-        discovery_rate=differential_profile_config.get("discovery_rate", 1.0),
-        alpha=differential_profile_config.get("alpha", 0.05),
-        beta=differential_profile_config.get("beta", 0.2),
-        gamma=differential_profile_config.get("gamma", 0.3),
-        learning_rate=differential_profile_config.get("learning_rate", 0.1),
-        llm_workers=differential_profile_config.get("llm_workers", 4),
-        cpu_workers=differential_profile_config.get("cpu_workers", cpu_count),
-        max_pairs_per_group=differential_profile_config.get("max_pairs_per_group", 5),
-        prob_assigner_strategy=differential_profile_config.get(
-            "prob_assigner_strategy", "min"
-        ),
-        num_passing_tests_to_sample=differential_profile_config.get(
-            "num_passing_tests_to_sample", 5
-        ),
+        cpu_workers=cpu_count,
     )
 
-    # 4. Public Profile (optional)
-    public_profile = create_public_test_profile(
-        alpha=public_profile_config.get("alpha", 0.0),
-        beta=public_profile_config.get("beta", 0.2),
-        gamma=public_profile_config.get("gamma", 0.0),
-        learning_rate=public_profile_config.get("learning_rate", 0.1),
-    )
+    # 2. Construct Profiles
+    profiles = discovery_service.construct_all(config)
+    code_profile = profiles["code_profile"]
+    evolved_test_profiles = profiles["evolved_test_profiles"]
+    public_test_profile = profiles["public_test_profile"]
 
-    # 5. Schedule
+    if not code_profile:
+        raise ValueError("No code profile configured or constructed.")
+
+    # 3. Schedule
     schedule = ScheduleBuilder.from_config(schedule_config)
 
-    # 6. Orchestrator Configuration
+    # 4. Orchestrator Configuration
     builder = (
         OrchestratorBuilder()
         .with_composer(language_adapter.composer)
@@ -421,16 +351,13 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
         .with_code_profile(code_profile)
     )
 
-    # Add test profiles only if specified in config
-    if unittest_profile_config:
-        builder = builder.add_test_profile("unittest", unittest_profile)
+    # Add evolved test profiles
+    for test_type, profile in evolved_test_profiles.items():
+        builder = builder.add_test_profile(test_type, profile)
 
-    if differential_profile_config:
-        builder = builder.add_test_profile("differential", differential_profile)
-
-    # Add public test profile only if specified in config
-    if public_profile:
-        builder = builder.with_public_test_profile(public_profile)
+    # Add public test profile if it exists
+    if public_test_profile:
+        builder = builder.with_public_test_profile(public_test_profile)
 
     orchestrator_config = (
         builder.with_execution_system(execution_system)
@@ -438,7 +365,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
         .build()
     )
 
-    # 7. The Engine
+    # 5. The Engine
     orchestrator = build_orchestrator_from_config(orchestrator_config)
     logger.info("Orchestrator Engine Online.")
 

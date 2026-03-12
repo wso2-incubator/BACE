@@ -6,5 +6,6 @@ Adding a new population:
 """
 
 from . import agent_coder, code, differential, property, unittest
+from .registry import registry
 
-__all__ = ["code", "unittest", "differential", "agent_coder", "property"]
+__all__ = ["code", "unittest", "differential", "agent_coder", "property", "registry"]

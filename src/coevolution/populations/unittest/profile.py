@@ -25,9 +25,13 @@ from .operators.edit import UnittestEditOperator
 from .operators.initializer import UnittestInitializer
 
 
+from ..registry import registry
+
+@registry.test_factory("unittest")
 def create_unittest_test_profile(
     llm_client: LLMClient,
     language_adapter: ILanguage,
+    # ... (rest of parameters)
     initial_prior: float = 0.2,
     initial_population_size: int = 20,
     max_population_size: int = 20,
@@ -45,6 +49,7 @@ def create_unittest_test_profile(
     diversity_enabled: bool = True,
 ) -> TestProfile:
     """Create a unittest test population profile."""
+    # ... (function body)
     total_rate = mutation_rate + crossover_rate + edit_rate
     if not (0.99 <= total_rate <= 1.01):
         raise ValueError(f"Operation rates must sum to 1.0, got {total_rate:.4f}")
@@ -124,6 +129,7 @@ def create_unittest_test_profile(
     )
 
 
+@registry.public_factory("public")
 def create_public_test_profile(
     alpha: float = 0.001,
     beta: float = 0.1,
@@ -139,6 +145,5 @@ def create_public_test_profile(
             learning_rate=learning_rate,
         )
     )
-
 
 __all__ = ["create_unittest_test_profile", "create_public_test_profile"]

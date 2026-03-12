@@ -28,9 +28,13 @@ from .operators.edit import CodeEditOperator
 from .operators.initializer import CodeInitializer
 
 
+from ..registry import registry
+
+@registry.code_factory("default")
 def create_default_code_profile(
     llm_client: LLMClient,
     language_adapter: ILanguage,
+    # ... (rest of parameters)
     initial_prior: float = 0.2,
     initial_population_size: int = 10,
     max_population_size: int = 15,
@@ -47,6 +51,7 @@ def create_default_code_profile(
     planning_enabled: bool = False,
 ) -> CodeProfile:
     """Create a standard code population profile."""
+    # ... (function body)
     total_rate = mutation_rate + crossover_rate + edit_rate
     if not (0.99 <= total_rate <= 1.01):
         raise ValueError(
@@ -123,6 +128,5 @@ def create_default_code_profile(
         initializer=initializer,
         elite_selector=elite_selector,
     )
-
 
 __all__ = ["create_default_code_profile"]

@@ -85,32 +85,13 @@ class <Name>Initializer(BaseLLMInitializer[<Individual>]):
 ```python
 # populations/<name>/profile.py
 from coevolution.core.interfaces import CodeProfile, PopulationConfig   # or TestProfile
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
-from coevolution.strategies.probability.assigner import ProbabilityAssigner
-from coevolution.strategies.selection.parent_selection import RouletteWheelParentSelection
-from coevolution.strategies.selection.elite import TopKEliteSelector
-from .operators.mutation import <Name>MutationOperator
-from .operators.initializer import <Name>Initializer
+from ..registry import registry
 
+@registry.code_factory("<name>")  # or @registry.test_factory("<name>")
 def create_<name>_profile(llm_client, language_adapter, ...) -> CodeProfile:
     pop_config = PopulationConfig(...)
-    prob_assigner = ProbabilityAssigner(strategy="min", initial_prior=...)
-    parent_selector = RouletteWheelParentSelection()
-
-    mutation_op = <Name>MutationOperator(llm_client, language_adapter, parent_selector, prob_assigner)
-    breeder = Breeder(
-        registered_operators=[RegisteredOperator(weight=1.0, operator=mutation_op)],
-        llm_workers=4,
-    )
-    initializer = <Name>Initializer(llm=llm_client, language_adapter=language_adapter, pop_config=pop_config)
-    elite_selector = TopKEliteSelector()
-
-    return CodeProfile(
-        population_config=pop_config,
-        breeder=breeder,
-        initializer=initializer,
-        elite_selector=elite_selector,
-    )
+    # ... construction logic ...
+    return CodeProfile(...)
 ```
 
 ### 4. Write `__init__.py` files
@@ -126,33 +107,26 @@ __all__ = ["<Name>MutationOperator", "<Name>Initializer"]
 ```python
 # populations/<name>/__init__.py
 from .profile import create_<name>_profile
-from .operators import <Name>MutationOperator, <Name>Initializer
 
-__all__ = ["create_<name>_profile", "<Name>MutationOperator", "<Name>Initializer"]
+__all__ = ["create_<name>_profile"]
 ```
 
-### 5. Register in `factories/__init__.py`
+### 5. Ensure population is loaded
 
-This is the **only file outside the population folder** that needs to change:
+Update `src/coevolution/populations/__init__.py` to import your new subpackage:
 
 ```python
-# factories/__init__.py  — add one line
-from ..populations.<name>.profile import create_<name>_profile
+# src/coevolution/populations/__init__.py
+from . import <name>, ...
 ```
 
-And add the name to `__all__`.
+That's it! `main.py` will now automatically discover and construct your population if it's present in the experiment configuration.
 
 ---
 
-## Checklist
+## checklist
 
-- [ ] `populations/<name>/operators/_helpers.py` (if needed)
-- [ ] `populations/<name>/operators/mutation.py` / `crossover.py` / `edit.py`
 - [ ] `populations/<name>/operators/initializer.py`
-- [ ] `populations/<name>/operators/__init__.py`
-- [ ] `populations/<name>/profile.py`
-- [ ] `populations/<name>/__init__.py`
+- [ ] `populations/<name>/profile.py` (with `@registry` decorator)
 - [ ] `populations/__init__.py` — add `from . import <name>`
-- [ ] `factories/__init__.py` — import + add to `__all__`
-- [ ] `uv run mypy src/coevolution --ignore-missing-imports` → 0 errors
-- [ ] `uv run ruff check src` → All checks passed
+- [ ] `uv run python main.py run --config your_config.yaml --dry-run`

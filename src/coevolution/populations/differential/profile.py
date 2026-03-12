@@ -26,10 +26,14 @@ from .operators.discovery import DifferentialDiscoveryOperator
 from .operators.initializer import DifferentialInitializer
 
 
+from ..registry import registry
+
+@registry.test_factory("differential")
 def create_differential_test_profile(
     llm_client: LLMClient,
     language_adapter: ILanguage,
     sandbox_config: SandboxConfig,
+    # ... (parameters)
     initial_prior: float = 0.5,
     initial_population_size: int = 0,
     max_population_size: int = 20,
@@ -48,6 +52,7 @@ def create_differential_test_profile(
     num_passing_tests_to_sample: int = 5,
 ) -> TestProfile:
     """Create a differential test population profile."""
+    # ... (function body)
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -125,6 +130,5 @@ def create_differential_test_profile(
         elite_selector=elite_selector,
         bayesian_config=bayesian_config,
     )
-
 
 __all__ = ["create_differential_test_profile"]

@@ -16,41 +16,29 @@ from .operators.noop import NoOpOperator
 from .types import IOPairCache
 
 
+from ..registry import registry
+
+@registry.test_factory("property")
 def create_property_test_profile(
     llm_client: LLMClient,
     language_adapter: ILanguage,
+    # ... (rest of parameters)
     sandbox_config: SandboxConfig,
-    # Population parameters
     initial_prior: float = 0.5,
     initial_population_size: int = 10,
     max_population_size: int = 30,
     offspring_rate: float = 0.0,
     elitism_rate: float = 1.0,
-    # Bayesian parameters
     alpha: float = 0.05,
     beta: float = 0.3,
     gamma: float = 0.25,
     learning_rate: float = 0.1,
-    # Performance
     cpu_workers: int = 4,
     enable_multiprocessing: bool = True,
     num_inputs: int = 20,
 ) -> TestProfile:
-    """Create a complete property test population profile.
-
-    A single ``IOPairCache`` is created here and injected into both the
-    initializer and the evaluator — this is the shared bridge:
-
-    * The **initializer** stores the generator script in the cache during
-      ``initialize(problem)``.
-    * The **evaluator** reads the generator script from the cache on the first
-      call to ``execute_tests()`` and populates the IOPair table.
-
-    ``public_test_cases`` is **not** a profile-creation-time argument; it is
-    extracted from the ``Problem`` instance at operator runtime, consistent with
-    the orchestrator lifecycle (profiles are created once globally before any
-    ``Problem`` is loaded).
-    """
+    """Create a complete property test population profile."""
+    # ... (function body)
     pop_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -113,6 +101,5 @@ def create_property_test_profile(
         bayesian_config=bayesian_config,
         execution_system=evaluator,
     )
-
 
 __all__ = ["create_property_test_profile"]

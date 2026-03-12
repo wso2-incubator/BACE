@@ -22,17 +22,19 @@ from .operators.edit import AgentCoderEditOperator
 from .operators.initializer import AgentCoderInitializer
 
 
+from ..registry import registry
+
+@registry.code_factory("agent_coder")
 def create_agent_coder_code_profile(
     llm_client: LLMClient,
     language_adapter: ILanguage,
+    # ... (rest of parameters)
     initial_prior: float = 0.2,
     llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
 ) -> CodeProfile:
-    """Create an AgentCoder (iterative repair) code profile.
-
-    Fixed population of 1, edit-only, stateful conversation history.
-    """
+    """Create an AgentCoder (iterative repair) code profile."""
+    # ... (function body)
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=1,
@@ -78,6 +80,5 @@ def create_agent_coder_code_profile(
         initializer=initializer,
         elite_selector=elite_selector,
     )
-
 
 __all__ = ["create_agent_coder_code_profile"]
