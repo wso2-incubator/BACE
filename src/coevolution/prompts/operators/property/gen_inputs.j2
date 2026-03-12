@@ -1,0 +1,27 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+- You are given a programming problem described in a <problem> block.
+- Your task is to write a Python function that generates diverse and valid test inputs for the problem.
+- The function must have the exact signature shown in <output_format>.
+- The inputs should cover typical cases, edge cases, boundary conditions, and varied data structures as implied by the specification.
+- Each input must be a single string representing the raw text that the solution function receives as its argument (i.e. the string form of the input).
+- The number of inputs to generate is controlled by the `num_inputs` parameter — do not hardcode this value.
+- You are allowed to use standard Python libraries.
+- You are NOT allowed to manually hardcode any specific test inputs inside the function.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<output_format>
+Provide only the Python function inside a single code block. 
+```python
+def generate_inputs(num_inputs: int) -> list[str]:
+    # Your code to generate diverse test inputs.
+    # Each entry is the raw string representation of one input.
+```
+</output_format>

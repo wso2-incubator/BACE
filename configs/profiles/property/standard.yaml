@@ -1,0 +1,12 @@
+initial_prior: 0.5
+initial_population_size: 10
+max_population_size: 30
+offspring_rate: 0.8
+elitism_rate: 1.0
+
+alpha: 0.05
+beta: 0.3
+gamma: 0.25
+learning_rate: 0.1
+
+cpu_workers: 4

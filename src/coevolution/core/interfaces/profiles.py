@@ -4,7 +4,7 @@ Profile classes for bundling population configurations and strategies.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .config import BayesianConfig, PopulationConfig
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .initializer import IPopulationInitializer
     from .language import IScriptComposer
     from .selection import IEliteSelectionStrategy
-    from .systems import IBeliefUpdater, IExecutionSystem, LedgerFactory
+    from .systems import IBeliefUpdater, IExecutionSystem, LedgerFactory  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -71,6 +71,7 @@ class TestProfile:
     initializer: "IPopulationInitializer[TestIndividual]"
     elite_selector: "IEliteSelectionStrategy[TestIndividual]"
     bayesian_config: BayesianConfig
+    execution_system: "Optional[IExecutionSystem]" = None
 
 
 @dataclass(frozen=True)

@@ -303,7 +303,9 @@ class Orchestrator:
 
         # Execute evolved test populations
         for test_type, test_pop in evolved_test_pops.items():
-            interaction = self.execution_system.execute_tests(code_pop, test_pop)
+            profile = self.evolved_test_profiles[test_type]
+            exec_sys = profile.execution_system or self.execution_system
+            interaction = exec_sys.execute_tests(code_pop, test_pop)
             interactions[test_type] = interaction
             logging_utils.log_observation_matrix(
                 code_pop.generation,

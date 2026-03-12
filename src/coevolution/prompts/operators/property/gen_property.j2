@@ -1,0 +1,44 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem and a starter code template.
+Generate correct Python functions that assert specific properties or invariants
+a correct solution must satisfy.
+
+Each function must have this exact signature:
+    def property_<descriptive_name>(inputdata, output):
+        ...
+        return True   # property holds
+        # or
+        return False  # property violated
+
+Rules:
+- `inputdata` and `output` are raw strings (the exact text the solution receives/produces).
+- Return True if the property holds for this input/output pair, False otherwise.
+- Each function must test ONE distinct property (e.g. sorted order, length constraint,
+  non-negativity, idempotency, commutativity, symmetry, range bounds).
+- Generate as many independent properties as you can identify.
+- Wrap each function in its own ```python ... ``` code block.
+- Do NOT import anything outside the standard library.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+{% if code_samples is defined and code_samples %}
+
+<code_samples>
+The following high-scoring solution samples may help you identify meaningful properties:
+{% for sample in code_samples %}
+```
+{{ sample }}
+```
+{% endfor %}
+</code_samples>
+{% endif %}

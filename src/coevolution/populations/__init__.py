@@ -5,6 +5,6 @@ Adding a new population:
 2. Import the factory in factories/__init__.py
 """
 
-from . import code, unittest, differential, agent_coder
+from . import agent_coder, code, differential, property, unittest
 
-__all__ = ["code", "unittest", "differential", "agent_coder"]
+__all__ = ["code", "unittest", "differential", "agent_coder", "property"]

@@ -9,15 +9,16 @@ Adding a new population:
 2. Import the factory function below.
 """
 
+from ..populations.agent_coder.profile import create_agent_coder_code_profile
+from ..populations.code.profile import create_default_code_profile
+from ..populations.differential.profile import create_differential_test_profile
+from ..populations.property.profile import create_property_test_profile
+from ..populations.unittest.profile import (
+    create_public_test_profile,
+    create_unittest_test_profile,
+)
 from .orchestrator import OrchestratorBuilder, build_orchestrator_from_config
 from .schedule import ScheduleBuilder
-from ..populations.code.profile import create_default_code_profile
-from ..populations.agent_coder.profile import create_agent_coder_code_profile
-from ..populations.unittest.profile import (
-    create_unittest_test_profile,
-    create_public_test_profile,
-)
-from ..populations.differential.profile import create_differential_test_profile
 
 __all__ = [
     # Builders
@@ -29,5 +30,6 @@ __all__ = [
     "create_unittest_test_profile",
     "create_public_test_profile",
     "create_differential_test_profile",
+    "create_property_test_profile",
     "build_orchestrator_from_config",
 ]
