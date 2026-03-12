@@ -25,6 +25,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
     from loguru import Record
 
     from coevolution.core.interfaces import Problem
@@ -140,12 +141,15 @@ def setup_logging(
 
     if is_main_process:
         from coevolution.utils.paths import sanitize_id
+
         sanitized_run_id = sanitize_id(run_id)
         sanitized_pid = sanitize_id(problem_id)
-        
+
         # MAIN PROCESS: Writes to the master trace log and the evolutionary history
         trace_path = f"logs/{sanitized_run_id}/trace.jsonl"
-        history_path = f"logs/{sanitized_run_id}/{sanitized_pid}/evolutionary_history.jsonl"
+        history_path = (
+            f"logs/{sanitized_run_id}/{sanitized_pid}/evolutionary_history.jsonl"
+        )
 
         logger.add(
             trace_path,
@@ -612,6 +616,18 @@ def log_observation_matrix(
     )
 
     _log_observation_matrix_statistics(observation_matrix)
+
+    # Log as pandas DataFrame for better readability in trace logs
+    try:
+        df = pd.DataFrame(
+            observation_matrix,
+            index=[f"code_{cid[:8]}" for cid in code_ids],
+            columns=[f"test_{tid[:8]}" for tid in test_ids],
+        )
+        logger.info(f"Observation Matrix ({test_type}):\n{df}")
+    except Exception as e:
+        logger.warning(f"Could not log observation matrix as DataFrame: {e}")
+
     return
 
 
