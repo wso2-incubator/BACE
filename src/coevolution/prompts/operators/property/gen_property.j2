@@ -31,14 +31,12 @@ Rules:
 <starter_code>
 {{ starter_code }}
 </starter_code>
-{% if code_samples is defined and code_samples %}
 
-<code_samples>
-The following high-scoring solution samples may help you identify meaningful properties:
-{% for sample in code_samples %}
-```
-{{ sample }}
-```
-{% endfor %}
-</code_samples>
-{% endif %}
+<input/output format>
+If input is via stdin/json, each entry will be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry will be of the form:
+{"param1": value1, "param2": value2, ...}
+
+Output format will simply be a string of the output value. 
+</input/output format>
