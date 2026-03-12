@@ -327,8 +327,10 @@ def get_problem_ids(
                 if extra.get("run_id") == run_id:
                     legacy_run_files.add(fpath)
                     pid = extra.get("problem_id")
-                    if pid: problem_ids.add(pid)
-            except Exception: continue
+                    if pid:
+                        problem_ids.add(pid)
+            except Exception:
+                continue
 
     return problem_ids, sorted(list(legacy_run_files))
 
@@ -354,7 +356,9 @@ def get_run_ids(
             try:
                 log_entry = json.loads(line_str)
                 rid = log_entry.get("record", {}).get("extra", {}).get("run_id")
-                if rid: run_ids.add(rid)
-            except Exception: continue
+                if rid:
+                    run_ids.add(rid)
+            except Exception:
+                continue
 
     return run_ids

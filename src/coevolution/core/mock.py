@@ -1,7 +1,6 @@
 # /path/to/your/project/mock.py
 from dataclasses import dataclass
-import typing
-from typing import Literal, cast, Any
+from typing import Literal, cast
 
 import numpy as np
 from loguru import logger

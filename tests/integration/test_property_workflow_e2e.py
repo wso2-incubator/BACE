@@ -70,6 +70,22 @@ SORT_PROBLEM = Problem(
     private_test_cases=[],
 )
 
+ADD_PROBLEM = Problem(
+    question_title="add",
+    question_content=(
+        "Given two integers x and y, return their sum.\n"
+        "Example: add(2, 3) should return 5."
+    ),
+    question_id="integration/add",
+    starter_code="def add(x: int, y: int) -> int:\n    ...\n",
+    public_test_cases=[
+        Test(input="2 3", output="5"),
+        Test(input="0 0", output="0"),
+        Test(input="-1 1", output="0"),
+    ],
+    private_test_cases=[],
+)
+
 # ── Code snippets under test ──────────────────────────────────────────────────
 
 # Correct: returns a sorted copy of the input
@@ -77,6 +93,12 @@ CORRECT_SORT = "def sort(lst):\n    return sorted(lst)\n"
 
 # Buggy: returns the list unchanged — fails on any unsorted input
 BUGGY_SORT = "def sort(lst):\n    return lst\n"
+
+# Correct: returns x + y
+CORRECT_ADD = "def add(x, y):\n    return x + y\n"
+
+# Buggy: always returns x (ignores y)
+BUGGY_ADD = "def add(x, y):\n    return x\n"
 
 # ── LLM response printer ─────────────────────────────────────────────────────
 
@@ -160,6 +182,32 @@ def evaluator(property_profile: TestProfile) -> PropertyTestEvaluator:
     """Typed evaluator extracted from the profile — avoids repeated isinstance casts."""
     assert isinstance(property_profile.execution_system, PropertyTestEvaluator)
     return property_profile.execution_system
+
+
+@pytest.fixture(scope="module")
+def add_profile(llm_client: LLMClient, sandbox_config: SandboxConfig) -> TestProfile:
+    """Fresh property test profile for the add problem — isolated IOPairCache."""
+    return create_property_test_profile(
+        llm_client=llm_client,
+        language_adapter=PythonLanguage(),
+        sandbox_config=sandbox_config,
+        initial_population_size=5,
+        max_population_size=10,
+        num_inputs=5,
+        enable_multiprocessing=False,
+    )
+
+
+@pytest.fixture(scope="module")
+def add_evaluator(add_profile: TestProfile) -> PropertyTestEvaluator:
+    assert isinstance(add_profile.execution_system, PropertyTestEvaluator)
+    return add_profile.execution_system
+
+
+@pytest.fixture(scope="module")
+def add_individuals(add_profile: TestProfile) -> IndividualsList:
+    """Initialize property tests for the add problem once per module."""
+    return add_profile.initializer.initialize(ADD_PROBLEM)
 
 
 @pytest.fixture(scope="module")
@@ -506,6 +554,83 @@ class TestIOPairCacheE2E:
         assert evaluator.io_pair_cache.has(ind.id), (
             f"Individual {ind.id!r} was not added to the cache after execute_tests."
         )
+
+
+# ── Add problem E2E ──────────────────────────────────────────────────────────
+
+
+@REQUIRES_OPENAI
+class TestAddProblemE2E:
+    """End-to-end tests for the integer-addition problem.
+
+    Verifies that the property test workflow generalises beyond sorting:
+    the LLM must generate properties like commutativity, identity element,
+    integer type preservation, etc.
+    """
+
+    def test_returns_at_least_one_individual(
+        self, add_individuals: IndividualsList
+    ) -> None:
+        assert len(add_individuals) >= 1, (
+            "Expected at least one property individual for the add problem."
+        )
+
+    def test_all_snippets_define_a_property_function(
+        self, add_individuals: IndividualsList
+    ) -> None:
+        for ind in add_individuals:
+            first_line = ind.snippet.lstrip().split("\n")[0]
+            assert first_line.startswith("def property_"), (
+                f"Snippet does not start with 'def property_'.\nFirst line: {first_line!r}"
+            )
+
+    def test_generator_script_cached(
+        self, add_individuals: IndividualsList, add_evaluator: PropertyTestEvaluator
+    ) -> None:
+        _ = add_individuals
+        script = add_evaluator.io_pair_cache.get_generator_script()
+        assert script is not None, "No generator script cached for add problem."
+        assert "generate_inputs" in script
+
+    def test_correct_add_passes_at_least_one_property(
+        self,
+        add_individuals: IndividualsList,
+        add_evaluator: PropertyTestEvaluator,
+    ) -> None:
+        code_pop = _make_code_pop([CORRECT_ADD])
+        test_pop = TestPopulation(add_individuals)
+        result = add_evaluator.execute_tests(code_pop, test_pop)
+        correct_passes = int(result.observation_matrix[0].sum())
+        assert correct_passes >= 1, (
+            f"Correct add passed 0/{test_pop.size} property tests.\n"
+            + "\n---\n".join(ind.snippet for ind in add_individuals)
+        )
+
+    def test_correct_add_passes_more_than_buggy(
+        self,
+        add_individuals: IndividualsList,
+        add_evaluator: PropertyTestEvaluator,
+    ) -> None:
+        """Correct add should score >= buggy add (which ignores y)."""
+        code_pop = _make_code_pop([CORRECT_ADD, BUGGY_ADD])
+        test_pop = TestPopulation(add_individuals)
+        result = add_evaluator.execute_tests(code_pop, test_pop)
+        correct_score = int(result.observation_matrix[0].sum())
+        buggy_score = int(result.observation_matrix[1].sum())
+        assert correct_score >= buggy_score, (
+            f"Correct add (score={correct_score}) did not beat "
+            f"buggy add (score={buggy_score}).\n{result.observation_matrix}"
+        )
+
+    def test_observation_matrix_shape(
+        self,
+        add_individuals: IndividualsList,
+        add_evaluator: PropertyTestEvaluator,
+    ) -> None:
+        code_pop = _make_code_pop([CORRECT_ADD, BUGGY_ADD])
+        test_pop = TestPopulation(add_individuals)
+        result = add_evaluator.execute_tests(code_pop, test_pop)
+        assert result.observation_matrix.shape == (2, len(add_individuals))
 
 
 # ── Full pipeline smoke test ───────────────────────────────────────────────────

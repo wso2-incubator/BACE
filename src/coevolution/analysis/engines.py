@@ -16,8 +16,10 @@ def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
         for p in phases:
             duration = p.get("duration", 0)
             if isinstance(duration, str):
-                try: duration = int(duration)
-                except ValueError: duration = 0
+                try:
+                    duration = int(duration)
+                except ValueError:
+                    duration = 0
             
             for _ in range(duration):
                 epochs.append({
@@ -29,11 +31,14 @@ def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
     # CASE 2: Dictionary of phases (e.g. {"warmup": {"duration": 5}})
     elif isinstance(schedule_data, dict):
         for name, p in schedule_data.items():
-            if not isinstance(p, dict): continue
+            if not isinstance(p, dict):
+                continue
             duration = p.get("duration", 0)
             if isinstance(duration, str):
-                try: duration = int(duration)
-                except ValueError: duration = 0
+                try:
+                    duration = int(duration)
+                except ValueError:
+                    duration = 0
                 
             for _ in range(duration):
                 epochs.append({
