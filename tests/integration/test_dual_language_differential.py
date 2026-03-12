@@ -1,10 +1,11 @@
-from infrastructure.languages.python import PythonLanguage
-from infrastructure.languages.ballerina import BallerinaLanguage
 """Integration test for dual-language differential testing: Python generators + Ballerina code."""
 
 import pytest
-
+from infrastructure.languages.ballerina import BallerinaLanguage
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
+
+pytestmark = pytest.mark.integration
 
 
 class TestDualLanguageDifferentialTesting:
@@ -176,4 +177,5 @@ print(generate_test_inputs(5))
         assert math.isinf(test_inputs[1]["x"]) and test_inputs[1]["x"] > 0
         assert math.isinf(test_inputs[2]["x"]) and test_inputs[2]["x"] < 0
         assert math.isnan(test_inputs[3]["x"])
+        assert test_inputs[4]["x"] == 0.0
         assert test_inputs[4]["x"] == 0.0

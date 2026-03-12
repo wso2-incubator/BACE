@@ -1,7 +1,9 @@
-from infrastructure.languages.python import PythonLanguage
-# Integration test for DifferentialFinder using the real SafeCodeSandbox.
+import pytest
 from coevolution.populations.differential.finder import DifferentialFinder
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
+
+pytestmark = pytest.mark.integration
 
 
 def test_integration_differential_finder_real_execution() -> None:

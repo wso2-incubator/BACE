@@ -317,6 +317,7 @@ class TestExecutionCache:
                 )
 
 
+@pytest.mark.integration
 class TestIntegrationConcurrency:
     def test_multiprocessing_serialization(
         self, mock_populations: tuple[MagicMock, MagicMock], basic_config: SandboxConfig

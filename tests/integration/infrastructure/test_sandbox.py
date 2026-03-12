@@ -12,6 +12,10 @@ from infrastructure.sandbox import (
 )
 from infrastructure.languages.python import PythonLanguage
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 class TestSubprocessSandboxExecution:
     """Test cases for the high-level execution methods in SubprocessSandbox."""

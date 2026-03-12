@@ -45,6 +45,8 @@ from infrastructure.llm_client import create_llm_client
 from infrastructure.llm_client.base import LLMClient
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
+pytestmark = pytest.mark.integration
+
 # ── Skip guard ────────────────────────────────────────────────────────────────
 
 REQUIRES_OPENAI = pytest.mark.skipif(

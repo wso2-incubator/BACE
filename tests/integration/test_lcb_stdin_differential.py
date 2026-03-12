@@ -1,4 +1,3 @@
-from infrastructure.languages.python import PythonLanguage
 """
 Integration test for LCB STDIN-style problems with differential testing.
 
@@ -6,11 +5,16 @@ This test verifies that when a method returns str (like LCB STDIN problems),
 the differential test generation preserves string outputs correctly.
 """
 
+import pytest
 from coevolution.populations.differential.finder import DifferentialFinder
 from coevolution.populations.differential.operators.llm_operator import (
     DifferentialLLMOperator,
 )
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
+
+
+pytestmark = pytest.mark.integration
 
 
 def test_lcb_stdin_differential_preserves_string_outputs() -> None:
@@ -55,7 +59,12 @@ if __name__ == "__main__":
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     lang = PythonLanguage()
     finder = DifferentialFinder(
-        parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        parser=lang.parser,
+        composer=lang.composer,
+        runtime=lang.runtime,
+        sandbox_config=sandbox_config,
+        enable_multiprocessing=True,
+        cpu_workers=4,
     )
 
     results = finder.find_differential(
@@ -81,7 +90,10 @@ if __name__ == "__main__":
     from unittest.mock import MagicMock
 
     mock_llm = MagicMock()
-    lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
+    lang = PythonLanguage()
+    operator = DifferentialLLMOperator(
+        llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python"
+    )
 
     # Convert first divergence to IO pair
     div = results[0]
@@ -119,4 +131,5 @@ class Solution:
         f"Test should NOT expect integer 10, but got: {test_method}"
     )
 
+    print("✓ LCB STDIN differential test correctly preserves string outputs")
     print("✓ LCB STDIN differential test correctly preserves string outputs")

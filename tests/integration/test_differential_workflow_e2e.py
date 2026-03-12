@@ -1,4 +1,3 @@
-from infrastructure.languages.python import PythonLanguage
 """
 End-to-end test demonstrating the full differential testing workflow
 for class-based starter codes like beautifulNumbers.
@@ -10,6 +9,8 @@ This test verifies the entire pipeline:
 4. Test class integration
 """
 
+from infrastructure.languages.python import PythonLanguage
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,6 +20,8 @@ from coevolution.populations.differential.operators.llm_operator import (
     DifferentialLLMOperator,
 )
 from infrastructure.sandbox import SandboxConfig
+
+pytestmark = pytest.mark.integration
 
 
 class TestBeautifulNumbersEndToEnd:
@@ -113,7 +116,13 @@ if __name__ == "__main__":
 
         # --- Step 4: Build Test Methods from Differential IO Pairs ---
         mock_llm = MagicMock()
-        lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
+        lang = PythonLanguage()
+        operator = DifferentialLLMOperator(
+            llm=mock_llm,
+            parser=lang.parser,
+            composer=lang.composer,
+            language_name="python",
+        )
 
         test_methods = []
         for idx, diff_result in enumerate(differential_results):
@@ -246,7 +255,13 @@ class Solution:
 """
 
         mock_llm = MagicMock()
-        lang = PythonLanguage(); operator = DifferentialLLMOperator(llm=mock_llm, parser=lang.parser, composer=lang.composer, language_name="python")
+        lang = PythonLanguage()
+        operator = DifferentialLLMOperator(
+            llm=mock_llm,
+            parser=lang.parser,
+            composer=lang.composer,
+            language_name="python",
+        )
 
         # Simulate multiple differential findings
         differential_io_pairs = [
@@ -276,4 +291,5 @@ class Solution:
         # Verify each contains the correct input values in the ast inputs
         assert "'1', '10'" in test_methods[0]
         assert "'10', '20'" in test_methods[1]
+        assert "'20', '30'" in test_methods[2]
         assert "'20', '30'" in test_methods[2]

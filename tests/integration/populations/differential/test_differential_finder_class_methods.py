@@ -1,13 +1,9 @@
-from infrastructure.languages.python import PythonLanguage
-"""
-Integration tests for DifferentialFinder with class-based starter codes.
-
-These tests verify that the entire differential testing workflow works correctly
-for class methods with various parameter types, not just simple input_str/output_str.
-"""
-
+import pytest
 from coevolution.populations.differential.finder import DifferentialFinder
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
+
+pytestmark = pytest.mark.integration
 
 
 class TestDifferentialFinderClassMethods:
@@ -58,7 +54,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -125,7 +122,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -186,7 +184,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -242,7 +241,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -310,7 +310,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -357,7 +358,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
@@ -407,7 +409,8 @@ if __name__ == "__main__":
         sandbox_config = SandboxConfig(
             timeout=5, max_memory_mb=200, max_output_size=50_000
         )
-        lang=PythonLanguage(); finder = DifferentialFinder(
+        lang = PythonLanguage()
+        finder = DifferentialFinder(
             parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
         )
 
