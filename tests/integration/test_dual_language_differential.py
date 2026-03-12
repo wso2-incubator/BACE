@@ -5,7 +5,6 @@ from infrastructure.languages.ballerina import BallerinaLanguage
 import pytest
 
 from infrastructure.sandbox import SandboxConfig, create_sandbox
-from infrastructure.sandbox.executor import TestExecutor
 
 
 class TestDualLanguageDifferentialTesting:
@@ -48,8 +47,7 @@ print(generate_test_inputs(5))
 
         # Compose and execute generator script
         composed_script = python.composer.compose_generator_script(python_generator, 5)
-        executor = TestExecutor(sandbox_adapter=python_sandbox, language_adapter=python)
-        result = executor.execute_code(composed_script)
+        result = python_sandbox.execute_code(composed_script, python.runtime)
 
         assert result.success, f"Generator should execute successfully: {result.error}"
 
@@ -82,7 +80,6 @@ public function add(int a, int b) returns int {
             timeout=30, max_memory_mb=200, max_output_size=50_000, language="ballerina"
         )
         ballerina_sandbox = create_sandbox(ballerina_config)
-        ballerina_executor = TestExecutor(sandbox_adapter=ballerina_sandbox, language_adapter=ballerina)
 
         results_a = []
         results_b = []
@@ -98,7 +95,7 @@ public function add(int a, int b) returns int {
             script_a = ballerina.composer.compose_evaluation_script(
                 ballerina_code_correct, input_formatted
             )
-            output_a = ballerina_executor.execute_code(script_a)
+            output_a = ballerina_sandbox.execute_code(script_a, ballerina.runtime)
             assert output_a.success, f"Correct code should execute: {output_a.error}"
             results_a.append(int(output_a.output.strip()))
 
@@ -106,7 +103,7 @@ public function add(int a, int b) returns int {
             script_b = ballerina.composer.compose_evaluation_script(
                 ballerina_code_buggy, input_formatted
             )
-            output_b = ballerina_executor.execute_code(script_b)
+            output_b = ballerina_sandbox.execute_code(script_b, ballerina.runtime)
             assert output_b.success, f"Buggy code should execute: {output_b.error}"
             results_b.append(int(output_b.output.strip()))
 
@@ -159,10 +156,9 @@ print(generate_test_inputs(5))
             timeout=5, max_memory_mb=200, max_output_size=50_000, language="python"
         )
         python_sandbox = create_sandbox(python_config)
-        executor = TestExecutor(sandbox_adapter=python_sandbox, language_adapter=python)
 
         composed_script = python.composer.compose_generator_script(python_generator, 5)
-        result = executor.execute_code(composed_script)
+        result = python_sandbox.execute_code(composed_script, python.runtime)
 
         assert result.success, "Generator should execute successfully"
 

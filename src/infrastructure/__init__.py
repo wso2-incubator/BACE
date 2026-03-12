@@ -13,8 +13,6 @@ This module provides shared functionality including:
 Usage:
     from infrastructure.languages import PythonLanguage, BallerinaLanguage
     from infrastructure import LLMClient, SafeCodeSandbox
-    from infrastructure.config import BaseConfig, ExperimentConfig
-    from coevolution.core.interfaces import LanguageParsingError, LanguageTransformationError
 """
 
 from coevolution.core.exceptions import (
@@ -31,10 +29,8 @@ from .sandbox import (
     CodeExecutionTimeoutError,
     SafeCodeSandbox,
     SandboxConfig,
-    TestExecutor,
     check_test_execution_status,
     create_safe_test_environment,
-    create_test_executor,
 )
 
 __all__ = [
@@ -53,9 +49,6 @@ __all__ = [
     "EvaluationResult",
     "CodeExecutionError",
     "CodeExecutionTimeoutError",
-    # New architecture
-    "TestExecutor",
-    "create_test_executor",
 ]
 __version__ = "0.1.0"
 __version__ = "0.1.0"

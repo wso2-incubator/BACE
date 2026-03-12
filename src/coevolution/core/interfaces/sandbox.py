@@ -7,8 +7,10 @@ from typing import Protocol
 
 from coevolution.core.interfaces.data import (
     BasicExecutionResult,
+    EvaluationResult,
     SandboxConfig,
 )
+from coevolution.core.interfaces.language import ILanguageRuntime, ITestAnalyzer
 
 
 class ISandbox(Protocol):
@@ -41,5 +43,36 @@ class ISandbox(Protocol):
 
         Returns:
             BasicExecutionResult with success status, output, errors, and timing
+        """
+        ...
+
+    def execute_test_script(
+        self, test_script: str, runtime: ILanguageRuntime, analyzer: ITestAnalyzer
+    ) -> EvaluationResult:
+        """
+        Execute a complete test script and return analyzed results.
+
+        Args:
+            test_script: The complete source code of the test script.
+            runtime: Language-specific runtime to get commands.
+            analyzer: Language-specific analyzer to parse output.
+
+        Returns:
+            EvaluationResult: Structured test execution result.
+        """
+        ...
+
+    def execute_code(
+        self, code: str, runtime: ILanguageRuntime
+    ) -> BasicExecutionResult:
+        """
+        Execute an arbitrary code snippet and return the raw output.
+
+        Args:
+            code: The source code to execute.
+            runtime: Language-specific runtime to get commands.
+
+        Returns:
+            BasicExecutionResult: Raw execution result.
         """
         ...

@@ -11,18 +11,16 @@ Structure:
 - executor: TestExecutor for high-level test orchestration
 - utils: Utility functions and factory methods
 
-Usage:
-    from infrastructure.sandbox import SafeCodeSandbox, TestExecutor
-    from infrastructure.sandbox import create_safe_test_environment, create_test_executor
+usage:
+    from infrastructure.sandbox import SubprocessSandbox, create_sandbox
+    from infrastructure.sandbox import create_safe_test_environment
 
     # High-level API (recommended)
-    executor = create_test_executor()
-    result = executor.execute_test_script(test_code)
-
-    # Low-level API (for more control)
     sandbox = create_safe_test_environment()
-    basic_result = sandbox.execute_code(code)
-    test_result = sandbox.execute_test_script(test_code)
+    test_result = sandbox.execute_test_script(test_code, runtime, analyzer)
+
+    # Standard command execution
+    basic_result = sandbox.execute_command(cmd)
 """
 
 from coevolution.core.interfaces.data import EvaluationResult
@@ -30,12 +28,10 @@ from coevolution.core.interfaces.sandbox import ISandbox
 
 from .adapters.generic import SubprocessSandbox
 from .exceptions import CodeExecutionError, CodeExecutionTimeoutError
-from .executor import TestExecutor
 from .types import BasicExecutionResult, SandboxConfig
 from .utils import (
     check_test_execution_status,
     create_safe_test_environment,
-    create_test_executor,
 )
 
 # Alias for backward compatibility
@@ -54,7 +50,6 @@ __all__ = [
     "SubprocessSandbox",
     "SafeCodeSandbox",
     "ISandbox",
-    "TestExecutor",
     # Data types
     "EvaluationResult",
     "BasicExecutionResult",
@@ -66,6 +61,5 @@ __all__ = [
     "create_sandbox",
     # Utility functions
     "create_safe_test_environment",
-    "create_test_executor",
     "check_test_execution_status",
 ]

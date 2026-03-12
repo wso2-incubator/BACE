@@ -7,20 +7,21 @@ Refactored for single-test pytest architecture.
 from coevolution.core.interfaces.data import EvaluationResult
 from infrastructure.sandbox import (
     SafeCodeSandbox,
-    TestExecutor,
     check_test_execution_status,
     create_safe_test_environment,
 )
+from infrastructure.languages.python import PythonLanguage
 
 
-class TestTestExecutorWrapper:
-    """Test cases for the high-level TestExecutor."""
+class TestSubprocessSandboxExecution:
+    """Test cases for the high-level execution methods in SubprocessSandbox."""
 
     def setup_method(self) -> None:
         """Set up test fixtures."""
         from infrastructure.sandbox.types import SandboxConfig
         config = SandboxConfig(timeout=30)
-        self.executor = TestExecutor(config=config)
+        self.sandbox = SafeCodeSandbox(config=config)
+        self.python = PythonLanguage()
 
     def test_basic_execution(self) -> None:
         """Test basic code execution via execute_code."""
@@ -31,7 +32,7 @@ def add(a, b):
 result = add(2, 3)
 print(result)
 """
-        result = self.executor.execute_code(code)
+        result = self.sandbox.execute_code(code, self.python.runtime)
         assert result.success
         assert "5" in result.output
         assert result.error is None or result.error == ""
@@ -43,7 +44,7 @@ print(result)
 def broken_function(
     print("This has a syntax error")
 """
-        result = self.executor.execute_code(code)
+        result = self.sandbox.execute_code(code, self.python.runtime)
         assert not result.success
         assert "SyntaxError" in result.error or "syntax" in result.error.lower()
 
@@ -55,8 +56,8 @@ while True:
 """
         from infrastructure.sandbox.types import SandboxConfig
         config = SandboxConfig(timeout=1)
-        executor = TestExecutor(config=config)
-        result = executor.execute_code(code)
+        sandbox = SafeCodeSandbox(config=config)
+        result = sandbox.execute_code(code, self.python.runtime)
         assert not result.success
         assert result.timeout is True
 
@@ -66,7 +67,7 @@ while True:
 def test_addition():
     assert 2 + 2 == 4
 """
-        result = self.executor.execute_test_script(test_script)
+        result = self.sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert isinstance(result, EvaluationResult)
         assert result.status == "passed"
         assert result.execution_time >= 0
@@ -77,7 +78,7 @@ def test_addition():
 def test_failing():
     assert 1 + 1 == 3
 """
-        result = self.executor.execute_test_script(test_script)
+        result = self.sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert result.status == "failed"
         assert result.error_log is not None
         assert "AssertionError" in result.error_log
@@ -88,7 +89,7 @@ def test_failing():
 def test_error():
     raise ValueError("Something went wrong")
 """
-        result = self.executor.execute_test_script(test_script)
+        result = self.sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert result.status in ["failed", "error"]
         assert result.error_log is not None
         assert "ValueError: Something went wrong" in result.error_log
@@ -99,7 +100,7 @@ def test_error():
 def test_broken(:
     pass
 """
-        result = self.executor.execute_test_script(test_script)
+        result = self.sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert result.status == "error"
         assert result.error_log is not None
         assert (
@@ -114,7 +115,7 @@ import nonexistent_module_xyz
 def test_something():
     pass
 """
-        result = self.executor.execute_test_script(test_script)
+        result = self.sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert result.status == "error"
         assert result.error_log is not None
         assert "no module named" in result.error_log.lower()
@@ -128,24 +129,26 @@ def test_slow():
 """
         from infrastructure.sandbox.types import SandboxConfig
         config = SandboxConfig(timeout=10, test_method_timeout=2)
-        executor = TestExecutor(config=config)
-        result = executor.execute_test_script(test_script)
+        sandbox = SafeCodeSandbox(config=config)
+        result = sandbox.execute_test_script(test_script, self.python.runtime, self.python.analyzer)
         assert result.status == "error" or result.status == "failed"
         assert result.error_log is not None
         assert (
             "timeout" in result.error_log.lower()
-            or "timed out" in result.error_log.lower()
+            or "timed_out" in result.error_log.lower()
         )
 
 
-class TestTestExecutor:
-    """Test cases for TestExecutor high-level wrapper."""
+class TestSubprocessSandboxDelegation:
+    """Test that the sandbox correctly delegates to language components."""
 
-    def test_executor_delegation(self) -> None:
-        """Test that TestExecutor correctly delegates and returns EvaluationResult."""
-        executor = TestExecutor(timeout=5)
+    def test_sandbox_delegation(self) -> None:
+        """Test that sandbox correctly returns EvaluationResult."""
+        from infrastructure.sandbox.types import SandboxConfig
+        sandbox = SafeCodeSandbox(config=SandboxConfig(timeout=5))
+        python = PythonLanguage()
         test_script = "def test_pass(): assert True"
-        result = executor.execute_test_script(test_script)
+        result = sandbox.execute_test_script(test_script, python.runtime, python.analyzer)
         assert isinstance(result, EvaluationResult)
         assert result.status == "passed"
 

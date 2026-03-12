@@ -83,6 +83,9 @@ class IScriptComposer(Protocol):
 class ILanguageRuntime(Protocol):
     """Protocol for language-specific runtime infrastructure."""
 
+    @property
+    def file_extension(self) -> str: ...
+
     def get_execution_command(self, file_path: str) -> list[str]: ...
     def get_test_command(
         self, test_file_path: str, result_xml_path: str, **kwargs: Any

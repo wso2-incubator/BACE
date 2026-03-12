@@ -66,33 +66,8 @@ def _execute_atomic_interaction(
         # Compose the complete test script using the language adapter
         script = composer.compose_test_script(code_snippet, test_snippet)
 
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            file_ext = ".bal" if hasattr(runtime, "bal_executable") else ".py"
-            script_path = os.path.join(tmpdir, f"test_script{file_ext}")
-            xml_path = os.path.join(tmpdir, "results.xml")
-
-            with open(script_path, "w", encoding="utf-8") as f:
-                f.write(script)
-
-            cmd = runtime.get_test_command(script_path, xml_path)
-            raw_result = sandbox.execute_command(cmd, cwd=tmpdir)
-
-            xml_content = None
-            if os.path.exists(xml_path):
-                with open(xml_path, "r", encoding="utf-8") as f:
-                    xml_content = f.read()
-
-            result: EvaluationResult = analyzer.analyze(
-                raw_result, xml_content=xml_content
-            )
-
-        # logger.debug(
-        #     f"Worker (PID {os.getpid()}): Executed interaction ({code_idx}, {test_idx}) with result: {result}"
-        # )
-
-        return code_idx, test_idx, result
+        # High-level sandbox API handles file creation, commands, and cleanup
+        return code_idx, test_idx, sandbox.execute_test_script(script, runtime, analyzer)
 
     except Exception as e:
         logger.error(

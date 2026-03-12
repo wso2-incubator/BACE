@@ -6,11 +6,14 @@ import signal
 import subprocess
 import tempfile
 import time
-from typing import Optional
-
+from typing import Optional, TYPE_CHECKING
 from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.sandbox.memory import MemoryMonitor
 from infrastructure.sandbox.types import BasicExecutionResult, SandboxConfig
+
+if TYPE_CHECKING:
+    from coevolution.core.interfaces.language import ILanguageRuntime, ITestAnalyzer
+    from coevolution.core.interfaces.data import EvaluationResult
 
 
 class SubprocessSandbox(ISandbox):
@@ -78,6 +81,55 @@ class SubprocessSandbox(ISandbox):
                 return self._run_subprocess(cmd, tmpdir)
         else:
             return self._run_subprocess(cmd, cwd)
+
+    def execute_test_script(
+        self,
+        test_script: str,
+        runtime: "ILanguageRuntime",
+        analyzer: "ITestAnalyzer",
+    ) -> "EvaluationResult":
+        """Execute a test script and return a single test result."""
+        from coevolution.core.interfaces.data import EvaluationResult
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = runtime.file_extension
+            script_path = os.path.join(tmpdir, f"test_script{file_ext}")
+            xml_path = os.path.join(tmpdir, "results.xml")
+
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(test_script)
+
+            kwargs = {}
+            if hasattr(self.config, "test_method_timeout"):
+                kwargs["timeout"] = self.config.test_method_timeout
+
+            cmd = runtime.get_test_command(script_path, xml_path, **kwargs)
+            raw_result = self.execute_command(cmd, cwd=tmpdir)
+
+            xml_content = None
+            if os.path.exists(xml_path):
+                with open(xml_path, "r", encoding="utf-8") as f:
+                    xml_content = f.read()
+
+            result: EvaluationResult = analyzer.analyze(
+                raw_result, xml_content=xml_content
+            )
+
+        return result
+
+    def execute_code(
+        self, code: str, runtime: "ILanguageRuntime"
+    ) -> BasicExecutionResult:
+        """Execute arbitrary code safely."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_ext = runtime.file_extension
+            script_path = os.path.join(tmpdir, f"eval_script{file_ext}")
+
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(code)
+
+            cmd = runtime.get_execution_command(script_path)
+            return self.execute_command(cmd, cwd=tmpdir)
 
     def _run_subprocess(self, cmd: list[str], cwd: str) -> BasicExecutionResult:
         """Helper to manage the actual Popen execution and resource monitoring."""

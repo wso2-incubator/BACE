@@ -6,7 +6,6 @@ from coevolution.core.interfaces.data import EvaluationResult
 from coevolution.core.interfaces.sandbox import ISandbox
 
 from .adapters.generic import SubprocessSandbox
-from .executor import TestExecutor
 from .types import SandboxConfig
 
 
@@ -29,32 +28,6 @@ def create_safe_test_environment(
         test_method_timeout=30,
     )
     return SubprocessSandbox(config)
-
-
-def create_test_executor(
-    sandbox_adapter: Optional[ISandbox] = None,
-    config: Optional[SandboxConfig] = None,
-) -> TestExecutor:
-    """
-    Create a test executor with a specific sandbox or default configuration.
-
-    Args:
-        sandbox_adapter: Optional specialized sandbox adapter
-        config: Optional configuration for default sandbox
-
-    Returns:
-        Configured TestExecutor instance
-    """
-    if not sandbox_adapter:
-        config = config or SandboxConfig(
-            timeout=180,
-            max_memory_mb=256,
-            max_output_size=1_000_000,
-            test_method_timeout=30,
-        )
-        sandbox_adapter = SubprocessSandbox(config)
-
-    return TestExecutor(sandbox_adapter=sandbox_adapter)
 
 
 def check_test_execution_status(result: EvaluationResult) -> str:

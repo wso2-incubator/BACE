@@ -105,6 +105,10 @@ class BallerinaRuntime(ILanguageRuntime):
     def __init__(self, bal_executable: str):
         self.bal_executable = bal_executable
 
+    @property
+    def file_extension(self) -> str:
+        return ".bal"
+
     def get_execution_command(self, file_path: str) -> List[str]:
         return [self.bal_executable, "run", file_path]
 

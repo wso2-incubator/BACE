@@ -128,6 +128,10 @@ class PythonRuntime(ILanguageRuntime):
     def __init__(self, python_exe: str):
         self.python_exe = python_exe
 
+    @property
+    def file_extension(self) -> str:
+        return ".py"
+
     def get_execution_command(self, file_path: str) -> List[str]:
         return [self.python_exe, file_path]
 
