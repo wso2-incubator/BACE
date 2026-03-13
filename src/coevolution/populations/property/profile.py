@@ -36,6 +36,7 @@ def create_property_test_profile(
     cpu_workers: int = 4,
     enable_multiprocessing: bool = True,
     num_inputs: int = 20,
+    llm_workers: int = 8,
 ) -> TestProfile:
     """Create a complete property test population profile."""
     # ... (function body)
@@ -60,6 +61,7 @@ def create_property_test_profile(
         pop_config=pop_config,
         sandbox_config=sandbox_config,
         io_pair_cache=io_pair_cache,
+        llm_workers=llm_workers,
     )
 
     # ── Breeder (no-op — breeding disabled via offspring_rate=0) ────────────

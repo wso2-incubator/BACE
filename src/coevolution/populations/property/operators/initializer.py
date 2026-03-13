@@ -49,10 +49,12 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         pop_config: PopulationConfig,
         sandbox_config: SandboxConfig,
         io_pair_cache: IOPairCache,
+        llm_workers: int = 8,
     ) -> None:
         super().__init__(llm, parser, language_name, pop_config)
         self.sandbox_config = sandbox_config
         self.io_pair_cache = io_pair_cache
+        self.llm_workers = llm_workers
         self._python_lang = PythonLanguage()
         self._python_sandbox_config = replace(sandbox_config, language="python")
 
@@ -167,7 +169,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
 
         # Stage 2: Convert each description to code in parallel
         results: list[tuple[str, str]] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             future_to_desc = {
                 executor.submit(self._call_convert_to_property, desc, problem): desc
                 for desc in descriptions
