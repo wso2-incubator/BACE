@@ -134,7 +134,7 @@ def _property_eval_worker(
         if not failures:
             return code_id, test_id, EvaluationResult(status="passed")
 
-        error_log = _format_failure_log(failures)
+        error_log = _format_failure_log(failures, property_snippet)
         return code_id, test_id, EvaluationResult(status="failed", error_log=error_log)
 
     except Exception as e:
@@ -152,10 +152,13 @@ def _property_eval_worker(
         )
 
 
-def _format_failure_log(failures: list[dict[str, str]]) -> str:
+def _format_failure_log(failures: list[dict[str, str]], property_snippet: str) -> str:
     """Build a structured human-readable failure report."""
     separator = "\u2500" * 58
-    lines = [f"PROPERTY CHECK FAILURES\n{separator}"]
+    lines = [
+        f"PROPERTY CHECK FAILURES\n{separator}",
+        f"PROPERTY TEST:\n{property_snippet}\n{separator}",
+    ]
     for i, f in enumerate(failures, start=1):
         lines.append(
             f"[{i}] inputdata : {f['inputdata']}\n"
