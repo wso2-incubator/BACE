@@ -15,7 +15,18 @@
 </current_solution>
 
 <failing_tests_feedback>
-{{ feedback }}
+{% for test in failing_tests %}
+Failing Test #{{ loop.index }}:
+{{ test.snippet }}
+
+Error Trace:
+{{ test.trace }}
+{% if not loop.last %}
+
+{{ "=" * 80 }}
+
+{% endif %}
+{% endfor %}
 </failing_tests_feedback>
 
 <task>

@@ -84,23 +84,20 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             logger.debug("CodeEditOperator: no failing tests for this parent, skipping")
             return []
 
-        feedback_parts = []
-        for idx, (test_ind, test_pop_type) in enumerate(failing, start=1):
+        failing_tests_data = []
+        for test_ind, test_pop_type in failing:
             exec_result = context.interactions[test_pop_type].execution_results
             trace = "No trace available"
             if parent.id in exec_result and test_ind.id in exec_result[parent.id]:
                 trace = exec_result[parent.id][test_ind.id].error_log or trace
-            feedback_parts.append(
-                f"Failing Test #{idx}:\n{test_ind.snippet}\n\nError Trace:\n{trace}"
-            )
-        feedback = "\n\n" + "=" * 80 + "\n\n".join(feedback_parts)
+            failing_tests_data.append({"snippet": test_ind.snippet, "trace": trace})
 
         prompt = self.prompt_manager.render_prompt(
-            "operators/code/edit_multiple.j2",
+            "operators/code/edit.j2",
             question_content=problem.question_content,
             starter_code=problem.starter_code,
             individual=parent.snippet,
-            feedback=feedback,
+            failing_tests=failing_tests_data,
         )
         response = self._generate(prompt)
         edited_code = self._extract_code_block(response)
