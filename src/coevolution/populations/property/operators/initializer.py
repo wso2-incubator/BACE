@@ -97,6 +97,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         if not blocks:
             raise LLMGenerationError("gen_inputs: no code block found in LLM response.")
         script = blocks[0]
+        script = self._python_lang.parser.remove_main_block(script)
         if not self._python_lang.parser.is_syntax_valid(script):
             raise LLMSyntaxError("gen_inputs produced invalid Python")
         return script
@@ -168,7 +169,8 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         candidates: list[str] = []
         for block in blocks:
             try:
-                self._python_lang.parser.is_syntax_valid(block)
+                block = self.parser.remove_main_block(block)
+                self.parser.is_syntax_valid(block)
                 candidates.append(block)
             except (LanguageTransformationError, LLMSyntaxError):
                 pass

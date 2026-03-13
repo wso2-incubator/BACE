@@ -119,6 +119,8 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
         if not self.parser.contains_starter_code(edited_code, problem.starter_code):
             raise ValueError("AgentCoder edit result does not contain starter code")
 
+        edited_code = self.parser.remove_main_block(edited_code)
+
         probability = self.prob_assigner.assign_probability(
             OPERATION_EDIT, [code_parent.probability]
         )

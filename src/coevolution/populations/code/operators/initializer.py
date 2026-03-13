@@ -69,7 +69,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 )
                 response = self._generate(prompt)
                 code = self._extract_code_block(response)
-                self._validated_code(code, problem.starter_code, "initial")
+                code = self._validated_code(code, problem.starter_code, "initial")
                 return [code]
             else:
                 prompt = self.prompt_manager.render_prompt(
@@ -80,13 +80,14 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 )
                 response = self._generate(prompt)
                 blocks = self._extract_all_code_blocks(response)
+                validated_blocks = []
                 for b in blocks:
-                    self._validated_code(b, problem.starter_code, "initial")
-                if len(blocks) != batch_size:
+                    validated_blocks.append(self._validated_code(b, problem.starter_code, "initial"))
+                if len(validated_blocks) != batch_size:
                     raise ValueError(
-                        f"Expected {batch_size} code blocks, got {len(blocks)}"
+                        f"Expected {batch_size} code blocks, got {len(validated_blocks)}"
                     )
-                return blocks
+                return validated_blocks
 
         logger.info(
             f"CodeInitializer: initializing {target} individuals in {num_batches} batches"
@@ -155,7 +156,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
             )
             response = self._generate(prompt)
             code = self._extract_code_block(response)
-            self._validated_code(code, problem.starter_code, "plan_to_code")
+            code = self._validated_code(code, problem.starter_code, "plan_to_code")
             return plan, code
 
         # Phase A: plans

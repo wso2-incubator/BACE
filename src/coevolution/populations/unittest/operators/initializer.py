@@ -78,12 +78,12 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
             starter_code=problem.starter_code,
         )
         response = self._generate(prompt)
-        self._validate_test_syntax(response)
 
         code_blocks = self.parser.extract_code_blocks(response)
         test_functions: list[str] = []
         for block in code_blocks:
-            test_functions.extend(self._extract_test_functions(block))
+            clean_block = self.parser.remove_main_block(block)
+            test_functions.extend(self._extract_test_functions(clean_block))
 
         # Trim over-generation
         if len(test_functions) > target:
@@ -101,7 +101,8 @@ class UnittestInitializer(_TestLLMHelpers, BaseLLMInitializer[TestIndividual]):
             )
             extra_response = self._generate(extra_prompt)
             for block in self.parser.extract_code_blocks(extra_response):
-                test_functions.extend(self._extract_test_functions(block))
+                clean_block = self.parser.remove_main_block(block)
+                test_functions.extend(self._extract_test_functions(clean_block))
                 if len(test_functions) >= target:
                     break
             test_functions = test_functions[:target]

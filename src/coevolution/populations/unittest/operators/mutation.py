@@ -51,7 +51,8 @@ class UnittestMutationOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual])
         )
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
-        mutated = self._extract_first_test_function(extracted)
+        clean_block = self.parser.remove_main_block(extracted)
+        mutated = self._extract_first_test_function(clean_block)
 
         probability = self.prob_assigner.assign_probability(
             OPERATION_MUTATION, [parent.probability]

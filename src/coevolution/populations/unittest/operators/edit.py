@@ -129,7 +129,8 @@ class UnittestEditOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual]):
         logger.debug(f"UnittestEditOperator: using '{edit_type}' edit mode")
         response = self._generate(prompt)
         extracted = self._extract_code_block(response)
-        edited = self._extract_first_test_function(extracted)
+        clean_block = self.parser.remove_main_block(extracted)
+        edited = self._extract_first_test_function(clean_block)
 
         probability = self.prob_assigner.assign_probability(
             OPERATION_EDIT, [parent.probability]

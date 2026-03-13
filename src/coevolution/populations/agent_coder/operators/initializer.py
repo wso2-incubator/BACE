@@ -83,6 +83,8 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
                 "AgentCoderInitializer: generated code missing starter code"
             )
 
+        code = self.parser.remove_main_block(code)
+
         return CodeIndividual(
             snippet=code,
             probability=self.pop_config.initial_prior,
