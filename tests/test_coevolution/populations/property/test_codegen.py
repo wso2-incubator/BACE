@@ -124,17 +124,17 @@ class TestFunctionNameExtraction:
 class TestStringSafety:
     def test_plain_strings_injected(self) -> None:
         script = compose_property_test_script(SIMPLE_SNIPPET, "hello", "world")
-        assert '"hello"' in script
-        assert '"world"' in script
+        assert "'hello'" in script
+        assert "'world'" in script
 
     def test_double_quotes_in_inputdata_escaped(self) -> None:
         script = compose_property_test_script(SIMPLE_SNIPPET, 'say "hi"', "y")
-        # json.dumps produces: "say \"hi\""
-        assert 'say \\"hi\\"' in script or r"say \"hi\"" in script
+        # repr() produces: 'say "hi"'
+        assert 'say "hi"' in script
 
     def test_double_quotes_in_output_escaped(self) -> None:
         script = compose_property_test_script(SIMPLE_SNIPPET, "x", 'a "b" c')
-        assert 'a \\"b\\" c' in script or r"a \"b\" c" in script
+        assert 'a "b" c' in script
 
     def test_newline_in_inputdata_escaped(self) -> None:
         script = compose_property_test_script(SIMPLE_SNIPPET, "line1\nline2", "y")
@@ -147,7 +147,7 @@ class TestStringSafety:
 
     def test_empty_strings_valid(self) -> None:
         script = compose_property_test_script(SIMPLE_SNIPPET, "", "")
-        assert '""' in script
+        assert "''" in script
 
     def test_unicode_values_survive(self) -> None:
         # json.dumps escapes non-ASCII by default (\u00e9, etc.) — that is

@@ -34,9 +34,9 @@ from coevolution.populations.property.operators.validator import validate_proper
 # ── Shared test cases ──────────────────────────────────────────────────────────
 
 SORT_TESTS: list[Test] = [
-    Test(input="[3, 1, 2]", output="[1, 2, 3]"),  # basic reordering
-    Test(input="[5, 5, 1]", output="[1, 5, 5]"),  # duplicates
-    Test(input="[42]", output="[42]"),  # single element
+    Test(input='{"lst": [3, 1, 2]}', output="[1, 2, 3]"),  # basic reordering
+    Test(input='{"lst": [5, 5, 1]}', output="[1, 5, 5]"),  # duplicates
+    Test(input='{"lst": [42]}', output="[42]"),  # single element
 ]
 
 
@@ -45,34 +45,34 @@ SORT_TESTS: list[Test] = [
 # 1. All elements in the input are present in the output (multiset equality).
 PROPERTY_ELEMENTS_PRESENT = textwrap.dedent("""\
     def property_all_elements_present(inputdata, output):
-        import ast
-        inp = ast.literal_eval(inputdata)
-        out = ast.literal_eval(output)
-        return sorted(inp) == sorted(out)
+        import json
+        inp = json.loads(inputdata)
+        out = json.loads(output)
+        return sorted(inp["lst"]) == sorted(out)
 """)
 
 # 2. Length is unchanged.
 PROPERTY_SAME_LENGTH = textwrap.dedent("""\
     def property_same_length(inputdata, output):
-        import ast
-        inp = ast.literal_eval(inputdata)
-        out = ast.literal_eval(output)
-        return len(inp) == len(out)
+        import json
+        inp = json.loads(inputdata)
+        out = json.loads(output)
+        return len(inp["lst"]) == len(out)
 """)
 
 # 3. Output is non-decreasing.
 PROPERTY_NON_DECREASING = textwrap.dedent("""\
     def property_non_decreasing(inputdata, output):
-        import ast
-        out = ast.literal_eval(output)
+        import json
+        out = json.loads(output)
         return all(out[i] <= out[i + 1] for i in range(len(out) - 1))
 """)
 
 # Buggy: requires reverse-sorted output — wrong for ascending sort.
 PROPERTY_REVERSE_SORTED = textwrap.dedent("""\
     def property_reverse_sorted(inputdata, output):
-        import ast
-        out = ast.literal_eval(output)
+        import json
+        out = json.loads(output)
         return out == sorted(out, reverse=True)
 """)
 
@@ -167,7 +167,7 @@ class TestValidSortingProperties:
         )
 
     def test_same_length_passes_with_duplicates(self) -> None:
-        dup = [Test(input="[5, 5, 1]", output="[1, 5, 5]")]
+        dup = [Test(input='{"lst": [5, 5, 1]}', output="[1, 5, 5]")]
         assert validate_property_test(
             PROPERTY_SAME_LENGTH,
             dup,
@@ -208,8 +208,8 @@ class TestBuggyProperties:
         # Fails for the single-element test case [42]->[42].
         snippet = textwrap.dedent("""\
             def property_at_least_two(inputdata, output):
-                import ast
-                return len(ast.literal_eval(output)) >= 2
+                import json
+                return len(json.loads(output)) >= 2
         """)
         assert not validate_property_test(
             snippet,

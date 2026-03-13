@@ -82,6 +82,43 @@ class BallerinaParser(ICodeParser):
     def get_docstring(self, code: str) -> str:
         return ""
 
+    def get_function_signature(self, code: str) -> Dict[str, str]:
+        return ballerina_parser.get_function_signature(code)
+
+    def parse_public_test(
+        self, input_str: str, output_str: str, starter_code: str
+    ) -> tuple[Dict[str, Any], Any]:
+        """Parse raw Ballerina public test input/output."""
+        sig = self.get_function_signature(starter_code)
+        param_names = list(sig.keys())
+
+        # Ballerina output is usually just a JSON literal
+        try:
+            import json
+            output_val = json.loads(output_str)
+        except Exception:
+            output_val = output_str
+
+        # Ballerina input is often func(arg1, arg2)
+        match = re.search(r"\(+(.*)\)+", input_str.strip())
+        args_str = match.group(1) if match else input_str
+        
+        # Simple split by comma for now
+        raw_args = [arg.strip() for arg in args_str.split(",") if arg.strip()]
+        
+        input_dict = {}
+        for i, name in enumerate(param_names):
+            if i < len(raw_args):
+                try:
+                    import json
+                    input_dict[name] = json.loads(raw_args[i])
+                except Exception:
+                    input_dict[name] = raw_args[i]
+            else:
+                input_dict[name] = None
+                
+        return input_dict, output_val
+
 
 class BallerinaComposer(IScriptComposer):
     def compose_test_script(self, code_snippet: str, test_snippet: str) -> str:

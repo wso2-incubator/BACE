@@ -23,6 +23,7 @@ from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
 from ..types import IOPairCache
+from .helpers import transform_public_tests
 from .validator import validate_property_test
 
 
@@ -112,12 +113,17 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
             return []
 
         python_sandbox = create_sandbox(self._python_sandbox_config)
+
+        transformed_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
+
         individuals: list[TestIndividual] = []
 
         for snippet in candidates:
             try:
                 valid = validate_property_test(
-                    snippet, problem.public_test_cases, python_sandbox
+                    snippet, transformed_tests, python_sandbox
                 )
             except Exception as exc:
                 logger.debug(

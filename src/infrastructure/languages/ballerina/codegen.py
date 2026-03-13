@@ -29,23 +29,42 @@ def compose_test_script(code_snippet: str, test_snippet: str) -> str:
 
 
 def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
-    """Create an executable script that runs a function with input data."""
+    """Create an executable script that runs a function with JSON input data."""
     try:
-        match = re.match(r"(\w+)\((.*)\)", input_data.strip())
+        import json
+        input_dict = json.loads(input_data)
+        inner_input = input_dict.get("inputdata", {})
+        
+        # We need the function name from the code snippet
+        match = FUNCTION_PATTERN.search(code_snippet)
         if not match:
-            raise LanguageTransformationError(f"Invalid input format: {input_data}")
+            raise LanguageTransformationError("Cannot find function in code snippet")
+        function_name = match.group(2)
+        
+        # Build arguments string in the correct order using the function signature
+        from .parser import BallerinaParser
+        parser = BallerinaParser()
+        sig = parser.get_function_signature(code_snippet)
+        param_names = list(sig.keys())
 
-        function_name = match.group(1)
-        args_str = match.group(2)
+        args_list = []
+        for name in param_names:
+            val = inner_input.get(name)
+            # Complicated types should be handled as JSON and cast
+            # Ballerina's ensureType() is perfect for this
+            args_list.append(f"check {json.dumps(val)}.ensureType()")
+
+        args_str = ", ".join(args_list)
 
         script_parts = [
             "import ballerina/io;",
+            "import ballerina/lang.value;",
             "",
             code_snippet.strip(),
             "",
-            "public function main() {",
+            "public function main() returns error? {",
             f"    var result = {function_name}({args_str});",
-            "    io:println(result);",
+            "    io:println(value:toJsonString(result));",
             "}",
         ]
         return "\n".join(script_parts)
@@ -89,5 +108,7 @@ function test{capitalized_name}{test_number}() {{
 def compose_generator_script(generator_code: str, num_inputs: int) -> str:
     """Create an executable script wrapper invoking `generate_test_inputs`."""
     script = remove_main_block(generator_code)
-    script += f"\n\nimport ballerina/io;\n\npublic function main() {{\n    io:println(generate_test_inputs({num_inputs}));\n}}"
+    script += "\n\nimport ballerina/io;"
+    script += "\nimport ballerina/lang.value;"
+    script += f"\n\npublic function main() {{\n    io:println(value:toJsonString(generate_test_inputs({num_inputs})));\n}}"
     return script

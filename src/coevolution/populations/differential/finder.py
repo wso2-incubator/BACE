@@ -4,6 +4,7 @@ Moved from strategies/breeding/differential_finder.py to this
 population-centric location.
 """
 
+import json
 import multiprocessing
 from dataclasses import dataclass, replace
 from typing import Any, Optional, Union
@@ -54,7 +55,7 @@ def _worker_entry(
         def run_snippet(snippet: str) -> Optional[str]:
             test_input_formatted = {"inputdata": input_data}
             script = composer.compose_evaluation_script(
-                snippet, str(test_input_formatted)
+                snippet, json.dumps(test_input_formatted)
             )
             import os
             import tempfile
@@ -183,7 +184,7 @@ class DifferentialFinder(IDifferentialFinder):
     ) -> Optional[str]:
         test_input_formatted = {"inputdata": input_data}
         script = self.composer.compose_evaluation_script(
-            code, str(test_input_formatted)
+            code, json.dumps(test_input_formatted)
         )
         import os
         import tempfile

@@ -6,6 +6,7 @@ Refactored to enforce Separation of Concerns via the Facade pattern.
 This class acts as an orchestration facade and execution configuration registry.
 """
 
+import ast
 import re
 import sys
 from typing import Any, Dict, List, Optional
@@ -62,6 +63,52 @@ class PythonParser(ICodeParser):
 
     def get_docstring(self, code: str) -> str:
         return python_ast.get_docstring(code)
+
+    def get_function_signature(self, code: str) -> Dict[str, str]:
+        return python_ast.get_function_signature(code)
+
+    def parse_public_test(
+        self, input_str: str, output_str: str, starter_code: str
+    ) -> tuple[Dict[str, Any], Any]:
+        """Parse raw Python public test input/output."""
+        sig = python_ast.parse_method_signature(starter_code)
+        param_names = [p[0] for p in sig.params]
+
+        # 1. Parse raw output
+        try:
+            output_val = ast.literal_eval(output_str)
+        except (ValueError, SyntaxError):
+            output_val = output_str
+
+        # 2. Parse raw input
+        # Stdin style: input_str: str -> str
+        if python_ast.is_stdin_signature(sig):
+            return {param_names[0]: input_str}, output_val
+
+        # Functional style: lines are positional args
+        lines = [line.strip() for line in input_str.split("\n") if line.strip()]
+        raw_vals = []
+        for line in lines:
+            try:
+                raw_vals.append(ast.literal_eval(line))
+            except (ValueError, SyntaxError):
+                raw_vals.append(line)
+
+        input_dict = {}
+        if len(raw_vals) == len(param_names):
+            for i, name in enumerate(param_names):
+                input_dict[name] = raw_vals[i]
+        elif len(param_names) == 1:
+            input_dict[param_names[0]] = raw_vals[0] if raw_vals else input_str
+        else:
+            # Positional fallback
+            for i, name in enumerate(param_names):
+                if i < len(raw_vals):
+                    input_dict[name] = raw_vals[i]
+                else:
+                    input_dict[name] = None
+
+        return input_dict, output_val
 
     def normalize_code(self, code: str) -> str:
         text = re.sub(r"#.*$", "", code, flags=re.MULTILINE)

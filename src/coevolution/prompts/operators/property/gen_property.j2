@@ -7,15 +7,34 @@ You will be given a programming problem and a starter code template.
 Generate correct Python functions that assert specific properties or invariants
 a correct solution must satisfy.
 
-Each function must have this exact signature:
-    def property_<descriptive_name>(inputdata, output):
-        ...
-        return True   # property holds
-        # or
-        return False  # property violated
+### Your Task
+Create {{ num_properties if num_properties else 'multiple' }} diverse property tests following this template:
+
+```python
+import json
+
+def property_<name>(inputdata: str, output: str) -> bool:
+    """
+    inputdata: JSON-encoded string of a dictionary mapping parameter names to values.
+               Example: '{"lst": [3, 1, 2]}'
+    output:    JSON-encoded string of the solution's return value.
+               Example: '[1, 2, 3]'
+    """
+    # 1. Parse JSON inputs
+    inp = json.loads(inputdata)
+    out = json.loads(output)
+    
+    # 2. Extract specific parameters
+    # lst = inp["lst"]
+    
+    # 3. Check property
+    # return out == sorted(out)
+    ...
+```
+Each function must return True if the property holds, or False if the property violated.
 
 Rules:
-- `inputdata` and `output` are raw strings (the exact text the solution receives/produces).
+- `inputdata` and `output` are JSON-encoded strings.
 - Return True if the property holds for this input/output pair, False otherwise.
 - Each function must test ONE distinct property (e.g. sorted order, length constraint,
   non-negativity, idempotency, commutativity, symmetry, range bounds).

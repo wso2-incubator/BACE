@@ -86,16 +86,18 @@ POP_CONFIG = PopulationConfig(
 # A minimal valid generator script (LLM call 1 response)
 GEN_INPUTS_RESPONSE = textwrap.dedent("""\
     ```python
-    def generate_inputs(num_inputs: int) -> list[str]:
-        return [str(i) for i in range(num_inputs)]
+    def generate_test_inputs(num_inputs: int) -> list[dict]:
+        return [{"lst": [i, i+1]} for i in range(num_inputs)]
     ```
 """)
 
 # Two candidate property snippets (LLM call 2 response)
 PROPERTY_SNIPPET_PASS = textwrap.dedent("""\
     def property_same_length(inputdata, output):
-        import ast
-        return len(ast.literal_eval(inputdata)) == len(ast.literal_eval(output))
+        import json
+        inp = json.loads(inputdata)
+        out = json.loads(output)
+        return len(inp["lst"]) == len(out)
 """)
 
 PROPERTY_SNIPPET_FAIL = textwrap.dedent("""\
@@ -163,7 +165,7 @@ class TestHappyPath:
 
         script = cache.get_generator_script()
         assert script is not None
-        assert "generate_inputs" in script
+        assert "generate_test_inputs" in script
 
     def test_individual_has_initial_prior(self) -> None:
         init, _, mock_llm = make_initializer()

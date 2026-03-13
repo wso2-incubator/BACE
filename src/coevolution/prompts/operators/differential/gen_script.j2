@@ -5,7 +5,9 @@
 - You are also given the current test inputs and the corresponding equivalent outputs they produce for both P and Q solutions in a <current_tests> block.
 - The current tests fail to differentiate between the two code snippets as they produce the same outputs for both.
 - Your task is to write a {{ language }} script that generates test inputs that can differentiate between the two code snippets.
-- The script should define a function named `generate_test_inputs` that takes an integer parameter specifying the number of test inputs to generate and returns a representation of these test inputs.
+- Your generator must be a pure Python function `generate_test_inputs(n)`.
+- It should return a list of `n` dictionaries. Each dictionary maps parameter names to values.
+- These dictionaries will be handled as JSON data.
 - The script should be able to generate multiple diverse test inputs as much as required by the user in a single execution. 
 - You should prefer smaller and simpler test inputs over larger and complex ones, as long as they can differentiate between the two code snippets.
 - You are allowed to use standard {{ language }} libraries to implement the script.

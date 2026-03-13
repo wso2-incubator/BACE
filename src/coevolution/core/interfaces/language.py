@@ -65,6 +65,23 @@ class ICodeParser(Protocol):
     def get_structural_metadata(self, code: str) -> dict[str, Any]: ...
     def parse_test_inputs(self, outputs: str) -> list[dict[str, Any]]: ...
     def get_docstring(self, code: str) -> str: ...
+    def get_function_signature(self, code: str) -> dict[str, str]:
+        """
+        Extract the function/method signature from the code.
+        Returns a mapping of parameter names to their type strings.
+        For Python, types might be 'Any' or empty if not annotated.
+        For Ballerina, types will be explicit (e.g., 'int', 'string').
+        """
+        ...
+
+    def parse_public_test(
+        self, input_str: str, output_str: str, starter_code: str
+    ) -> tuple[dict[str, Any], Any]:
+        """
+        Parse raw public test input and output strings into structured data.
+        Returns (input_args_dict, output_value).
+        """
+        ...
 
 
 @runtime_checkable

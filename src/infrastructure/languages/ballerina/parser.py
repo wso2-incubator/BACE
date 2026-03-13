@@ -144,3 +144,32 @@ def parse_test_inputs(outputs: str) -> List[Dict[str, Any]]:
         logger.debug(f"Error parsing test inputs: {e}")
 
     return test_cases
+
+
+def get_function_signature(code: str) -> Dict[str, str]:
+    """Extract parameter names and types from Ballerina function signature."""
+    # Pattern to match: function name(type1 param1, type2 param2, ...)
+    # This pattern captures the parameters block specifically.
+    param_sig_pattern = re.compile(
+        r"function\s+\w+\s*\(([^)]*)\)",
+        re.MULTILINE,
+    )
+    match = param_sig_pattern.search(code)
+    if not match:
+        return {}
+
+    params_str = match.group(1).strip()
+    if not params_str:
+        return {}
+
+    # Split by comma and extract type and name
+    # Ballerina params are "Type Name", e.g. "int a", "string b", "json[] c"
+    signature = {}
+    for param in params_str.split(","):
+        parts = param.strip().split()
+        if len(parts) >= 2:
+            # Type is everything before the last word (the name)
+            param_name = parts[-1]
+            param_type = " ".join(parts[:-1])
+            signature[param_name] = param_type
+    return signature

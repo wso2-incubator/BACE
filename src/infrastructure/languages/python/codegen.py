@@ -94,20 +94,24 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
         raise LanguageTransformationError("No callable method found in Solution class")
 
     try:
-        input_dict = eval(input_data, {"__builtins__": {}}, {})  # noqa: S307
+        import json
+        input_dict = json.loads(input_data)
         if "inputdata" not in input_dict:
             raise LanguageTransformationError("Input data must contain 'inputdata' key")
         input_params = input_dict["inputdata"]
         if not isinstance(input_params, dict):
             raise LanguageTransformationError("'inputdata' value must be a dict object")
-    except (ValueError, SyntaxError, NameError, TypeError) as e:
+    except (json.JSONDecodeError, TypeError) as e:
         raise LanguageTransformationError(f"Failed to parse input data: {e}") from e
     except LanguageTransformationError:
         raise
     except Exception as e:
         raise LanguageTransformationError(f"Error processing input data: {e}") from e
 
-    parts: list[str] = []
+    parts: list[str] = [
+        "import json",
+        "",
+    ]
     for node in prog_imports:
         parts.append(ast.unparse(node))
     if prog_imports:
@@ -119,8 +123,9 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
     parts.append("")
     parts.append("# Execute solution")
     parts.append("sol = Solution()")
-    param_str = ", ".join(repr(v) for v in input_params.values())
-    parts.append(f"print(sol.{solution_method_name}({param_str}))")
+    # Use keyword arguments for safety
+    param_str = ", ".join(f"{k}={repr(v)}" for k, v in input_params.items())
+    parts.append(f"print(json.dumps(sol.{solution_method_name}({param_str})))")
 
     return "\n".join(parts)
 
@@ -139,15 +144,17 @@ def gen_stdin_test(
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    input_str = {input_literal}\n"
-            f"    expected_output = {output_literal}\n"
+            f"    import json\n"
+            f"    input_str = json.loads({input_literal})\n"
+            f"    expected_output = json.loads({output_literal})\n"
             f"    assert {method_name}(input_str) == expected_output\n"
         )
     return (
         f"def test_case_{test_number}():\n"
+        f"    import json\n"
         f"    solution = {class_name}()\n"
-        f"    input_str = {input_literal}\n"
-        f"    expected_output = {output_literal}\n"
+        f"    input_str = json.loads({input_literal})\n"
+        f"    expected_output = json.loads({output_literal})\n"
         f"    assert solution.{method_name}(input_str) == expected_output\n"
     )
 
@@ -167,25 +174,26 @@ def gen_functional_test(
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    import ast\n"
+            f"    import json\n"
             f"    input_lines = {input_lines_repr}\n"
-            f"    args = [ast.literal_eval(line) for line in input_lines]\n"
-            f"    expected_output = ast.literal_eval({output_repr})\n"
+            f"    args = [json.loads(line) for line in input_lines]\n"
+            f"    expected_output = json.loads({output_repr})\n"
             f"    assert {method_name}(*args) == expected_output\n"
         )
     return (
         f"def test_case_{test_number}():\n"
-        f"    import ast\n"
+        f"    import json\n"
         f"    solution = {class_name}()\n"
         f"    input_lines = {input_lines_repr}\n"
-        f"    args = [ast.literal_eval(line) for line in input_lines]\n"
-        f"    expected_output = ast.literal_eval({output_repr})\n"
+        f"    args = [json.loads(line) for line in input_lines]\n"
+        f"    expected_output = json.loads({output_repr})\n"
         f"    assert solution.{method_name}(*args) == expected_output\n"
     )
 
 
 def compose_generator_script(generator_code: str, num_inputs: int) -> str:
     """Compose a Python script that executes the generator and prints results."""
-    script = remove_main_block(generator_code)
-    script += f"\n\nprint(generate_test_inputs({num_inputs}))"
+    script = "import json\n"
+    script += remove_main_block(generator_code)
+    script += f"\n\nprint(json.dumps(generate_test_inputs({num_inputs})))"
     return script

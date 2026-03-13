@@ -245,10 +245,11 @@ class TestPropertyInitializerE2E:
     ) -> None:
         """Every returned snippet must follow the 'def property_' naming convention."""
         for ind in initialized_individuals:
-            first_line = ind.snippet.lstrip().split("\n")[0]
-            assert first_line.startswith("def property_"), (
-                f"Snippet does not start with 'def property_'.\n"
-                f"First line: {first_line!r}\n"
+            # Find the line starting with 'def property_'
+            lines = [line.strip() for line in ind.snippet.split("\n") if line.strip()]
+            defn_line = next((line for line in lines if line.startswith("def property_")), None)
+            assert defn_line is not None, (
+                f"Snippet does not contain a 'def property_' definition.\n"
                 f"Full snippet:\n{ind.snippet}"
             )
 
@@ -257,8 +258,9 @@ class TestPropertyInitializerE2E:
     ) -> None:
         """Each property function signature must accept 'input' and 'output' parameters."""
         for ind in initialized_individuals:
-            defn_line = ind.snippet.lstrip().split("\n")[0]
-            assert "input" in defn_line and "output" in defn_line, (
+            lines = [line.strip() for line in ind.snippet.split("\n") if line.strip()]
+            defn_line = next((line for line in lines if line.startswith("def property_")), None)
+            assert defn_line is not None and "input" in defn_line and "output" in defn_line, (
                 f"Property function signature missing 'input' or 'output' parameter.\n"
                 f"Definition line: {defn_line!r}"
             )
@@ -292,13 +294,19 @@ class TestPropertyInitializerE2E:
         from the public test cases — a well-formed property must return True for
         every (input, correct_output) pair.
         """
+        from coevolution.populations.property.operators.helpers import transform_public_tests
+        transformed_tests = transform_public_tests(
+            SORT_PROBLEM.public_test_cases, SORT_PROBLEM.starter_code, PythonLanguage().parser
+        )
         sandbox = create_sandbox(SandboxConfig(language="python", timeout=10))
         for ind in initialized_individuals:
+            print(f"\n[TRACE] E2E: Validating property: {ind.id}")
             result = validate_property_test(
                 snippet=ind.snippet,
-                public_test_cases=SORT_PROBLEM.public_test_cases,
+                public_test_cases=transformed_tests,
                 sandbox=sandbox,
             )
+            print(f"[TRACE] E2E: Validation result for {ind.id}: {result}")
             assert result is True, (
                 f"Property failed validation against public test cases.\n"
                 f"Snippet:\n{ind.snippet}"
@@ -581,9 +589,11 @@ class TestAddProblemE2E:
         self, add_individuals: IndividualsList
     ) -> None:
         for ind in add_individuals:
-            first_line = ind.snippet.lstrip().split("\n")[0]
-            assert first_line.startswith("def property_"), (
-                f"Snippet does not start with 'def property_'.\nFirst line: {first_line!r}"
+            lines = [line.strip() for line in ind.snippet.split("\n") if line.strip()]
+            defn_line = next((line for line in lines if line.startswith("def property_")), None)
+            assert defn_line is not None, (
+                f"Snippet does not start with 'def property_'.\n"
+                f"Full snippet: {ind.snippet}"
             )
 
     def test_generator_script_cached(
@@ -603,6 +613,13 @@ class TestAddProblemE2E:
         test_pop = TestPopulation(add_individuals)
         result = add_evaluator.execute_tests(code_pop, test_pop)
         correct_passes = int(result.observation_matrix[0].sum())
+        print(f"\n[TRACE] Add Problem E2E: Correct passes = {correct_passes}/{test_pop.size}")
+        if correct_passes < 1:
+            print("[TRACE] Observation Matrix:")
+            print(result.observation_matrix)
+            for i, ind in enumerate(test_pop.individuals):
+                print(f"[TRACE] Individual {i} snippet:\n{ind.snippet}")
+                
         assert correct_passes >= 1, (
             f"Correct add passed 0/{test_pop.size} property tests.\n"
             + "\n---\n".join(ind.snippet for ind in add_individuals)

@@ -7,6 +7,7 @@ population-centric location.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
@@ -18,14 +19,13 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from infrastructure.languages import PythonLanguage
-
 from coevolution.strategies.llm_base import (
     BaseLLMService,
     ILanguageModel,
     LLMGenerationError,
     llm_retry,
 )
+from infrastructure.languages import PythonLanguage
 
 
 class DifferentialInputOutput(TypedDict):
@@ -115,9 +115,12 @@ class DifferentialLLMOperator(BaseLLMService):
             logger.warning(f"Expected 1 IO pair, got {len(io_pairs)}; using first")
 
         io_pair = io_pairs[0]
-        input_lines = [str(v) for v in io_pair["inputdata"].values()]
+        # We store the input values as individual JSON strings, one per line.
+        # This is compatible with how functional tests are currently composed
+        # (split by \n and then each line parsed).
+        input_lines = [json.dumps(v) for v in io_pair["inputdata"].values()]
         input_str = "\n".join(input_lines)
-        output_str = str(io_pair["output"])
+        output_str = json.dumps(io_pair["output"])
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
 
         return self.composer.generate_test_case(

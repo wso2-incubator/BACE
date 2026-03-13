@@ -21,11 +21,11 @@ import sys
 import uuid
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
 from loguru import logger
 
 if TYPE_CHECKING:
     import numpy as np
-    import pandas as pd
     from loguru import Record
 
     from coevolution.core.interfaces import Problem
@@ -688,4 +688,5 @@ def save_run_config(run_id: str, config: dict[str, Any]) -> None:
             json.dump(config, f, indent=4, cls=DataclassEncoder)
         logger.info(f"Run configuration saved to {config_path}")
     except Exception as e:
+        logger.error(f"Failed to save run configuration: {e}")
         logger.error(f"Failed to save run configuration: {e}")

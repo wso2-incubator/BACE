@@ -276,3 +276,13 @@ def is_stdin_signature(sig: MethodSignature) -> bool:
     return (
         param_name == "input_str" and param_type == "str" and sig.return_type == "str"
     )
+
+
+def get_function_signature(code: str) -> Dict[str, str]:
+    """Extract parameter names and types from Python code."""
+    try:
+        sig = parse_method_signature(code)
+        return {name: (ptype or "Any") for name, ptype in sig.params}
+    except Exception as e:
+        logger.debug(f"Failed to get Python function signature: {e}")
+        return {}

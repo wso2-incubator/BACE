@@ -35,7 +35,7 @@ from coevolution.utils.logging import setup_logging
 from infrastructure.languages import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
 
-from .codegen import compose_property_test_script
+from .operators.helpers import compose_property_test_script
 from .types import IOPair, IOPairCache
 
 # ── Module-level pure worker functions ───────────────────────────────────────
@@ -92,17 +92,24 @@ def _property_eval_worker(
 
         failures: list[dict[str, str]] = []
 
+        import json
         for pair in pairs:
             try:
+                # pair["inputdata"] is json.dumps({"inputdata": {...}})
+                # We want to pass just the inner dict (serialized to JSON) to the property test.
+                # LLM property tests will then call json.loads() on it.
+                raw_input_dict = json.loads(pair["inputdata"])
+                inner_input = raw_input_dict.get("inputdata", raw_input_dict)
+                
                 script = compose_property_test_script(
-                    property_snippet, pair["inputdata"], pair["output"]
+                    property_snippet, json.dumps(inner_input), pair["output"]
                 )
             except Exception as exc:
                 failures.append(
                     {
                         "inputdata": pair["inputdata"],
                         "actual_output": pair["output"],
-                        "result": f"error: {exc}",
+                        "result": f"error formatting script: {exc}",
                     }
                 )
                 break
@@ -314,9 +321,10 @@ class PropertyTestEvaluator(IExecutionSystem):
                 )
                 return []
 
+            import json
             # Wrap each dict as compose_evaluation_script expects:
-            # str({"inputdata": {"lst": [3, 1, 2]}}) → one entry per input
-            formatted = [str({"inputdata": d}) for d in parsed if isinstance(d, dict)]
+            # json.dumps({"inputdata": {"lst": [3, 1, 2]}}) → one entry per input
+            formatted = [json.dumps({"inputdata": d}) for d in parsed if isinstance(d, dict)]
             logger.debug(
                 f"PropertyTestEvaluator: generator produced {len(formatted)} inputs."
             )
