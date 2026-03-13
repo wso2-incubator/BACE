@@ -621,8 +621,8 @@ def log_observation_matrix(
     try:
         df = pd.DataFrame(
             observation_matrix,
-            index=[f"code_{cid[:8]}" for cid in code_ids],
-            columns=[f"test_{tid[:8]}" for tid in test_ids],
+            index=[f"{cid[:8]}" for cid in code_ids],
+            columns=[f"{tid[:8]}" for tid in test_ids],
         )
         logger.info(f"Observation Matrix ({test_type}):\n{df}")
     except Exception as e:
