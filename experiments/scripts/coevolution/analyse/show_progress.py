@@ -780,8 +780,13 @@ def main(
     # Final Summary (Champions)
     survivors = [e for e in events if e["event_type"] == "SURVIVED"]
 
-    # Sort survivors by probability for champion identification
-    survivors.sort(key=lambda s: s.get("probability", 0), reverse=True)
+    # Sort survivors by probability for champion identification (use latest known prob if available)
+    survivors.sort(
+        key=lambda s: latest_probs.get(
+            str(s.get("individual_id")), s.get("probability", 0)
+        ),
+        reverse=True,
+    )
 
     if survivors:
         # Champion Analysis (Private Tests)
