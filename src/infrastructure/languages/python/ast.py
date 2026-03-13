@@ -270,9 +270,14 @@ def parse_method_signature(starter_code: str) -> MethodSignature:
 
 def is_stdin_signature(sig: MethodSignature) -> bool:
     """Return True if signature matches the STDIN pattern (input_str:str -> str)."""
-    if len(sig.params) != 1:
+    # Filter out 'self' if this is a method
+    params = sig.params
+    if params and params[0][0] == "self":
+        params = params[1:]
+
+    if len(params) != 1:
         return False
-    param_name, param_type = sig.params[0]
+    param_name, param_type = params[0]
     return (
         param_name == "input_str" and param_type == "str" and sig.return_type == "str"
     )

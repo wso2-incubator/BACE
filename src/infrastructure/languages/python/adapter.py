@@ -157,6 +157,7 @@ class PythonComposer(IScriptComposer):
                 sig.method_name,
                 test_number,
                 sig.is_standalone,
+                sig.return_type,
             )
         return python_codegen.gen_functional_test(
             input_str,
@@ -165,6 +166,7 @@ class PythonComposer(IScriptComposer):
             sig.method_name,
             test_number,
             sig.is_standalone,
+            sig.return_type,
         )
 
     def compose_generator_script(self, generator_code: str, num_inputs: int) -> str:

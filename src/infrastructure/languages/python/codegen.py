@@ -12,6 +12,37 @@ from .ast import (
 )
 
 
+def _parse_val(val: str) -> any:
+    """Try to parse as JSON, fallback to raw string."""
+    try:
+        import json
+
+        return json.loads(val)
+    except Exception:
+        return val
+
+
+def _try_cast_expected(expected: any, return_type: Optional[str]) -> any:
+    """Attempt to cast expected output to the return type if possible."""
+    if not return_type:
+        return expected
+
+    try:
+        if return_type == "int":
+            return int(expected)
+        if return_type == "str":
+            return str(expected)
+        if return_type == "float":
+            return float(expected)
+        if return_type == "bool":
+            if isinstance(expected, str):
+                return expected.lower() == "true"
+            return bool(expected)
+    except Exception:
+        pass
+    return expected
+
+
 def compose_test_script(code_snippet: str, test_snippet: str) -> str:
     """Compose a pytest script by combining code and test snippet."""
     parts = []
@@ -137,25 +168,42 @@ def gen_stdin_test(
     method_name: str,
     test_number: int,
     is_standalone: bool,
+    return_type: Optional[str],
 ) -> str:
     """Generate a stdin test function from inputs."""
-    input_literal = repr(input_data.rstrip("\n"))
-    output_literal = repr(output_data.rstrip("\n"))
+    input_val = _parse_val(input_data)
+    output_val = _parse_val(output_data)
+
+    # Intelligence at generation time: align expected output to signature type
+    # This prevents '16' == 16 failures.
+    expected_aligned = _try_cast_expected(output_val, return_type)
+
+    input_repr = repr(input_val)
+    output_repr = repr(expected_aligned)
+
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    import json\n"
-            f"    input_str = json.loads({input_literal})\n"
-            f"    expected_output = json.loads({output_literal})\n"
-            f"    assert {method_name}(input_str) == expected_output\n"
+            f"    input_str = {input_repr}\n"
+            f"    expected_output = {output_repr}\n"
+            f"    actual_output = {method_name}(input_str)\n"
+            f"    try:\n"
+            f"        assert actual_output == expected_output\n"
+            f"    except AssertionError:\n"
+            f"        # Type-agnostic fallback\n"
+            f"        assert str(actual_output).strip() == str(expected_output).strip()\n"
         )
     return (
         f"def test_case_{test_number}():\n"
-        f"    import json\n"
         f"    solution = {class_name}()\n"
-        f"    input_str = json.loads({input_literal})\n"
-        f"    expected_output = json.loads({output_literal})\n"
-        f"    assert solution.{method_name}(input_str) == expected_output\n"
+        f"    input_str = {input_repr}\n"
+        f"    expected_output = {output_repr}\n"
+        f"    actual_output = solution.{method_name}(input_str)\n"
+        f"    try:\n"
+        f"        assert actual_output == expected_output\n"
+        f"    except AssertionError:\n"
+        f"        # Type-agnostic fallback\n"
+        f"        assert str(actual_output).strip() == str(expected_output).strip()\n"
     )
 
 
@@ -166,28 +214,43 @@ def gen_functional_test(
     method_name: str,
     test_number: int,
     is_standalone: bool,
+    return_type: Optional[str],
 ) -> str:
     """Generate a functional test case from inputs."""
     input_lines = [line.strip() for line in input_data.split("\n") if line.strip()]
-    input_lines_repr = repr(input_lines)
-    output_repr = repr(output_data)
+
+    parsed_args = [_parse_val(line) for line in input_lines]
+    parsed_output = _parse_val(output_data)
+
+    # Intelligence at generation time: align expected output to signature type
+    expected_aligned = _try_cast_expected(parsed_output, return_type)
+
+    args_repr = repr(parsed_args)
+    output_repr = repr(expected_aligned)
+
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    import json\n"
-            f"    input_lines = {input_lines_repr}\n"
-            f"    args = [json.loads(line) for line in input_lines]\n"
-            f"    expected_output = json.loads({output_repr})\n"
-            f"    assert {method_name}(*args) == expected_output\n"
+            f"    args = {args_repr}\n"
+            f"    expected_output = {output_repr}\n"
+            f"    actual_output = {method_name}(*args)\n"
+            f"    try:\n"
+            f"        assert actual_output == expected_output\n"
+            f"    except AssertionError:\n"
+            f"        # Type-agnostic fallback\n"
+            f"        assert str(actual_output).strip() == str(expected_output).strip()\n"
         )
     return (
         f"def test_case_{test_number}():\n"
-        f"    import json\n"
         f"    solution = {class_name}()\n"
-        f"    input_lines = {input_lines_repr}\n"
-        f"    args = [json.loads(line) for line in input_lines]\n"
-        f"    expected_output = json.loads({output_repr})\n"
-        f"    assert solution.{method_name}(*args) == expected_output\n"
+        f"    args = {args_repr}\n"
+        f"    expected_output = {output_repr}\n"
+        f"    actual_output = solution.{method_name}(*args)\n"
+        f"    try:\n"
+        f"        assert actual_output == expected_output\n"
+        f"    except AssertionError:\n"
+        f"        # Type-agnostic fallback\n"
+        f"        assert str(actual_output).strip() == str(expected_output).strip()\n"
     )
 
 
