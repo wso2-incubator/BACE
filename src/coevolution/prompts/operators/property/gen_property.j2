@@ -16,8 +16,10 @@ import json
 def property_<name>(inputdata: str, output: str) -> bool:
     """
     inputdata: JSON-encoded string of a dictionary mapping parameter names to values.
+               The parameters and types for the <problem> is specified in the <starter_code> section.
                Example: '{"lst": [3, 1, 2]}'
     output:    JSON-encoded string of the solution's return value.
+               The return type(s) are specified in the <starter_code> section.
                Example: '[1, 2, 3]'
     """
     # 1. Parse JSON inputs
@@ -57,5 +59,10 @@ If input is via stdin/json, each entry will be a dictionary/map of the form:
 If input is functional, each entry will be of the form:
 {"param1": value1, "param2": value2, ...}
 
-Output format will simply be a string of the output value. 
+Output format will be a JSON-encoded string of the solution's return value.
+Examples:
+- list: '[1, 2, 3]'
+- str: "'hello'"
+- int: "2"
+- dict: '{"a": 1, "b": 2}'
 </input/output format>

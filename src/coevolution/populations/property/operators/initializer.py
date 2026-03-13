@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import re
 from dataclasses import replace
 
 from loguru import logger
@@ -10,7 +12,6 @@ from coevolution.core.individual import TestIndividual
 from coevolution.core.interfaces import OPERATION_INITIAL, PopulationConfig, Problem
 from coevolution.core.interfaces.language import (
     ICodeParser,
-    LanguageTransformationError,
 )
 from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
@@ -34,7 +35,8 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
             The script is validated and stored in ``io_pair_cache`` so the
             evaluator can run it when ``execute_tests`` is first called.
 
-    Call 2: gen_property.j2 → N candidate ``def property_<name>(...)`` snippets.
+    Call 2: describe_properties.j2 → List of property descriptions.
+    Call 3: convert_description_to_property.j2 → Implementation for each description.
             Each snippet is validated against the problem's public test cases;
             invalid snippets are discarded.
     """
@@ -121,7 +123,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
 
         individuals: list[TestIndividual] = []
 
-        for snippet in candidates:
+        for snippet, description in candidates:
             try:
                 valid = validate_property_test(
                     snippet, transformed_tests, python_sandbox
@@ -142,7 +144,10 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
                     probability=self.pop_config.initial_prior,
                     creation_op=OPERATION_INITIAL,
                     generation_born=0,
-                    metadata={"pruning": "passed_public_io"},
+                    metadata={
+                        "pruning": "passed_public_io",
+                        "description": description,
+                    },
                 )
             )
 
@@ -153,9 +158,61 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         return individuals
 
     @llm_retry((LLMGenerationError, ValueError))
-    def _call_gen_property(self, problem: Problem) -> list[str]:
+    def _call_gen_property(self, problem: Problem) -> list[tuple[str, str]]:
+        """Two-stage generation: 1. Describe properties, 2. Convert to code."""
+        # Stage 1: Brainstorm descriptions
+        descriptions = self._call_describe_properties(problem)
+        if not descriptions:
+            return []
+
+        # Stage 2: Convert each description to code in parallel
+        results: list[tuple[str, str]] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            future_to_desc = {
+                executor.submit(self._call_convert_to_property, desc, problem): desc
+                for desc in descriptions
+            }
+            for future in concurrent.futures.as_completed(future_to_desc):
+                desc = future_to_desc[future]
+                try:
+                    snippet = future.result()
+                    results.append((snippet, desc))
+                except Exception as exc:
+                    logger.warning(
+                        f"PropertyTestInitializer: Failed to convert description to code: {exc}"
+                    )
+
+        return results
+
+    @llm_retry((LLMGenerationError, ValueError))
+    def _call_describe_properties(self, problem: Problem) -> list[str]:
         prompt = self.prompt_manager.render_prompt(
-            "operators/property/gen_property.j2",
+            "operators/property/describe_properties.j2",
+            question_content=problem.question_content,
+            starter_code=problem.starter_code,
+        )
+        response = self._generate(prompt)
+        # Extract content between <property_description> tags
+        descriptions = re.findall(
+            r"<property_description>(.*?)</property_description>", response, re.DOTALL
+        )
+        if not descriptions:
+            # Fallback: maybe it's just a list? Try to extract lines if no tags
+            # but for now let's be strict or add a fallback.
+            # Let's try to extract any non-empty lines if no tags are found.
+            if not descriptions:
+                logger.debug("No <property_description> tags found, falling back to line-based extraction.")
+                lines = [line.strip() for line in response.split('\n') if line.strip()]
+                # Filter out obvious non-descriptions like markdown headers
+                descriptions = [line for line in lines if not line.startswith('#') and len(line) > 10]
+
+        return [d.strip() for d in descriptions if d.strip()]
+
+    @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
+    def _call_convert_to_property(self, description: str, problem: Problem) -> str:
+        prompt = self.prompt_manager.render_prompt(
+            "operators/property/convert_description_to_property.j2",
+            description=description,
             question_content=problem.question_content,
             starter_code=problem.starter_code,
         )
@@ -163,19 +220,15 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         blocks = self.parser.extract_code_blocks(response)
         if not blocks:
             raise LLMGenerationError(
-                "gen_property: no code blocks found in LLM response."
+                "convert_to_property: no code blocks found in LLM response."
             )
 
-        candidates: list[str] = []
-        for block in blocks:
-            try:
-                block = self.parser.remove_main_block(block)
-                self.parser.is_syntax_valid(block)
-                candidates.append(block)
-            except (LanguageTransformationError, LLMSyntaxError):
-                pass
+        block = blocks[0]
+        block = self.parser.remove_main_block(block)
+        if not self.parser.is_syntax_valid(block):
+            raise LLMSyntaxError("convert_to_property: invalid syntax")
 
-        return candidates
+        return block
 
 
 __all__ = ["PropertyTestInitializer"]

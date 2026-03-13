@@ -105,10 +105,15 @@ PROPERTY_SNIPPET_FAIL = textwrap.dedent("""\
         return False
 """)
 
-PROPERTY_RESPONSE_ONE_PASS = f"```python\n{PROPERTY_SNIPPET_PASS}```"
-PROPERTY_RESPONSE_TWO_MIXED = (
-    f"```python\n{PROPERTY_SNIPPET_PASS}```\n```python\n{PROPERTY_SNIPPET_FAIL}```"
-)
+# Stage 1 response: descriptions
+PROPERTY_DESCRIPTIONS_RESPONSE = textwrap.dedent("""\
+    <property_description>The length of the returned list is identical to the length of the input list.</property_description>
+    <property_description>The elements in the returned list are sorted in ascending order.</property_description>
+""")
+ 
+# Stage 2 response: snippets
+PROPERTY_SNIPPET_PASS_RESPONSE = f"```python\n{PROPERTY_SNIPPET_PASS}```"
+PROPERTY_SNIPPET_FAIL_RESPONSE = f"```python\n{PROPERTY_SNIPPET_FAIL}```"
 
 
 def make_initializer(
@@ -144,7 +149,8 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
 
         with patch(_PATCH, return_value=InProcessSandbox()):
@@ -157,9 +163,10 @@ class TestHappyPath:
         init, cache, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
-
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             init.initialize(SORT_PROBLEM)
 
@@ -171,7 +178,8 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
 
         with patch(_PATCH, return_value=InProcessSandbox()):
@@ -183,7 +191,8 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
 
         with patch(_PATCH, return_value=InProcessSandbox()):
@@ -195,7 +204,8 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
 
         with patch(_PATCH, return_value=InProcessSandbox()):
@@ -207,7 +217,8 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_ONE_PASS,
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
         ]
 
         with patch(_PATCH, return_value=InProcessSandbox()):
@@ -220,9 +231,11 @@ class TestHappyPath:
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
-            PROPERTY_RESPONSE_TWO_MIXED,
+            PROPERTY_DESCRIPTIONS_RESPONSE,
+            PROPERTY_SNIPPET_PASS_RESPONSE,
+            PROPERTY_SNIPPET_FAIL_RESPONSE,
         ]
-
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             individuals = init.initialize(SORT_PROBLEM)
 
@@ -239,12 +252,13 @@ class TestHappyPath:
             public_test_cases=[],
             private_test_cases=[],
         )
-        response = (
-            f"```python\n{PROPERTY_SNIPPET_FAIL}```\n"  # always-False but valid syntax
-        )
         init, _, mock_llm = make_initializer()
-        mock_llm.generate.side_effect = [GEN_INPUTS_RESPONSE, response]
-
+        mock_llm.generate.side_effect = [
+            GEN_INPUTS_RESPONSE,
+            "<property_description>always false</property_description>",
+            PROPERTY_SNIPPET_FAIL_RESPONSE,
+        ]
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             individuals = init.initialize(problem)
 
@@ -258,8 +272,11 @@ class TestGenInputsFailures:
     def test_gen_inputs_llm_failure_still_returns_property_individuals(self) -> None:
         """gen_inputs crashing should not prevent property test generation."""
         init, _, mock_llm = make_initializer()
-        mock_llm.generate.return_value = PROPERTY_RESPONSE_ONE_PASS
-
+        mock_llm.generate.side_effect = [
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
+        ]
+ 
         with (
             patch.object(init, "_call_gen_inputs", side_effect=Exception("LLM down")),
             patch(_PATCH, return_value=InProcessSandbox()),
@@ -270,8 +287,11 @@ class TestGenInputsFailures:
 
     def test_gen_inputs_llm_failure_nothing_cached(self) -> None:
         init, cache, mock_llm = make_initializer()
-        mock_llm.generate.return_value = PROPERTY_RESPONSE_ONE_PASS
-
+        mock_llm.generate.side_effect = [
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
+        ]
+ 
         with (
             patch.object(init, "_call_gen_inputs", side_effect=Exception("LLM down")),
             patch(_PATCH, return_value=InProcessSandbox()),
@@ -283,8 +303,11 @@ class TestGenInputsFailures:
     def test_gen_inputs_no_code_block_nothing_cached(self) -> None:
         """LLM returns a response with no code block → script discarded."""
         init, cache, mock_llm = make_initializer()
-        mock_llm.generate.return_value = PROPERTY_RESPONSE_ONE_PASS
-
+        mock_llm.generate.side_effect = [
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
+        ]
+ 
         with (
             patch.object(
                 init,
@@ -302,8 +325,11 @@ class TestGenInputsFailures:
     def test_gen_inputs_invalid_python_not_cached(self) -> None:
         """gen_inputs returns syntactically invalid Python → script discarded."""
         init, cache, mock_llm = make_initializer()
-        mock_llm.generate.return_value = PROPERTY_RESPONSE_ONE_PASS
-
+        mock_llm.generate.side_effect = [
+            "<property_description>matches length</property_description>",
+            PROPERTY_SNIPPET_PASS_RESPONSE,
+        ]
+ 
         with (
             patch.object(init, "_call_gen_inputs", return_value="def broken(:"),
             patch(_PATCH, return_value=InProcessSandbox()),
@@ -336,10 +362,13 @@ class TestGenPropertyFailures:
     def test_snippet_without_property_prefix_rejected(self) -> None:
         """A snippet whose function name doesn't start with property_ is rejected."""
         bad_snippet = "def check_output(inputdata, output):\n    return True\n"
-        response = f"```python\n{bad_snippet}```"
         init, _, mock_llm = make_initializer()
-        mock_llm.generate.side_effect = [GEN_INPUTS_RESPONSE, response]
-
+        mock_llm.generate.side_effect = [
+            GEN_INPUTS_RESPONSE,
+            "<property_description>check output</property_description>",
+            f"```python\n{bad_snippet}```",
+        ]
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             individuals = init.initialize(SORT_PROBLEM)
 
@@ -349,10 +378,13 @@ class TestGenPropertyFailures:
         crashing = (
             "def property_crashes(inputdata, output):\n    raise ValueError('boom')\n"
         )
-        response = f"```python\n{crashing}```"
         init, _, mock_llm = make_initializer()
-        mock_llm.generate.side_effect = [GEN_INPUTS_RESPONSE, response]
-
+        mock_llm.generate.side_effect = [
+            GEN_INPUTS_RESPONSE,
+            "<property_description>crashes</property_description>",
+            f"```python\n{crashing}```",
+        ]
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             individuals = init.initialize(SORT_PROBLEM)
 
@@ -362,10 +394,13 @@ class TestGenPropertyFailures:
         """Blocks that are syntactically invalid are dropped before validation."""
         # PythonParser.extract_code_blocks already filters invalid syntax,
         # so the initializer should get zero candidates and return [].
-        response = "```python\ndef property_broken(:\n```"
         init, _, mock_llm = make_initializer()
-        mock_llm.generate.side_effect = [GEN_INPUTS_RESPONSE, response]
-
+        mock_llm.generate.side_effect = [
+            GEN_INPUTS_RESPONSE,
+            "<property_description>broken</property_description>",
+            "```python\ndef property_broken(:\n```",
+        ]
+ 
         with patch(_PATCH, return_value=InProcessSandbox()):
             individuals = init.initialize(SORT_PROBLEM)
 

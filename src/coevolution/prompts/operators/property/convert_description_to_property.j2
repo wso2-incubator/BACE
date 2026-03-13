@@ -1,0 +1,57 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, and a specific property description.
+Your goal is to implement a Python function that checks this property.
+
+### Your Task
+Implement the function `property_<name>(inputdata: str, output: str) -> bool` following this template:
+
+```python
+import json
+
+def property_<name>(inputdata: str, output: str) -> bool:
+    """
+    {{ description }}
+    """
+    # 1. Parse JSON inputs
+    inp = json.loads(inputdata)
+    out = json.loads(output)
+    
+    # 2. Extract specific parameters if needed
+    # ...
+    
+    # 3. Check property
+    # ...
+    return ...
+```
+
+Rules:
+- `inputdata` and `output` are JSON-encoded strings.
+- Return True if the property holds, False otherwise.
+- Wrap the function in a ```python ... ``` code block.
+- Do NOT import anything outside the standard library.
+</task>
+
+<property_to_check>
+{{ description }}
+</property_to_check>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<input/output format>
+If input is via stdin/json, each entry will be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry will be of the form:
+{"param1": value1, "param2": value2, ...}
+
+Output format will be a JSON-encoded string of the solution's return value.
+</input/output format>
