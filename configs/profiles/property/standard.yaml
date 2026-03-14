@@ -9,4 +9,5 @@ beta: 0.3
 gamma: 0.25
 learning_rate: 0.1
 
-cpu_workers: 4
+cpu_workers: 8
+num_inputs: 60

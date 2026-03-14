@@ -11,7 +11,7 @@ code_profile: "profiles/code/standard.yaml"
 property_profile: "profiles/property/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
-schedule: "schedules/code-only-3gen.yaml"
+schedule: "schedules/code-only-5gen.yaml"
 
 # Dataset configuration
 dataset:
