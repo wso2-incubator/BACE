@@ -10,9 +10,7 @@ from loguru import logger
 
 from coevolution.core.individual import TestIndividual
 from coevolution.core.interfaces import OPERATION_INITIAL, PopulationConfig, Problem
-from coevolution.core.interfaces.language import (
-    ICodeParser,
-)
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.strategies.llm_base import (
     BaseLLMInitializer,
     ILanguageModel,
@@ -167,9 +165,16 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
         if not descriptions:
             return []
 
+        logger.debug(
+            f"PropertyTestInitializer: Generated {len(descriptions)} descriptions."
+        )
+        logger.trace(f"Descriptions: {descriptions}")
+
         # Stage 2: Convert each description to code in parallel
         results: list[tuple[str, str]] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.llm_workers
+        ) as executor:
             future_to_desc = {
                 executor.submit(self._call_convert_to_property, desc, problem): desc
                 for desc in descriptions
@@ -199,15 +204,9 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
             r"<property_description>(.*?)</property_description>", response, re.DOTALL
         )
         if not descriptions:
-            # Fallback: maybe it's just a list? Try to extract lines if no tags
-            # but for now let's be strict or add a fallback.
-            # Let's try to extract any non-empty lines if no tags are found.
-            if not descriptions:
-                logger.debug("No <property_description> tags found, falling back to line-based extraction.")
-                lines = [line.strip() for line in response.split('\n') if line.strip()]
-                # Filter out obvious non-descriptions like markdown headers
-                descriptions = [line for line in lines if not line.startswith('#') and len(line) > 10]
-
+            raise LLMGenerationError(
+                "PropertyTestInitializer: No property descriptions found in LLM response."
+            )
         return [d.strip() for d in descriptions if d.strip()]
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
