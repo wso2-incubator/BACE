@@ -26,6 +26,7 @@ class CodeIndividual(BaseIndividual):
         generation_born: int,
         parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
+        explanation: str | None = None,
     ) -> None:
         """
         Initializes the individual by passing all state
@@ -39,6 +40,7 @@ class CodeIndividual(BaseIndividual):
             generation_born,
             parents,
             metadata,
+            explanation,
         )
 
         self._id = f"C{next(CodeIndividual._code_counter)}"
@@ -75,6 +77,7 @@ class TestIndividual(BaseIndividual):
         generation_born: int,
         parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
+        explanation: str | None = None,
     ) -> None:
         """
         Initializes the individual by passing all state
@@ -88,6 +91,7 @@ class TestIndividual(BaseIndividual):
             generation_born,
             parents,
             metadata,
+            explanation,
         )
 
         self._id = f"T{next(TestIndividual._core_test_counter)}"
