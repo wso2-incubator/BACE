@@ -43,7 +43,7 @@ class PopulationDiscoveryService:
                 - evolved_test_profiles: Dict[str, TestProfile]
                 - public_test_profile: Optional[PublicTestProfile]
         """
-        results = {
+        results: Dict[str, Any] = {
             "code_profile": None,
             "evolved_test_profiles": {},
             "public_test_profile": None,

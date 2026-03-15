@@ -1,7 +1,7 @@
 """Codegen logic for Python code snippet composition and file formatting."""
 
 import ast
-from typing import Optional
+from typing import Any, Optional
 
 from coevolution.core.interfaces.language import (
     LanguageParsingError,
@@ -11,7 +11,7 @@ from coevolution.core.interfaces.language import (
 from .ast import remove_main_block
 
 
-def _parse_val(val: str) -> any:
+def _parse_val(val: str) -> Any:
     """Try to parse as JSON, fallback to raw string."""
     try:
         import json
@@ -21,7 +21,7 @@ def _parse_val(val: str) -> any:
         return val
 
 
-def _try_cast_expected(expected: any, return_type: Optional[str]) -> any:
+def _try_cast_expected(expected: Any, return_type: Optional[str]) -> Any:
     """Attempt to cast expected output to the return type if possible."""
     if not return_type:
         return expected

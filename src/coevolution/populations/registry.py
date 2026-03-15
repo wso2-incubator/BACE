@@ -62,28 +62,28 @@ class PopulationRegistry:
 
     # --- Decorators ---
 
-    def code_factory(self, name: str):
+    def code_factory(self, name: str) -> Callable[[Callable[..., CodeProfile]], Callable[..., CodeProfile]]:
         """Decorator to register a code profile factory."""
 
-        def decorator(func: Callable[..., CodeProfile]):
+        def decorator(func: Callable[..., CodeProfile]) -> Callable[..., CodeProfile]:
             self.register_code_factory(name, func)
             return func
 
         return decorator
 
-    def test_factory(self, name: str):
+    def test_factory(self, name: str) -> Callable[[Callable[..., TestProfile]], Callable[..., TestProfile]]:
         """Decorator to register a test profile factory."""
 
-        def decorator(func: Callable[..., TestProfile]):
+        def decorator(func: Callable[..., TestProfile]) -> Callable[..., TestProfile]:
             self.register_test_factory(name, func)
             return func
 
         return decorator
 
-    def public_factory(self, name: str):
+    def public_factory(self, name: str) -> Callable[[Callable[..., PublicTestProfile]], Callable[..., PublicTestProfile]]:
         """Decorator to register a public test profile factory."""
 
-        def decorator(func: Callable[..., PublicTestProfile]):
+        def decorator(func: Callable[..., PublicTestProfile]) -> Callable[..., PublicTestProfile]:
             self.register_public_factory(name, func)
             return func
 
