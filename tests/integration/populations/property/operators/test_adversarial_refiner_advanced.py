@@ -1,3 +1,4 @@
+import os
 import pytest
 
 from coevolution.core.individual import TestIndividual
@@ -34,6 +35,10 @@ DUPLICATE_PROBLEM = Problem(
 )
 
 
+@pytest.mark.skipif(
+    not os.getenv("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set; skipping real OpenAI integration tests.",
+)
 @pytest.mark.integration
 class TestAdversarialRefinerAdvanced:
     @pytest.fixture
