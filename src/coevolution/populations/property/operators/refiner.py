@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from coevolution.core.interfaces.language import ICodeParser
     from coevolution.core.interfaces.probability import IProbabilityAssigner
     from coevolution.core.interfaces.selection import IParentSelectionStrategy
+    from coevolution.core.population import TestPopulation
 
 
 class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
@@ -31,6 +33,9 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
              current property test but is actually correct according to the problem.
     Phase 2: Refine the property test snippet to correctly handle the counter-example.
     """
+
+    _lock = threading.Lock()
+    _in_flight: set[str] = set()
 
     def __init__(
         self,
@@ -53,26 +58,46 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         if not pop or pop.size == 0:
             return []
 
-        parents = self.parent_selector.select_parents(
-            pop, count=1, coevolution_context=context
-        )
-        if not parents:
-            return []
-
-        parent = parents[0]
-
-        # Check retry limit
-        attempts = parent.metadata.get("falsification_attempts", 0)
-        if attempts >= self.max_falsification_attempts:
-            logger.debug(
-                f"AdversarialPropertyRefiner: giving up on {parent.id} "
-                f"after {attempts} failed falsification attempts."
+        with self._lock:
+            parents = self.parent_selector.select_parents(
+                pop, count=1, coevolution_context=context
             )
-            return []
+            if not parents:
+                return []
+            parent = parents[0]
 
+            # Concurrency check: is someone else already working on this individual?
+            if parent.id in self._in_flight:
+                logger.debug(
+                    f"AdversarialPropertyRefiner: {parent.id} is already in-flight. Skipping."
+                )
+                return []
+
+            # Check retry limit
+            falsification_attempts = parent.metadata.get("falsification_attempts", 0)
+            if falsification_attempts >= self.max_falsification_attempts:
+                logger.debug(
+                    f"AdversarialPropertyRefiner: giving up on {parent.id} after "
+                    f"{falsification_attempts} failed falsification attempts."
+                )
+                return []
+
+            # Mark as in-flight
+            self._in_flight.add(parent.id)
+
+        try:
+            return self._do_execute(parent, context, pop)
+        finally:
+            with self._lock:
+                self._in_flight.remove(parent.id)
+
+    def _do_execute(
+        self, parent: TestIndividual, context: CoevolutionContext, pop: TestPopulation
+    ) -> list[TestIndividual]:
+        # 3. Phase 1: Falsification
         problem = context.problem
+        falsification_attempts = parent.metadata.get("falsification_attempts", 0)
 
-        # 2. Phase 1: Generate counter-example and reasoning
         try:
             ce_data = self._generate_counter_example(parent, problem)
         except Exception as exc:
@@ -80,7 +105,8 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 f"AdversarialPropertyRefiner: counter-example generation failed: {exc}"
             )
             # Increment attempts on failure to generate CE (including LLM errors)
-            parent.metadata["falsification_attempts"] = attempts + 1
+            with self._lock:
+                parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
 
         if not ce_data:
@@ -88,7 +114,8 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 f"AdversarialPropertyRefiner: no counter-example found for {parent.id}"
             )
             # Increment attempts when no CE is found
-            parent.metadata["falsification_attempts"] = attempts + 1
+            with self._lock:
+                parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
 
         counter_example_json, reasoning = ce_data
