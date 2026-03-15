@@ -125,34 +125,52 @@ def get_structural_metadata(code: str) -> Dict[str, Any]:
 
 def parse_test_inputs(outputs: str) -> List[Dict[str, Any]]:
     """
-    Parse Python literal outputs using ast.literal_eval, with a fallback to
-    restricted eval() for special float values (inf, nan).
+    Parse Python literal or JSON outputs, supporting special float values
+    (inf, nan, Infinity, NaN).
     """
+    import json
     import math
 
+    # Try JSON first (generator wrapper emits JSON)
+    try:
+        val = json.loads(outputs)
+        if isinstance(val, list):
+            return val
+        if isinstance(val, dict):
+            return [val]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Fallback to ast.literal_eval
     try:
         val = ast.literal_eval(outputs)
         if isinstance(val, list):
             return val
         if isinstance(val, dict):
             return [val]
-        return []
     except (ValueError, SyntaxError) as e:
         logger.debug(f"Failed to parse test inputs as literal: {e}")
-        try:
-            safe_ns = {"inf": math.inf, "nan": math.nan, "__builtins__": {}}
-            val = eval(outputs, safe_ns)  # noqa: S307
-            if isinstance(val, list):
-                return val
-            if isinstance(val, dict):
-                return [val]
-            logger.debug(
-                f"Eval succeeded but result type {type(val)} is not list or dict"
-            )
-            return []
-        except Exception as eval_error:
-            logger.debug(f"Failed to parse with restricted eval: {eval_error}")
-            return []
+
+    # Final fallback: restricted eval with support for both Python and JSON float tokens
+    try:
+        safe_ns = {
+            "inf": math.inf,
+            "nan": math.nan,
+            "Infinity": math.inf,
+            "-Infinity": -math.inf,
+            "NaN": math.nan,
+            "__builtins__": {},
+        }
+        val = eval(outputs, safe_ns)  # noqa: S307
+        if isinstance(val, list):
+            return val
+        if isinstance(val, dict):
+            return [val]
+        logger.debug(f"Eval succeeded but result type {type(val)} is not list or dict")
+        return []
+    except Exception as eval_error:
+        logger.debug(f"Failed to parse with restricted eval: {eval_error}")
+        return []
 
 
 def _extract_comments(node: ast.AST, lines: List[str]) -> str:
