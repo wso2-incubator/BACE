@@ -17,7 +17,6 @@ from coevolution.strategies.llm_base import (
     LLMSyntaxError,
     llm_retry,
 )
-from infrastructure.languages import PythonLanguage
 
 if TYPE_CHECKING:
     from coevolution.core.interfaces.language import ICodeParser
@@ -44,7 +43,6 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
     ) -> None:
         super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
         self.max_falsification_attempts = max_falsification_attempts
-        self._python_lang = PythonLanguage()
 
     def operation_name(self) -> str:
         return "adversarial_refinement"
