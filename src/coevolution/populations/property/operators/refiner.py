@@ -53,37 +53,40 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         return "adversarial_refinement"
 
     def execute(self, context: CoevolutionContext) -> list[TestIndividual]:
-        # 1. Select a property test to refine
+        # 1. Access population
         pop = context.test_populations.get("property")
         if not pop or pop.size == 0:
             return []
 
-        with self._lock:
+        # 2. Selection Loop (Re-roll strategy to prevent worker starvation)
+        # We try up to 5 times to find an available parent.
+        # Selection happens OUTSIDE the lock to allow parallel decision making.
+        parent = None
+        for _ in range(5):
             parents = self.parent_selector.select_parents(
                 pop, count=1, coevolution_context=context
             )
             if not parents:
-                return []
-            parent = parents[0]
+                break
+            candidate = parents[0]
 
-            # Concurrency check: is someone else already working on this individual?
-            if parent.id in self._in_flight:
-                logger.debug(
-                    f"AdversarialPropertyRefiner: {parent.id} is already in-flight. Skipping."
-                )
-                return []
+            with self._lock:
+                # Is someone else already working on this individual?
+                if candidate.id in self._in_flight:
+                    continue
 
-            # Check retry limit
-            falsification_attempts = parent.metadata.get("falsification_attempts", 0)
-            if falsification_attempts >= self.max_falsification_attempts:
-                logger.debug(
-                    f"AdversarialPropertyRefiner: giving up on {parent.id} after "
-                    f"{falsification_attempts} failed falsification attempts."
-                )
-                return []
+                # Check retry limit
+                attempts = candidate.metadata.get("falsification_attempts", 0)
+                if attempts >= self.max_falsification_attempts:
+                    continue
 
-            # Mark as in-flight
-            self._in_flight.add(parent.id)
+                # Successfully claimed!
+                self._in_flight.add(candidate.id)
+                parent = candidate
+                break
+
+        if not parent:
+            return []
 
         try:
             return self._do_execute(parent, context, pop)
