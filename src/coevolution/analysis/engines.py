@@ -1,6 +1,7 @@
 # src/coevolution/analysis/engines.py
 from typing import Any
 
+
 def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten the evolution schedule into a list of epoch definitions."""
     schedule_data = config.get("evolution_config", {}).get("schedule", {})
@@ -9,7 +10,7 @@ def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
         schedule_data = config.get("schedule", {})
 
     epochs = []
-    
+
     # CASE 1: List of phases (modern format)
     phases = schedule_data.get("phases", []) if isinstance(schedule_data, dict) else []
     if phases:
@@ -20,14 +21,16 @@ def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
                     duration = int(duration)
                 except ValueError:
                     duration = 0
-            
+
             for _ in range(duration):
-                epochs.append({
-                    "phase_name": p.get("name", "Unknown"),
-                    "evolve_code": p.get("evolve_code", False),
-                    "evolve_tests": p.get("evolve_tests", False),
-                })
-    
+                epochs.append(
+                    {
+                        "phase_name": p.get("name", "Unknown"),
+                        "evolve_code": p.get("evolve_code", False),
+                        "evolve_tests": p.get("evolve_tests", False),
+                    }
+                )
+
     # CASE 2: Dictionary of phases (e.g. {"warmup": {"duration": 5}})
     elif isinstance(schedule_data, dict):
         for name, p in schedule_data.items():
@@ -39,18 +42,24 @@ def reconstruct_schedule(config: dict[str, Any]) -> list[dict[str, Any]]:
                     duration = int(duration)
                 except ValueError:
                     duration = 0
-                
+
             for _ in range(duration):
-                epochs.append({
-                    "phase_name": name,
-                    "evolve_code": p.get("evolve_code", True), # Default to True for simple schedules
-                    "evolve_tests": p.get("evolve_tests", False),
-                })
+                epochs.append(
+                    {
+                        "phase_name": name,
+                        "evolve_code": p.get(
+                            "evolve_code", True
+                        ),  # Default to True for simple schedules
+                        "evolve_tests": p.get("evolve_tests", False),
+                    }
+                )
 
     return epochs
 
 
-def group_events_into_cycles(events: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+def group_events_into_cycles(
+    events: list[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
     """Group events into cycles delimited by GENERATION_SUMMARY."""
     cycles = []
     current_cycle = []
@@ -76,17 +85,14 @@ def get_active_ids_in_cycle(cycle_events: list[dict[str, Any]]) -> dict[str, Any
     for m in matrices:
         tt = str(m.get("test_type", "Test")).upper()
         if tt in ("PRIVATE", "PUBLIC"):
-            continue 
+            continue
 
         for cid in m.get("code_ids", []):
             code_ids.add(cid)
-            
+
         if tt not in test_pops:
             test_pops[tt] = set()
         for tid in m.get("test_ids", []):
             test_pops[tt].add(tid)
 
-    return {
-        "code": code_ids,
-        "test_pops": test_pops
-    }
+    return {"code": code_ids, "test_pops": test_pops}

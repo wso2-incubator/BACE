@@ -32,6 +32,7 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
     """Create an executable script that runs a function with JSON input data."""
     try:
         import json
+
         try:
             input_dict = json.loads(input_data)
             if not isinstance(input_dict, dict):
@@ -49,15 +50,16 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
                 "Evaluation input must be a JSON object with argument names; "
                 'if using an "inputdata" field, it must itself be an object.'
             )
-        
+
         # We need the function name from the code snippet
         match = FUNCTION_PATTERN.search(code_snippet)
         if not match:
             raise LanguageTransformationError("Cannot find function in code snippet")
         function_name = match.group(2)
-        
+
         # Build arguments string in the correct order using the function signature
         from .parser import get_function_signature
+
         sig = get_function_signature(code_snippet)
         param_names = list(sig.keys())
 

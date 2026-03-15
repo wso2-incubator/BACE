@@ -67,7 +67,11 @@ def _execute_atomic_interaction(
         script = composer.compose_test_script(code_snippet, test_snippet)
 
         # High-level sandbox API handles file creation, commands, and cleanup
-        return code_idx, test_idx, sandbox.execute_test_script(script, runtime, analyzer)
+        return (
+            code_idx,
+            test_idx,
+            sandbox.execute_test_script(script, runtime, analyzer),
+        )
 
     except Exception as e:
         logger.error(

@@ -126,7 +126,9 @@ class StandardCodeInitializer(BaseCodeInitializer):
                     logger.error(f"Batch init failed: {e}")
 
         if not individuals:
-            raise RuntimeError("StandardCodeInitializer: failed to generate any individuals")
+            raise RuntimeError(
+                "StandardCodeInitializer: failed to generate any individuals"
+            )
         return individuals[:target]
 
 

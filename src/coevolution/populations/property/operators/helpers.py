@@ -7,7 +7,10 @@ import re
 from loguru import logger
 
 from coevolution.core.interfaces.data import Test
-from coevolution.core.interfaces.language import ICodeParser, LanguageTransformationError
+from coevolution.core.interfaces.language import (
+    ICodeParser,
+    LanguageTransformationError,
+)
 
 
 def transform_public_tests(

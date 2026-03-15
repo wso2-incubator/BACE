@@ -28,6 +28,7 @@ from .operators.initializer import DifferentialInitializer
 
 from ..registry import registry
 
+
 @registry.test_factory("differential")
 def create_differential_test_profile(
     llm_client: LLMClient,
@@ -130,5 +131,6 @@ def create_differential_test_profile(
         elite_selector=elite_selector,
         bayesian_config=bayesian_config,
     )
+
 
 __all__ = ["create_differential_test_profile"]

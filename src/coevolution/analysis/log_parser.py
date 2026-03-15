@@ -13,12 +13,15 @@ from loguru import logger
 
 # --- Interface Definitions ---
 
+
 class ParsedLog(TypedDict):
     gen_stats: pd.DataFrame
     individuals: pd.DataFrame
     matrices: dict[str, list[pd.DataFrame]]
 
+
 # --- The Stream Reader (IO Abstraction for Legacy) ---
+
 
 def _log_line_generator(
     log_dir: str, log_filename_pattern: str, limit_to_files: list[str] | None = None
@@ -36,7 +39,9 @@ def _log_line_generator(
 
     if not found_files:
         if not limit_to_files:
-            logger.warning(f"No log files found at {os.path.join(log_dir, log_filename_pattern)}")
+            logger.warning(
+                f"No log files found at {os.path.join(log_dir, log_filename_pattern)}"
+            )
         return
 
     for file_path in found_files:
@@ -57,15 +62,25 @@ def _log_line_generator(
 
 # --- Specialized Parsers ---
 
+
 class LegacyLogParser:
     """Parses old-style flat-file .log files."""
-    
-    def parse(self, log_dir: str, file_pattern: str, run_id: str, problem_id: str, limit_to_files: list[str] | None = None) -> ParsedLog:
+
+    def parse(
+        self,
+        log_dir: str,
+        file_pattern: str,
+        run_id: str,
+        problem_id: str,
+        limit_to_files: list[str] | None = None,
+    ) -> ParsedLog:
         gen_data = []
         ind_data = []
         matrix_store: dict[str, list[pd.DataFrame]] = defaultdict(list)
 
-        for fpath, line_str in _log_line_generator(log_dir, file_pattern, limit_to_files=limit_to_files):
+        for fpath, line_str in _log_line_generator(
+            log_dir, file_pattern, limit_to_files=limit_to_files
+        ):
             if not line_str.strip():
                 continue
 
@@ -74,7 +89,10 @@ class LegacyLogParser:
                 record = log_entry.get("record", {})
                 extra = record.get("extra", {})
 
-                if extra.get("run_id") != run_id or extra.get("problem_id") != problem_id:
+                if (
+                    extra.get("run_id") != run_id
+                    or extra.get("problem_id") != problem_id
+                ):
                     continue
 
                 message = record.get("message", "")
@@ -89,7 +107,7 @@ class LegacyLogParser:
                     header_parts = header.split("_INDIVIDUAL_")
                     if len(header_parts) == 2:
                         data["type"] = header_parts[0].lower()
-                        data["status"] = header_parts[1].lower() # survivied/died
+                        data["status"] = header_parts[1].lower()  # survivied/died
                     ind_data.append(data)
                 elif header.endswith(" serialized"):
                     matrix_type = header.split(" ")[0].lower()
@@ -103,7 +121,13 @@ class LegacyLogParser:
 
         return self._finalize(gen_data, ind_data, matrix_store, run_id)
 
-    def _finalize(self, gen_data: list[dict[str, Any]], ind_data: list[dict[str, Any]], matrix_store: dict[str, list[pd.DataFrame]], run_id: str) -> ParsedLog:
+    def _finalize(
+        self,
+        gen_data: list[dict[str, Any]],
+        ind_data: list[dict[str, Any]],
+        matrix_store: dict[str, list[pd.DataFrame]],
+        run_id: str,
+    ) -> ParsedLog:
         gen_df = pd.DataFrame(gen_data)
         if not gen_df.empty and "generation" in gen_df.columns:
             gen_df = gen_df.set_index("generation").sort_index()
@@ -121,7 +145,7 @@ class LegacyLogParser:
 
 class StructuredJSONLParser:
     """Parses new-style directory-based JSONL telemetry."""
-    
+
     def parse(self, log_dir: str, run_id: str, problem_id: str) -> ParsedLog:
         from coevolution.utils.paths import sanitize_id
 
@@ -131,10 +155,14 @@ class StructuredJSONLParser:
             Path(log_dir) / sanitized_run / sanitized_pid / "evolutionary_history.jsonl"
         )
         if not history_path.exists():
-            return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
+            return {
+                "gen_stats": pd.DataFrame(),
+                "individuals": pd.DataFrame(),
+                "matrices": {},
+            }
 
         gen_data = []
-        ind_data = [] # standard lifecycle
+        ind_data = []  # standard lifecycle
         matrix_store: dict[str, list[pd.DataFrame]] = defaultdict(list)
 
         with open(history_path, "r") as f:
@@ -145,18 +173,18 @@ class StructuredJSONLParser:
                     extra = record.get("extra", {})
                     event_data = extra.get("event_data", {})
                     message = record.get("message", "")
-                    
+
                     if message == "LIFECYCLE_EVENT":
                         event_type = event_data.get("event", "UNKNOWN").upper()
                         # Map to legacy-compatible fields
                         row = {**event_data, "id": event_data.get("individual_id")}
-                        
+
                         # Type detection
                         if str(row["id"]).startswith("C"):
                             row["type"] = "code"
                         else:
                             row["type"] = "test"
-                        
+
                         # Status mapping for overview.py compatibility
                         if event_type in ("SELECTED_AS_ELITE", "SURVIVED"):
                             row["status"] = "survived"
@@ -164,15 +192,15 @@ class StructuredJSONLParser:
                             row["status"] = "died"
                         else:
                             row["status"] = event_type.lower()
-                            
+
                         ind_data.append(row)
-                    
+
                     elif message == "BELIEF_UPDATE":
                         # BELIEF_UPDATE contains lists of ids and posterior values
                         ids = event_data.get("ids", [])
                         posteriors = event_data.get("posterior", [])
                         population = event_data.get("population", "code")
-                        
+
                         if ids and posteriors and len(ids) == len(posteriors):
                             for iid, prob in zip(ids, posteriors):
                                 row = {
@@ -180,18 +208,18 @@ class StructuredJSONLParser:
                                     "probability": prob,
                                     "generation": event_data.get("generation"),
                                     "type": population,
-                                    "status": "belief_update"
+                                    "status": "belief_update",
                                 }
                                 ind_data.append(row)
-                        
+
                     elif message == "GENERATION_SUMMARY":
                         gen_data.append(event_data)
-                        
+
                     elif message == "OBSERVATION_MATRIX":
                         matrix_type = event_data.get("test_type", "unknown").lower()
                         matrix_dict = event_data.get("matrix", {})
                         code_ids = event_data.get("code_ids", [])
-                        
+
                         if matrix_dict:
                             df = pd.DataFrame.from_dict(matrix_dict)
                             # If we have explicit code_ids, use them as index
@@ -199,13 +227,19 @@ class StructuredJSONLParser:
                                 df.index = code_ids
                             df.index.name = "Code"
                             matrix_store[matrix_type].append(df)
-                            
+
                 except Exception:
                     continue
 
         return self._finalize(gen_data, ind_data, matrix_store, run_id)
 
-    def _finalize(self, gen_data: list[dict[str, Any]], ind_data: list[dict[str, Any]], matrix_store: dict[str, list[pd.DataFrame]], run_id: str) -> ParsedLog:
+    def _finalize(
+        self,
+        gen_data: list[dict[str, Any]],
+        ind_data: list[dict[str, Any]],
+        matrix_store: dict[str, list[pd.DataFrame]],
+        run_id: str,
+    ) -> ParsedLog:
         gen_df = pd.DataFrame(gen_data)
         if not gen_df.empty and "generation" in gen_df.columns:
             gen_df = gen_df.set_index("generation").sort_index()
@@ -222,6 +256,7 @@ class StructuredJSONLParser:
 
 
 # --- Public API (The Dispatcher) ---
+
 
 def parse_coevolution_log(
     log_dir: str = "logs",
@@ -268,35 +303,51 @@ def parse_coevolution_log(
             for p_dir in run_path.iterdir():
                 if p_dir.is_dir() and (p_dir / "evolutionary_history.jsonl").exists():
                     pids.append(p_dir.name)
-            
+
             if pids:
-                actual_pid = target_problem_id if target_problem_id in pids else sorted(pids)[0]
-                logger.info(f"Using structured log format for {target_run_id}/{actual_pid}")
+                actual_pid = (
+                    target_problem_id if target_problem_id in pids else sorted(pids)[0]
+                )
+                logger.info(
+                    f"Using structured log format for {target_run_id}/{actual_pid}"
+                )
                 return StructuredJSONLParser().parse(log_dir, target_run_id, actual_pid)
 
     # 3. Fallback to Legacy discovery (only if requested)
     if use_legacy:
         if target_problem_id is None:
-            problem_ids, current_legacy_files = get_problem_ids(log_dir, log_filename_pattern, target_run_id, use_legacy=True)
+            problem_ids, current_legacy_files = get_problem_ids(
+                log_dir, log_filename_pattern, target_run_id, use_legacy=True
+            )
             if not problem_ids:
-                return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
+                return {
+                    "gen_stats": pd.DataFrame(),
+                    "individuals": pd.DataFrame(),
+                    "matrices": {},
+                }
             target_problem_id = sorted(list(problem_ids))[0]
             if legacy_files is None:
                 legacy_files = current_legacy_files
-            
-        logger.info(f"Falling back to legacy flat log parser for {target_run_id}/{target_problem_id}")
-        return LegacyLogParser().parse(log_dir, log_filename_pattern, target_run_id, target_problem_id or "", limit_to_files=legacy_files)
+
+        logger.info(
+            f"Falling back to legacy flat log parser for {target_run_id}/{target_problem_id}"
+        )
+        return LegacyLogParser().parse(
+            log_dir,
+            log_filename_pattern,
+            target_run_id,
+            target_problem_id or "",
+            limit_to_files=legacy_files,
+        )
 
     return {"gen_stats": pd.DataFrame(), "individuals": pd.DataFrame(), "matrices": {}}
 
 
 # --- Helper Utilities (Shared) ---
 
+
 def get_problem_ids(
-    log_dir: str, 
-    log_filename_pattern: str, 
-    run_id: str, 
-    use_legacy: bool = False
+    log_dir: str, log_filename_pattern: str, run_id: str, use_legacy: bool = False
 ) -> tuple[set[str], list[str]]:
     """
     Scans for problem IDs.
@@ -313,8 +364,8 @@ def get_problem_ids(
     if run_path.exists() and run_path.is_dir():
         for p_dir in run_path.iterdir():
             if p_dir.is_dir() and (p_dir / "evolutionary_history.jsonl").exists():
-                # Note: Directory name is sanitized version, but the logs inside 
-                # might still reference the original ID. However, for discovery 
+                # Note: Directory name is sanitized version, but the logs inside
+                # might still reference the original ID. However, for discovery
                 # we return the directory name which is used as target_problem_id.
                 problem_ids.add(p_dir.name)
 
@@ -336,9 +387,7 @@ def get_problem_ids(
 
 
 def get_run_ids(
-    log_dir: str, 
-    log_filename_pattern: str, 
-    use_legacy: bool = False
+    log_dir: str, log_filename_pattern: str, use_legacy: bool = False
 ) -> set[str]:
     """Scans for run IDs in structured directories and optionally legacy logs."""
     run_ids = set()

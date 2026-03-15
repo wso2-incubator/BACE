@@ -125,9 +125,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
 
         # 3. Phase 2: Refine property
         current_explanations = [
-            ind.explanation
-            for ind in pop
-            if ind.id != parent.id and ind.explanation
+            ind.explanation for ind in pop if ind.id != parent.id and ind.explanation
         ]
         try:
             refined_snippet = self._refine_property(

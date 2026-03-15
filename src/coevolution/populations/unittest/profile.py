@@ -27,6 +27,7 @@ from .operators.initializer import UnittestInitializer
 
 from ..registry import registry
 
+
 @registry.test_factory("unittest")
 def create_unittest_test_profile(
     llm_client: LLMClient,
@@ -145,5 +146,6 @@ def create_public_test_profile(
             learning_rate=learning_rate,
         )
     )
+
 
 __all__ = ["create_unittest_test_profile", "create_public_test_profile"]

@@ -34,6 +34,7 @@ from .operators.initializer import (
 
 from ..registry import registry
 
+
 @registry.code_factory("default")
 def create_default_code_profile(
     llm_client: LLMClient,
@@ -141,5 +142,6 @@ def create_default_code_profile(
         initializer=initializer,
         elite_selector=elite_selector,
     )
+
 
 __all__ = ["create_default_code_profile"]

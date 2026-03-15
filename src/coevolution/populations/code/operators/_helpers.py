@@ -18,7 +18,7 @@ class _CodeLLMHelpers:
     def _validated_code(self, code: str, starter_code: str, op: str) -> str:
         if not self._contains_starter_code(code, starter_code):
             raise ValueError(f"{op} result does not contain starter code structure.")
-        
+
         if not self.parser.is_syntax_valid(code):
             raise LLMSyntaxError("Generated code has invalid syntax")
 

@@ -179,13 +179,13 @@ class SubprocessSandbox(ISandbox):
             )
 
         except subprocess.TimeoutExpired:
-            # Kill the entire process group to ensure no orphaned children 
+            # Kill the entire process group to ensure no orphaned children
             # (e.g. test runner subprocesses) hold open the pipes indefinitely.
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            
+
             proc.communicate()  # reaps the zombie and flushes stdout/stderr buffers
             return BasicExecutionResult(
                 success=False,

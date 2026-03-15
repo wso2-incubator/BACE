@@ -112,8 +112,11 @@ class MockCodeOperator:
 
         # Generate offspring snippet
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
-        parents: dict[Literal["code", "test"], list[str]] = {"code": [parent.id], "test": []}
-        
+        parents: dict[Literal["code", "test"], list[str]] = {
+            "code": [parent.id],
+            "test": [],
+        }
+
         if op == OPERATION_MUTATION:
             snippet = f"# mutated code snippet v{np.random.randint(100)}"
             prob = float(parent.probability)
@@ -124,14 +127,14 @@ class MockCodeOperator:
             p2 = code_pop[p2_idx]
             parents["code"].append(p2.id)
             prob = float(np.mean([parent.probability, p2.probability]))
-        else: # OPERATION_EDIT
+        else:  # OPERATION_EDIT
             snippet = f"# edited code snippet v{np.random.randint(100)}"
             # Select a random evolved test as a cross-species parent
             evolved_tests = []
             for t_pop in context.test_populations.values():
                 if t_pop.size > 0:
                     evolved_tests.extend(list(t_pop.individuals))
-            
+
             if evolved_tests:
                 # Use index selection to avoid mypy confusion with np.random.choice on objects
                 idx = int(np.random.randint(len(evolved_tests)))
@@ -193,18 +196,23 @@ class MockTestOperator:
         parent = test_pop[parent_idx]
 
         op = np.random.choice([OPERATION_MUTATION, OPERATION_CROSSOVER, OPERATION_EDIT])
-        parents: dict[Literal["code", "test"], list[str]] = {"code": [], "test": [parent.id]}
-        
+        parents: dict[Literal["code", "test"], list[str]] = {
+            "code": [],
+            "test": [parent.id],
+        }
+
         if op == OPERATION_MUTATION:
             snippet = f"def test_mutated_{np.random.randint(1000)}(): pass  # mutated"
             prob = float(parent.probability)
         elif op == OPERATION_CROSSOVER:
-            snippet = f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
+            snippet = (
+                f"def test_crossover_{np.random.randint(1000)}(): pass  # crossover"
+            )
             p2_idx = int(np.random.choice(len(probs), p=p_normalized))
             p2 = test_pop[p2_idx]
             parents["test"].append(p2.id)
             prob = float(np.mean([parent.probability, p2.probability]))
-        else: # OPERATION_EDIT
+        else:  # OPERATION_EDIT
             snippet = f"def test_edited_{np.random.randint(1000)}(): pass  # edited"
             # Select a random code individual as a cross-species parent
             code_pop = context.code_population

@@ -119,7 +119,9 @@ class RouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T
         return selected
 
 
-class ReverseRouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T]):
+class ReverseRouletteWheelParentSelection[T: BaseIndividual](
+    IParentSelectionStrategy[T]
+):
     """
     Reverse Roulette Wheel selection strategy.
 

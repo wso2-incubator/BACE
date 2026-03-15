@@ -93,6 +93,7 @@ def _property_eval_worker(
         failures: list[dict[str, str]] = []
 
         import json
+
         for pair in pairs:
             try:
                 # pair["inputdata"] is json.dumps({"inputdata": {...}})
@@ -100,7 +101,7 @@ def _property_eval_worker(
                 # LLM property tests will then call json.loads() on it.
                 raw_input_dict = json.loads(pair["inputdata"])
                 inner_input = raw_input_dict.get("inputdata", raw_input_dict)
-                
+
                 script = compose_property_test_script(
                     property_snippet, json.dumps(inner_input), pair["output"]
                 )
@@ -322,9 +323,12 @@ class PropertyTestEvaluator(IExecutionSystem):
                 return []
 
             import json
+
             # Wrap each dict as compose_evaluation_script expects:
             # json.dumps({"inputdata": {"lst": [3, 1, 2]}}) → one entry per input
-            formatted = [json.dumps({"inputdata": d}) for d in parsed if isinstance(d, dict)]
+            formatted = [
+                json.dumps({"inputdata": d}) for d in parsed if isinstance(d, dict)
+            ]
             logger.debug(
                 f"PropertyTestEvaluator: generator produced {len(formatted)} inputs."
             )

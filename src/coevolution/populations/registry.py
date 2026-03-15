@@ -10,6 +10,7 @@ from ..core.interfaces import CodeProfile, PublicTestProfile, TestProfile
 T = TypeVar("T", CodeProfile, TestProfile, PublicTestProfile)
 FactoryFunc = Callable[..., T]
 
+
 class PopulationRegistry:
     """Registry for population profile factories."""
 
@@ -18,15 +19,21 @@ class PopulationRegistry:
         self._test_factories: Dict[str, FactoryFunc[TestProfile]] = {}
         self._public_factories: Dict[str, FactoryFunc[PublicTestProfile]] = {}
 
-    def register_code_factory(self, name: str, factory: FactoryFunc[CodeProfile]) -> None:
+    def register_code_factory(
+        self, name: str, factory: FactoryFunc[CodeProfile]
+    ) -> None:
         """Register a factory for a code population profile."""
         self._code_factories[name] = factory
 
-    def register_test_factory(self, name: str, factory: FactoryFunc[TestProfile]) -> None:
+    def register_test_factory(
+        self, name: str, factory: FactoryFunc[TestProfile]
+    ) -> None:
         """Register a factory for an evolved test population profile."""
         self._test_factories[name] = factory
 
-    def register_public_factory(self, name: str, factory: FactoryFunc[PublicTestProfile]) -> None:
+    def register_public_factory(
+        self, name: str, factory: FactoryFunc[PublicTestProfile]
+    ) -> None:
         """Register a factory for a public test population profile."""
         self._public_factories[name] = factory
 
@@ -62,7 +69,9 @@ class PopulationRegistry:
 
     # --- Decorators ---
 
-    def code_factory(self, name: str) -> Callable[[Callable[..., CodeProfile]], Callable[..., CodeProfile]]:
+    def code_factory(
+        self, name: str
+    ) -> Callable[[Callable[..., CodeProfile]], Callable[..., CodeProfile]]:
         """Decorator to register a code profile factory."""
 
         def decorator(func: Callable[..., CodeProfile]) -> Callable[..., CodeProfile]:
@@ -71,7 +80,9 @@ class PopulationRegistry:
 
         return decorator
 
-    def test_factory(self, name: str) -> Callable[[Callable[..., TestProfile]], Callable[..., TestProfile]]:
+    def test_factory(
+        self, name: str
+    ) -> Callable[[Callable[..., TestProfile]], Callable[..., TestProfile]]:
         """Decorator to register a test profile factory."""
 
         def decorator(func: Callable[..., TestProfile]) -> Callable[..., TestProfile]:
@@ -80,14 +91,19 @@ class PopulationRegistry:
 
         return decorator
 
-    def public_factory(self, name: str) -> Callable[[Callable[..., PublicTestProfile]], Callable[..., PublicTestProfile]]:
+    def public_factory(
+        self, name: str
+    ) -> Callable[[Callable[..., PublicTestProfile]], Callable[..., PublicTestProfile]]:
         """Decorator to register a public test profile factory."""
 
-        def decorator(func: Callable[..., PublicTestProfile]) -> Callable[..., PublicTestProfile]:
+        def decorator(
+            func: Callable[..., PublicTestProfile],
+        ) -> Callable[..., PublicTestProfile]:
             self.register_public_factory(name, func)
             return func
 
         return decorator
+
 
 # Global registry instance
 registry = PopulationRegistry()

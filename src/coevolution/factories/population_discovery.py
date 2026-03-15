@@ -32,9 +32,7 @@ class PopulationDiscoveryService:
         self.cpu_workers = cpu_workers
         self.registry: PopulationRegistry = registry
 
-    def construct_all(
-        self, experiment_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def construct_all(self, experiment_config: Dict[str, Any]) -> Dict[str, Any]:
         """Discover and construct all profiles defined in the config.
 
         Returns:

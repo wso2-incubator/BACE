@@ -30,9 +30,7 @@ class LifecycleEmitter:
         payload["generation"] = generation
         payload["event"] = event.value
         # Emits pure JSON objects to the specific sink hook
-        logger.bind(is_evolution_event=True).info(
-            "LIFECYCLE_EVENT", event_data=payload
-        )
+        logger.bind(is_evolution_event=True).info("LIFECYCLE_EVENT", event_data=payload)
 
     @staticmethod
     def log_creation(
@@ -107,7 +105,9 @@ class LifecycleEmitter:
         )
 
     @staticmethod
-    def log_elite_selection(generation: int, individual_id: str, test_type: str | None = None) -> None:
+    def log_elite_selection(
+        generation: int, individual_id: str, test_type: str | None = None
+    ) -> None:
         """Log when an individual is selected to pass directly into the next generation."""
         LifecycleEmitter._emit(
             generation=generation,

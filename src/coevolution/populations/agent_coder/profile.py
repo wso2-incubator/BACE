@@ -24,6 +24,7 @@ from .operators.initializer import AgentCoderInitializer
 
 from ..registry import registry
 
+
 @registry.code_factory("agent_coder")
 def create_agent_coder_code_profile(
     llm_client: LLMClient,
@@ -80,5 +81,6 @@ def create_agent_coder_code_profile(
         initializer=initializer,
         elite_selector=elite_selector,
     )
+
 
 __all__ = ["create_agent_coder_code_profile"]
