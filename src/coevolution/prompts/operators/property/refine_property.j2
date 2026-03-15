@@ -2,52 +2,73 @@
 
 {{ roles.tester_role() }}
 
+<background>
+You are an expert at property-based testing. You have an existing property test that is too restrictive—it incorrectly rejects valid solutions (false positives).
+A falsifier has found a **counter-example**: a valid execution trace (input, output) that the current property test incorrectly marks as `False`.
+
+You have also been provided with the **reasoning** from the falsifier explaining why the current property is wrong.
+</background>
+
 <task>
-You will be given a programming problem, a starter code template, an existing property test, and a counter-example that the property test failed on.
-The counter-example is a valid (inputdata, output) pair that should have been accepted but was rejected (returned False).
+Your objective is to produce a refined property test function that satisfies two critical requirements:
 
-Your goal is to refine the property test implementation so that it accepts the counter-example while still correctly checking the property's intent for other cases.
+1. **Refinement**: Fix the original property test so it correctly accepts the provided counter-example (returns `True`) while maintaining its original intent to catch bugs.
+2. **Orthogonality**: Ensure this property checks a unique aspect of the problem that is **NOT** already covered by the list of "Existing Property Intentions" provided below. We want a diverse and non-redundant set of properties.
 
-### Your Task
-1. Analyze why the original property test failed on the counter-example.
-2. Implement a refined version of the property function `property_<name>(inputdata: str, output: str) -> bool`.
-3. Ensure it returns True for the provided counter-example and other valid solutions.
-4. Ensure it still returns False for incorrect solutions that violate the property.
-
-Rules:
-- Follow the same signature: `property_<name>(inputdata: str, output: str) -> bool`.
-- `inputdata` and `output` are JSON-encoded strings.
-- Wrap the function in a ```python ... ``` code block.
-- Do NOT import anything outside the standard library.
+### Specific Instructions:
+- **Analyze**: Read the counter-example and the reasoning. Understand the flaw in the current property logic.
+- **Implement**: Write a Python function `property_<name>(inputdata: str, output: str) -> bool`.
+- **Handle Inputs**: `inputdata` and `output` are JSON strings. Always parse them using `json.loads()`.
+- **Intent**: The property should be robust. It should return `True` for ALL correct implementations and `False` for buggy ones.
+- **Docstring**: EXTREMELY IMPORTANT. You must include a clear, descriptive docstring. This docstring is used by other agents to understand what this property tests and to ensure uniqueness.
 </task>
 
-<problem>
+<problem_context>
+<problem_description>
 {{ question_content }}
-</problem>
+</problem_description>
 
 <starter_code>
 {{ starter_code }}
 </starter_code>
+</problem_context>
 
+<current_state>
 <original_property_test>
 {{ snippet }}
 </original_property_test>
 
-<counter_example>
+<counter_example_to_fix>
 {{ counter_example }}
-</counter_example>
+</counter_example_to_fix>
 
-<reasoning_from_falsifier>
+<falsifier_reasoning>
 {{ reasoning }}
-</reasoning_from_falsifier>
+</falsifier_reasoning>
+</current_state>
+
+<existing_property_intentions>
+These behaviors are already tested. Your refined property MUST be orthogonal to these:
+{% for explanation in current_explanations %}
+- {{ explanation }}
+{% endfor %}
+</existing_property_intentions>
 
 <output_format>
-# Reasoning for refinement:
-...
+Provide your response in the following format:
+
+# Reasoning for Refinement and Orthogonality
+Explain why the original was wrong, how you fixed it, and why this property is distinct from existing ones.
+
 ```python
 import json
 
-def property_<name>(inputdata: str, output: str) -> bool:
-    ...
+def property_<descriptive_name>(inputdata: str, output: str) -> bool:
+    """
+    [Detailed explanation of the property intent and behavior]
+    """
+    # Parse inputs
+    # ... logic ...
+    return True # or False
 ```
 </output_format>

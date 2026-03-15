@@ -96,9 +96,12 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         counter_example_json, reasoning = ce_data
 
         # 3. Phase 2: Refine property
+        current_explanations = [
+            ind.explanation for ind in pop if ind.explanation
+        ]
         try:
             refined_snippet = self._refine_property(
-                parent, counter_example_json, reasoning, problem
+                parent, counter_example_json, reasoning, problem, current_explanations
             )
         except Exception as exc:
             logger.debug(
@@ -119,7 +122,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 creation_op=self.operation_name(),
                 generation_born=context.code_population.generation,
                 parents={"test": [parent.id]},
-                explanation=f"Refined {parent.id} using counter-example and reasoning.",
+                explanation=self.parser.get_docstring(refined_snippet),
                 metadata={
                     "refined_from": parent.id,
                     "counter_example": json.loads(counter_example_json),
@@ -185,6 +188,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         counter_example: str,
         reasoning: str,
         problem: Problem,
+        current_explanations: list[str],
     ) -> str:
         """
         Phase 2: Refine a property test using a counter-example and reasoning.
@@ -196,6 +200,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             snippet=parent.snippet,
             counter_example=counter_example,
             reasoning=reasoning,
+            current_explanations=current_explanations,
         )
         response = self._generate(prompt)
         blocks = self.parser.extract_code_blocks(response)
