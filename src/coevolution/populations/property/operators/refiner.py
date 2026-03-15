@@ -9,10 +9,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from coevolution.core.individual import TestIndividual
-from coevolution.core.interfaces import (
-    CoevolutionContext,
-    Problem,
-)
+from coevolution.core.interfaces import CoevolutionContext, Problem
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     ILanguageModel,
@@ -43,8 +40,10 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         language_name: str,
         parent_selector: IParentSelectionStrategy[TestIndividual],
         prob_assigner: IProbabilityAssigner,
+        max_falsification_attempts: int = 3,
     ) -> None:
         super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
+        self.max_falsification_attempts = max_falsification_attempts
         self._python_lang = PythonLanguage()
 
     def operation_name(self) -> str:
@@ -56,31 +55,56 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         if not pop or pop.size == 0:
             return []
 
-        parents = self.parent_selector.select_parents(pop, count=1, coevolution_context=context)
+        parents = self.parent_selector.select_parents(
+            pop, count=1, coevolution_context=context
+        )
         if not parents:
             return []
 
         parent = parents[0]
+
+        # Check retry limit
+        attempts = parent.metadata.get("falsification_attempts", 0)
+        if attempts >= self.max_falsification_attempts:
+            logger.debug(
+                f"AdversarialPropertyRefiner: giving up on {parent.id} "
+                f"after {attempts} failed falsification attempts."
+            )
+            return []
+
         problem = context.problem
 
         # 2. Phase 1: Generate counter-example and reasoning
         try:
             ce_data = self._generate_counter_example(parent, problem)
         except Exception as exc:
-            logger.debug(f"AdversarialPropertyRefiner: counter-example generation failed: {exc}")
+            logger.debug(
+                f"AdversarialPropertyRefiner: counter-example generation failed: {exc}"
+            )
+            # Increment attempts on failure to generate CE (including LLM errors)
+            parent.metadata["falsification_attempts"] = attempts + 1
             return []
 
         if not ce_data:
-            logger.debug(f"AdversarialPropertyRefiner: no counter-example found for {parent.id}")
+            logger.debug(
+                f"AdversarialPropertyRefiner: no counter-example found for {parent.id}"
+            )
+            # Increment attempts when no CE is found
+            parent.metadata["falsification_attempts"] = attempts + 1
             return []
 
         counter_example_json, reasoning = ce_data
 
         # 3. Phase 2: Refine property
         try:
-            refined_snippet = self._refine_property(parent, counter_example_json, reasoning, problem)
+            refined_snippet = self._refine_property(
+                parent, counter_example_json, reasoning, problem
+            )
         except Exception as exc:
-            logger.debug(f"AdversarialPropertyRefiner: property refinement failed: {exc}")
+            logger.debug(
+                f"AdversarialPropertyRefiner: property refinement failed: {exc}"
+            )
+            # Note: We don't necessarily increment falsification_attempts here because we DID find a CE.
             return []
 
         # 4. Create offspring
@@ -100,12 +124,15 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                     "refined_from": parent.id,
                     "counter_example": json.loads(counter_example_json),
                     "reasoning": reasoning,
+                    "falsification_attempts": 0,  # Reset for the new child
                 },
             )
         ]
 
     @llm_retry((LLMGenerationError, ValueError))
-    def _generate_counter_example(self, parent: TestIndividual, problem: Problem) -> tuple[str, str] | None:
+    def _generate_counter_example(
+        self, parent: TestIndividual, problem: Problem
+    ) -> tuple[str, str] | None:
         """
         Phase 1: Generate a counter-example and reasoning for a property test.
         Returns (counter_example_json, reasoning_str) or None.
@@ -117,32 +144,48 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             snippet=parent.snippet,
         )
         response = self._generate(prompt)
-        
+
         # Extract reasoning
-        reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", response, re.DOTALL)
+        reasoning_match = re.search(
+            r"<reasoning>(.*?)</reasoning>", response, re.DOTALL
+        )
         reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
-        
+
         # Extract counter-example
-        ce_match = re.search(r"<counter_example>(.*?)</counter_example>", response, re.DOTALL)
+        ce_match = re.search(
+            r"<counter_example>(.*?)</counter_example>", response, re.DOTALL
+        )
         if not ce_match:
             if reasoning:
-                logger.debug(f"AdversarialPropertyRefiner: no counter-example found. Reasoning: {reasoning}")
+                logger.debug(
+                    f"AdversarialPropertyRefiner: no counter-example found. Reasoning: {reasoning}"
+                )
             return None
-        
+
         content = ce_match.group(1).strip()
         try:
             # Validate it's valid JSON and contains required keys
             ce_data = json.loads(content)
             if "inputdata" not in ce_data or "output" not in ce_data:
-                logger.warning("AdversarialPropertyRefiner: counter-example JSON missing keys.")
+                logger.warning(
+                    "AdversarialPropertyRefiner: counter-example JSON missing keys."
+                )
                 return None
             return content, reasoning
         except json.JSONDecodeError:
-            logger.warning("AdversarialPropertyRefiner: counter-example JSON decode error.")
+            logger.warning(
+                "AdversarialPropertyRefiner: counter-example JSON decode error."
+            )
             return None
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
-    def _refine_property(self, parent: TestIndividual, counter_example: str, reasoning: str, problem: Problem) -> str:
+    def _refine_property(
+        self,
+        parent: TestIndividual,
+        counter_example: str,
+        reasoning: str,
+        problem: Problem,
+    ) -> str:
         """
         Phase 2: Refine a property test using a counter-example and reasoning.
         """

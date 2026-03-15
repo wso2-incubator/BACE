@@ -110,3 +110,42 @@ class TestAdversarialPropertyRefiner:
         mock_context.test_populations = {"property": TestPopulation(individuals=[])}
         offspring = refiner.execute(mock_context)
         assert len(offspring) == 0
+
+    def test_execute_skips_if_retry_limit_reached(self, refiner, mock_context) -> None:
+        # Setup population with parent at limit
+        parent = TestIndividual(
+            snippet="def property_test(i, o): return True",
+            probability=0.2,
+            creation_op="init",
+            generation_born=0,
+            metadata={"falsification_attempts": 3},
+        )
+        pop = TestPopulation(individuals=[parent])
+        mock_context.test_populations = {"property": pop}
+        
+        # Execute
+        offspring = refiner.execute(mock_context)
+        
+        assert len(offspring) == 0
+
+    def test_execute_increments_attempts_on_failure(self, refiner, mock_llm, mock_context) -> None:
+        # 1. Setup population
+        parent = TestIndividual(
+            snippet="def property_test(i, o): return True",
+            probability=0.2,
+            creation_op="init",
+            generation_born=0,
+            metadata={"falsification_attempts": 1},
+        )
+        pop = TestPopulation(individuals=[parent])
+        mock_context.test_populations = {"property": pop}
+        
+        # 2. Mock LLM response: No counter-example
+        mock_llm.generate.return_value = "<reasoning>No CE found</reasoning>"
+        
+        # 3. Execute
+        offspring = refiner.execute(mock_context)
+        
+        # 4. Verify
+        assert len(offspring) == 0
+        assert parent.metadata["falsification_attempts"] == 2
