@@ -6,17 +6,20 @@ from coevolution.core.individual import TestIndividual
 from coevolution.core.interfaces import BayesianConfig, PopulationConfig, TestProfile
 from coevolution.core.interfaces.language import ILanguage
 from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TestDiversityEliteSelector
+from coevolution.strategies.selection.parent_selection import (
+    ReverseRouletteWheelParentSelection,
+)
 from infrastructure.llm_client import LLMClient
 from infrastructure.sandbox import SandboxConfig
 
+from ..registry import registry
 from .evaluator import PropertyTestEvaluator
-from .operators.initializer import PropertyTestInitializer
+from .operators import AdversarialPropertyRefiner, PropertyTestInitializer
 from .operators.noop import NoOpOperator
 from .types import IOPairCache
 
-
-from ..registry import registry
 
 @registry.test_factory("property")
 def create_property_test_profile(
@@ -27,7 +30,7 @@ def create_property_test_profile(
     initial_prior: float = 0.5,
     initial_population_size: int = 10,
     max_population_size: int = 30,
-    offspring_rate: float = 0.0,
+    offspring_rate: float = 0.2,
     elitism_rate: float = 1.0,
     alpha: float = 0.05,
     beta: float = 0.3,
@@ -64,11 +67,23 @@ def create_property_test_profile(
         llm_workers=llm_workers,
     )
 
-    # ── Breeder (no-op — breeding disabled via offspring_rate=0) ────────────
+    # ── Breeder ────────────────────────────────────────────────────────────
+    # Enable breeding with the new AdversarialPropertyRefiner
     breeder: Breeder[TestIndividual] = Breeder(
         registered_operators=[
+            RegisteredOperator(
+                weight=1.0,
+                operator=AdversarialPropertyRefiner(
+                    llm=llm_client,
+                    parser=python_parser,
+                    language_name=language_adapter.language,
+                    parent_selector=ReverseRouletteWheelParentSelection(),
+                    prob_assigner=ProbabilityAssigner(initial_prior=initial_prior),
+                ),
+            ),
             RegisteredOperator(weight=0.0, operator=NoOpOperator()),
         ],
+        llm_workers=llm_workers,
     )
 
     # ── Elite selector ───────────────────────────────────────────────────────
@@ -103,5 +118,6 @@ def create_property_test_profile(
         bayesian_config=bayesian_config,
         execution_system=evaluator,
     )
+
 
 __all__ = ["create_property_test_profile"]

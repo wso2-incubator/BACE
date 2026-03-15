@@ -118,6 +118,73 @@ class RouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T
 
         return selected
 
+
+class ReverseRouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T]):
+    """
+    Reverse Roulette Wheel selection strategy.
+
+    Selects parents with probability proportional to (1 - individual.probability).
+    This prioritizes individuals with lower belief/probability, which is useful
+    for operators that aim to refine or improve low-quality individuals.
+
+    Handles edge cases:
+    - All probabilities one (degenerate): Falls back to uniform random selection
+    - All probabilities zero: Proceeds with equal weights (uniform selection)
+    - Single individual: Returns that individual
+    - Count > population size: Allows duplicates (sampling with replacement)
+    """
+
+    def select_parents(
+        self,
+        population: BasePopulation[T],
+        count: int,
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
+        if count < 1:
+            raise ValueError(f"count must be at least 1, got {count}")
+
+        if population.size == 0:
+            raise ValueError("Cannot select parents from empty population")
+
+        if population.size < count:
+            raise ValueError("Population size must be at least equal to count")
+
+        # Extract probabilities from population
+        probs = population.probabilities
+
+        # Calculate inverse probabilities (1 - p)
+        # Note: We use 1.0 - p. If p is high, 1.0 - p is low.
+        inverse_probs = 1.0 - probs
+
+        # Handle edge case where all individuals have prob=1.0 (inverse_probs all 0)
+        total_inverse = np.sum(inverse_probs)
+        if total_inverse == 0:
+            logger.warning(
+                "Reverse Roulette: all inverse probabilities are zero, using uniform random selection"
+            )
+            indices = np.random.choice(population.size, size=count, replace=True)
+            selected = [population.individuals[int(idx)] for idx in indices]
+            return selected
+
+        # Normalize inverse probabilities
+        normalized_probs = inverse_probs / total_inverse
+
+        # Weighted choice
+        indices = np.random.choice(
+            population.size, size=count, p=normalized_probs, replace=True
+        )
+
+        selected = [population.individuals[int(idx)] for idx in indices]
+
+        logger.debug(
+            f"Reverse Roulette selected {count} parents: "
+            f"{[f'{ind.id} (p={ind.probability:.4f})' for ind in selected]}"
+        )
+
+        return selected
+
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
-        return "RouletteWheelParentSelection()"
+        return "ReverseRouletteWheelParentSelection()"
+
+
+__all__ = ["RouletteWheelParentSelection", "ReverseRouletteWheelParentSelection"]

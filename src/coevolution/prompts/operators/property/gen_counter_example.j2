@@ -1,0 +1,61 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, and a candidate property test (Python snippet).
+Your goal is to find a counter-example: a (inputdata, output) pair that is CORRECT according to the problem description, but is rejected by the candidate property test (i.e., the property test returns False).
+
+1. Analyze the property test and the problem.
+2. Find an edge case or a valid scenario where the property test would incorrectly return False.
+3. Provide the counter-example as a JSON object containing `inputdata` and `output`.
+
+Rules:
+- `inputdata` and `output` must be the same JSON-encoded string formats used by the property test.
+- The `output` must be a valid output for a correct solution given the `inputdata`.
+- The property test function should return False for this pair.
+- Wrap your reasoning in <reasoning> tags. **Always provide reasoning even if you cannot find a counter-example.**
+- If a counter-example is found, wrap the JSON response in <counter_example> tags.
+- **If no counter-example can be found (i.e., the property test seems correct), DO NOT include <counter_example> tags.**
+
+Example Response:
+<reasoning>
+The property test checks if the output is sorted, but it fails to handle cases where the input is already sorted.
+</reasoning>
+<counter_example>
+{
+  "inputdata": "{\"param1\": [1, 2, 3]}",
+  "output": "[1, 2, 3]"
+}
+</counter_example>
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<candidate_property_test>
+{{ snippet }}
+</candidate_property_test>
+
+<output_format>
+When a counter-example is found:
+<reasoning>
+...
+</reasoning>
+<counter_example>
+{
+  "inputdata": "...",
+  "output": "..."
+}
+</counter_example>
+
+When no counter-example is found:
+<reasoning>
+...
+</reasoning>
+</output_format>

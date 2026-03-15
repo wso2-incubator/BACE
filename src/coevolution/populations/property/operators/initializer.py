@@ -144,7 +144,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
                     probability=self.pop_config.initial_prior,
                     creation_op=OPERATION_INITIAL,
                     generation_born=0,
-                    explanation=description,
+                    explanation=self.parser.get_docstring(snippet),
                     metadata={
                         "pruning": "passed_public_io",
                         "description": description,
