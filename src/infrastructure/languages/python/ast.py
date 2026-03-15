@@ -161,7 +161,6 @@ def parse_test_inputs(outputs: str) -> List[Dict[str, Any]]:
             "inf": math.inf,
             "nan": math.nan,
             "Infinity": math.inf,
-            "-Infinity": -math.inf,
             "NaN": math.nan,
             "__builtins__": {},
         }
