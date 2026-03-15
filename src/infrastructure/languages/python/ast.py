@@ -148,6 +148,10 @@ def parse_test_inputs(outputs: str) -> List[Dict[str, Any]]:
             return val
         if isinstance(val, dict):
             return [val]
+        logger.debug(
+            f"literal_eval succeeded but result type {type(val)} is not list or dict"
+        )
+        return []
     except (ValueError, SyntaxError) as e:
         logger.debug(f"Failed to parse test inputs as literal: {e}")
 
