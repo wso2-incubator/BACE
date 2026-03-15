@@ -173,13 +173,17 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 logger.warning(
                     "AdversarialPropertyRefiner: counter-example JSON missing keys."
                 )
-                return None
+                raise ValueError(
+                    "AdversarialPropertyRefiner: counter-example JSON missing required keys."
+                )
             return content, reasoning
         except json.JSONDecodeError:
             logger.warning(
                 "AdversarialPropertyRefiner: counter-example JSON decode error."
             )
-            return None
+            raise ValueError(
+                "AdversarialPropertyRefiner: counter-example JSON could not be decoded."
+            )
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _refine_property(
