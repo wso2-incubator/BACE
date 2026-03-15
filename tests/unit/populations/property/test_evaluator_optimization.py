@@ -10,17 +10,18 @@ def test_property_eval_worker_sorting_and_early_break():
     mock_sandbox = MagicMock()
 
     # Define IOPairs with different lengths
+    import json
     pairs = [
-        {"inputdata": "long_input_data_string", "output": "output1"},
-        {"inputdata": "short", "output": "output2"},
-        {"inputdata": "medium_input", "output": "output3"},
+        {"inputdata": json.dumps({"inputdata": "long_input_data_string"}), "output": "output1"},
+        {"inputdata": json.dumps({"inputdata": "short"}), "output": "output2"},
+        {"inputdata": json.dumps({"inputdata": "medium_input"}), "output": "output3"},
     ]
 
     # Sort them as the evaluator would before passing to worker
     sorted_pairs = sorted(pairs, key=lambda p: len(str(p["inputdata"])))
-    assert sorted_pairs[0]["inputdata"] == "short"
-    assert sorted_pairs[1]["inputdata"] == "medium_input"
-    assert sorted_pairs[2]["inputdata"] == "long_input_data_string"
+    assert "short" in sorted_pairs[0]["inputdata"]
+    assert "medium_input" in sorted_pairs[1]["inputdata"]
+    assert "long_input_data_string" in sorted_pairs[2]["inputdata"]
 
     # Mock execute_code to fail on the SECOND shortest input ("medium_input")
     def side_effect(script, runtime):

@@ -65,6 +65,7 @@ class CodeCrossoverOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
                 creation_op=OPERATION_CROSSOVER,
                 generation_born=code_pop.generation + 1,
                 parents={"code": [p1.id, p2.id], "test": []},
+                explanation=self.parser.get_docstring(child_code),
             )
         ]
 

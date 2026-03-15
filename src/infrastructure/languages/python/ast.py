@@ -183,7 +183,8 @@ def get_docstring(code: str) -> Optional[str]:
 
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
-                return ast.get_docstring(node) or _extract_comments(node, lines)
+                doc = ast.get_docstring(node) or _extract_comments(node, lines)
+                return doc if doc else None
 
             if isinstance(node, ast.ClassDef):
                 class_doc = ast.get_docstring(node)
@@ -201,7 +202,8 @@ def get_docstring(code: str) -> Optional[str]:
                     if method_comments:
                         return method_comments
 
-                return _extract_comments(node, lines)
+                cls_doc = _extract_comments(node, lines)
+                return cls_doc if cls_doc else None
 
     except Exception as e:
         logger.debug(f"Failed to extract docstring: {e}")
@@ -291,5 +293,4 @@ def get_function_signature(code: str) -> Dict[str, str]:
         return {name: (ptype or "Any") for name, ptype in sig.params}
     except Exception as e:
         logger.debug(f"Failed to get Python function signature: {e}")
-        return {}
         return {}

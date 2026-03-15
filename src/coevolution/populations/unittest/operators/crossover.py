@@ -65,6 +65,7 @@ class UnittestCrossoverOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual]
                 creation_op=OPERATION_CROSSOVER,
                 generation_born=test_pop.generation + 1,
                 parents={"code": [], "test": [p1.id, p2.id]},
+                explanation=self.parser.get_docstring(child),
             )
         ]
 

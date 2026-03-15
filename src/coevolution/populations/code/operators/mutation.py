@@ -68,6 +68,7 @@ class CodeMutationOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
                 creation_op=OPERATION_MUTATION,
                 generation_born=code_pop.generation + 1,
                 parents={"code": [parent.id], "test": []},
+                explanation=self.parser.get_docstring(mutated_code),
             )
         ]
 

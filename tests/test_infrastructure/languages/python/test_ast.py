@@ -271,5 +271,5 @@ class TestDocstringExtraction:
         ''')
         assert adapter.parser.get_docstring(code) == "Standalone docstring"
 
-    def test_returns_empty_string_on_failure(self, adapter: PythonLanguage) -> None:
-        assert adapter.parser.get_docstring("not valid python {{{") == ""
+    def test_returns_none_on_failure(self, adapter: PythonLanguage) -> None:
+        assert adapter.parser.get_docstring("not valid python {{{") is None

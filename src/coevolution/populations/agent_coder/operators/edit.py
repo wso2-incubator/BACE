@@ -138,6 +138,7 @@ class AgentCoderEditOperator(BaseLLMOperator[CodeIndividual]):
                         if test_results[t.id].status == "failed"
                     ],
                 },
+                explanation=self.parser.get_docstring(edited_code),
             )
         ]
 

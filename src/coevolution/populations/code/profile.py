@@ -25,7 +25,11 @@ from coevolution.strategies.selection.parent_selection import (
 from .operators.mutation import CodeMutationOperator
 from .operators.crossover import CodeCrossoverOperator
 from .operators.edit import CodeEditOperator
-from .operators.initializer import CodeInitializer
+from .operators.initializer import (
+    BaseCodeInitializer,
+    PlanningCodeInitializer,
+    StandardCodeInitializer,
+)
 
 
 from ..registry import registry
@@ -108,15 +112,24 @@ def create_default_code_profile(
         llm_workers=llm_workers,
     )
 
-    initializer = CodeInitializer(
-        llm=llm_client,
-        parser=language_adapter.parser,
-        language_name=language_adapter.language,
-        pop_config=population_config,
-        init_batch_size=init_pop_batch_size,
-        llm_workers=llm_workers,
-        planning_enabled=planning_enabled,
-    )
+    initializer: BaseCodeInitializer
+    if planning_enabled:
+        initializer = PlanningCodeInitializer(
+            llm=llm_client,
+            parser=language_adapter.parser,
+            language_name=language_adapter.language,
+            pop_config=population_config,
+            llm_workers=llm_workers,
+        )
+    else:
+        initializer = StandardCodeInitializer(
+            llm=llm_client,
+            parser=language_adapter.parser,
+            language_name=language_adapter.language,
+            pop_config=population_config,
+            init_batch_size=init_pop_batch_size,
+            llm_workers=llm_workers,
+        )
 
     elite_selector: IEliteSelectionStrategy[CodeIndividual] = (
         CodeDiversityEliteSelector() if diversity_enabled else TopKEliteSelector()

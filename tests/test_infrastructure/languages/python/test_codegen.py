@@ -171,8 +171,10 @@ class TestComposeEvaluationScript:
         )
         assert "class Solution" in script
         assert "sol = Solution()" in script
-        assert "sol.add(1, 2)" in script
-        assert "print(sol.add(1, 2))" in script
+        assert "sol.add(" in script
+        assert "a=1" in script
+        assert "b=2" in script
+        assert "json.dumps" in script
 
     def test_generated_script_executes_correctly(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
@@ -194,14 +196,18 @@ class TestComposeEvaluationScript:
         )
         assert "class Solution" in script
         assert "def multiply(self, x, y)" in script
-        assert "sol.multiply(3, 4)" in script
+        assert "multiply(" in script
+        assert "x=3" in script
+        assert "y=4" in script
 
     def test_string_parameters(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def process(self, text, count):\n        return text * count\n"
         script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'text': 'hello', 'count': 3}}"
         )
-        assert "process('hello', 3)" in script
+        assert "process(" in script
+        assert "'hello'" in script
+        assert "count=3" in script
 
     def test_preserves_imports(self, adapter: PythonLanguage) -> None:
         prog = "import math\n\nclass Solution:\n    def sqrt_sum(self, a, b):\n        return math.sqrt(a + b)\n"
@@ -231,14 +237,16 @@ class TestComposeEvaluationScript:
         script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'nums': [1, 2, 3, 4, 5]}}"
         )
-        assert "sum_list([1, 2, 3, 4, 5])" in script
+        assert "sum_list(" in script
+        assert "[1, 2, 3, 4, 5]" in script
 
     def test_boolean_parameter(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def toggle(self, flag):\n        return not flag\n"
         script = adapter.composer.compose_evaluation_script(
             prog, "{'inputdata': {'flag': True}}"
         )
-        assert "toggle(True)" in script
+        assert "toggle(" in script
+        assert "flag=True" in script
 
     def test_raises_on_invalid_programmer_code(self, adapter: PythonLanguage) -> None:
         with pytest.raises(
@@ -254,12 +262,13 @@ class TestComposeEvaluationScript:
 
     def test_raises_when_missing_inputdata_key(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
-        with pytest.raises(LanguageTransformationError, match="inputdata"):
-            adapter.composer.compose_evaluation_script(prog, "{'wrongkey': {'x': 1}}")
+        # Robust parsing now handles missing key by assuming the whole dict is inputdata
+        script = adapter.composer.compose_evaluation_script(prog, "{'wrongkey': {'x': 1}}")
+        assert "wrongkey={'x': 1}" in script
 
     def test_raises_when_inputdata_not_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
-        with pytest.raises(LanguageTransformationError, match="dict object"):
+        with pytest.raises(LanguageTransformationError, match="Input data must be a dict"):
             adapter.composer.compose_evaluation_script(prog, "{'inputdata': 'not a dict'}")
 
     def test_raises_on_invalid_input_dict(self, adapter: PythonLanguage) -> None:
@@ -286,7 +295,9 @@ class TestComposeEvaluationScript:
         script = adapter.composer.compose_evaluation_script(
             prog, "{ 'inputdata' : { 'a' : 1 , 'b' : 2 } }"
         )
-        assert "add(1, 2)" in script
+        assert "add(" in script
+        assert "a=1" in script
+        assert "b=2" in script
 
     def test_methods_called_in_order_first_method(
         self, adapter: PythonLanguage
@@ -299,7 +310,7 @@ class TestComposeEvaluationScript:
             "        return y * 3\n"
         )
         script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {'x': 10}}")
-        assert "sol.solve(10)" in script
+        assert "sol.solve(x=10)" in script
 
 
 class TestNormalizeCode:

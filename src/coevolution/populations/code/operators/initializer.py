@@ -1,7 +1,8 @@
-"""CodeInitializer — creates Gen-0 code individuals via batched LLM calls."""
+"""Code initializers — create Gen-0 code individuals via LLM."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import cast
 
@@ -27,11 +28,28 @@ from coevolution.strategies.llm_base import (
 from ._helpers import _CodeLLMHelpers
 
 
-class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
-    """Creates Gen-0 code individuals via batched LLM calls.
+class BaseCodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual], ABC):
+    """Base class for code population initializers."""
 
-    Supports both standard and planning modes.
-    """
+    def __init__(
+        self,
+        llm: ILanguageModel,
+        parser: ICodeParser,
+        language_name: str,
+        pop_config: PopulationConfig,
+        llm_workers: int = 4,
+    ) -> None:
+        super().__init__(llm, parser, language_name, pop_config)
+        self.llm_workers = llm_workers
+
+    @abstractmethod
+    def initialize(self, problem: Problem) -> list[CodeIndividual]:
+        """Create Gen-0 code individuals."""
+        ...
+
+
+class StandardCodeInitializer(BaseCodeInitializer):
+    """Creates Gen-0 code individuals via batched LLM calls."""
 
     def __init__(
         self,
@@ -41,22 +59,14 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
         pop_config: PopulationConfig,
         init_batch_size: int = 2,
         llm_workers: int = 4,
-        planning_enabled: bool = False,
     ) -> None:
-        super().__init__(llm, parser, language_name, pop_config)
+        super().__init__(llm, parser, language_name, pop_config, llm_workers)
         self.init_batch_size = min(
             init_batch_size, pop_config.initial_population_size or 1
         )
-        self.llm_workers = llm_workers
-        self.planning_enabled = planning_enabled
 
     def initialize(self, problem: Problem) -> list[CodeIndividual]:
         target = self.pop_config.initial_population_size
-        if self.planning_enabled:
-            return self._init_with_planning(problem, target)
-        return self._init_standard(problem, target)
-
-    def _init_standard(self, problem: Problem, target: int) -> list[CodeIndividual]:
         individuals: list[CodeIndividual] = []
         num_batches = (target + self.init_batch_size - 1) // self.init_batch_size
 
@@ -82,7 +92,9 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 blocks = self._extract_all_code_blocks(response)
                 validated_blocks = []
                 for b in blocks:
-                    validated_blocks.append(self._validated_code(b, problem.starter_code, "initial"))
+                    validated_blocks.append(
+                        self._validated_code(b, problem.starter_code, "initial")
+                    )
                 if len(validated_blocks) != batch_size:
                     raise ValueError(
                         f"Expected {batch_size} code blocks, got {len(validated_blocks)}"
@@ -90,7 +102,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                 return validated_blocks
 
         logger.info(
-            f"CodeInitializer: initializing {target} individuals in {num_batches} batches"
+            f"StandardCodeInitializer: initializing {target} individuals in {num_batches} batches"
         )
         with ThreadPoolExecutor(max_workers=self.llm_workers) as executor:
             futures = [
@@ -107,19 +119,22 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                                 probability=self.pop_config.initial_prior,
                                 creation_op=OPERATION_INITIAL,
                                 generation_born=0,
+                                explanation=self.parser.get_docstring(snip),
                             )
                         )
                 except Exception as e:
                     logger.error(f"Batch init failed: {e}")
 
         if not individuals:
-            raise RuntimeError("CodeInitializer: failed to generate any individuals")
+            raise RuntimeError("StandardCodeInitializer: failed to generate any individuals")
         return individuals[:target]
 
-    def _init_with_planning(
-        self, problem: Problem, target: int
-    ) -> list[CodeIndividual]:
-        """Two-phase: plan per individual, then code from plan."""
+
+class PlanningCodeInitializer(BaseCodeInitializer):
+    """Two-phase: plan per individual, then code from plan."""
+
+    def initialize(self, problem: Problem) -> list[CodeIndividual]:
+        target = self.pop_config.initial_population_size
 
         @llm_retry(
             (
@@ -160,6 +175,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
             return plan, code
 
         # Phase A: plans
+        logger.info(f"PlanningCodeInitializer: generating {target} plans")
         plans: list[str] = []
         with ThreadPoolExecutor(max_workers=self.llm_workers) as ex:
             for f in as_completed([ex.submit(_make_plan) for _ in range(target)]):
@@ -169,9 +185,10 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                     logger.error(f"Plan generation failed: {e}")
 
         if not plans:
-            raise RuntimeError("CodeInitializer (planning): no plans generated")
+            raise RuntimeError("PlanningCodeInitializer: no plans generated")
 
         # Phase B: code from plans
+        logger.info(f"PlanningCodeInitializer: generating code for {len(plans)} plans")
         individuals: list[CodeIndividual] = []
         with ThreadPoolExecutor(max_workers=self.llm_workers) as ex:
             for f in as_completed([ex.submit(_code_from_plan, p) for p in plans]):  # type: ignore[assignment]
@@ -183,6 +200,7 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                             probability=self.pop_config.initial_prior,
                             creation_op=OPERATION_INITIAL,
                             generation_born=0,
+                            explanation=plan,
                             metadata={"plan": plan},
                         )
                     )
@@ -190,9 +208,8 @@ class CodeInitializer(_CodeLLMHelpers, BaseLLMInitializer[CodeIndividual]):
                     logger.error(f"Plan-to-code failed: {e}")
 
         if not individuals:
-            raise RuntimeError("CodeInitializer (planning): no individuals generated")
+            raise RuntimeError("PlanningCodeInitializer: no individuals generated")
         return individuals[:target]
 
 
-__all__ = ["CodeInitializer"]
-__all__ = ["CodeInitializer"]
+__all__ = ["BaseCodeInitializer", "StandardCodeInitializer", "PlanningCodeInitializer"]

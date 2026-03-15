@@ -116,6 +116,7 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
                     "code": [parent.id],
                     "test": [t.id for t, _ in failing],
                 },
+                explanation=self.parser.get_docstring(edited_code),
                 metadata={"num_failing_tests": len(failing)},
             )
         ]

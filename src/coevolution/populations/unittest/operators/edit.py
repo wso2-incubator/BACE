@@ -145,6 +145,7 @@ class UnittestEditOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual]):
                     "code": [ind.id for ind in passing_inds + failing_inds],
                     "test": [parent.id],
                 },
+                explanation=self.parser.get_docstring(edited),
                 metadata={"edit_type": edit_type},
             )
         ]

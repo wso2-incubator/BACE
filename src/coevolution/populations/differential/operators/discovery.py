@@ -307,6 +307,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                         creation_op=OPERATION_DISCOVERY,
                         generation_born=context.code_population.generation + 1,
                         parents={"code": [winner.id, loser.id], "test": []},
+                        explanation=self.parser.get_docstring(snippet),
                         metadata={"io_pair": io_pair},
                     )
                 )
