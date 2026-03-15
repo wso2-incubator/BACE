@@ -9,8 +9,6 @@ This test verifies the entire pipeline:
 4. Test class integration
 """
 
-from infrastructure.languages.python import PythonLanguage
-
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,6 +17,7 @@ from coevolution.populations.differential.finder import DifferentialFinder
 from coevolution.populations.differential.operators.llm_operator import (
     DifferentialLLMOperator,
 )
+from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
 
 pytestmark = pytest.mark.integration
@@ -289,7 +288,6 @@ class Solution:
         assert "test_case_" in test_methods[2]
 
         # Verify each contains the correct input values in the ast inputs
-        assert "'1', '10'" in test_methods[0]
-        assert "'10', '20'" in test_methods[1]
-        assert "'20', '30'" in test_methods[2]
-        assert "'20', '30'" in test_methods[2]
+        assert "args = [1, 10]" in test_methods[0]
+        assert "args = [10, 20]" in test_methods[1]
+        assert "args = [20, 30]" in test_methods[2]

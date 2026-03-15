@@ -1,4 +1,5 @@
 import pytest
+
 from coevolution.populations.differential.finder import DifferentialFinder
 from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
@@ -60,7 +61,12 @@ if __name__ == "__main__":
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     lang = PythonLanguage()
     finder = DifferentialFinder(
-        parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        parser=lang.parser,
+        composer=lang.composer,
+        runtime=lang.runtime,
+        sandbox_config=sandbox_config,
+        enable_multiprocessing=True,
+        cpu_workers=4,
     )
 
     # 4. Execute
@@ -74,7 +80,7 @@ if __name__ == "__main__":
     # 5. Assertions
     # We expect exactly 2 differentials (Case 3 and Case 4)
     assert len(results) == 2, f"Expected 2 divergences, found {len(results)}"
-    
+
     div_inputs = [r.input_data for r in results]
     assert {"x": 6, "y": 5} in div_inputs
     assert {"x": 10, "y": 10} in div_inputs
@@ -128,7 +134,12 @@ if __name__ == "__main__":
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     lang = PythonLanguage()
     finder = DifferentialFinder(
-        parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        parser=lang.parser,
+        composer=lang.composer,
+        runtime=lang.runtime,
+        sandbox_config=sandbox_config,
+        enable_multiprocessing=True,
+        cpu_workers=4,
     )
 
     results = finder.find_differential(
@@ -196,7 +207,12 @@ if __name__ == "__main__":
     sandbox_config = SandboxConfig(timeout=5, max_memory_mb=200, max_output_size=50_000)
     lang = PythonLanguage()
     finder = DifferentialFinder(
-        parser=lang.parser, composer=lang.composer, runtime=lang.runtime, sandbox_config=sandbox_config, enable_multiprocessing=True, cpu_workers=4
+        parser=lang.parser,
+        composer=lang.composer,
+        runtime=lang.runtime,
+        sandbox_config=sandbox_config,
+        enable_multiprocessing=True,
+        cpu_workers=4,
     )
 
     results = finder.find_differential(
@@ -213,8 +229,8 @@ if __name__ == "__main__":
     # Check Logical Divergence ("Racecar")
     res_logic = results[0]
     assert res_logic.input_data == {"s": "Racecar"}
-    assert res_logic.output_a == "True"
-    assert res_logic.output_b == "False"
+    assert res_logic.output_a == "true"
+    assert res_logic.output_b == "false"
 
     # Note: The empty string case ("") causes code_b to crash, so it's skipped
     # by the finder and not reported as a divergence

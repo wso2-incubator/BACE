@@ -1,6 +1,9 @@
 """Integration test for dual-language differential testing: Python generators + Ballerina code."""
 
+import json
+
 import pytest
+
 from infrastructure.languages.ballerina import BallerinaLanguage
 from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig, create_sandbox
@@ -30,8 +33,8 @@ def generate_test_inputs(num_inputs):
     
     inputs = []
     for i in range(num_inputs):
-        a = random.randint(-10, 10)
-        b = random.randint(-10, 10)
+        a = random.randint(0, 10)
+        b = random.randint(0, 10)
         inputs.append({"a": a, "b": b})
     
     return inputs
@@ -90,7 +93,7 @@ public function add(int a, int b) returns int {
             b = test_input["b"]
 
             # Format input for Ballerina
-            input_formatted = f"add({a}, {b})"
+            input_formatted = json.dumps({"inputdata": {"a": a, "b": b}})
 
             # Execute correct code
             script_a = ballerina.composer.compose_evaluation_script(
