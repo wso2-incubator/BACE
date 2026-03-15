@@ -61,7 +61,7 @@ class PythonParser(ICodeParser):
     def parse_test_inputs(self, outputs: str) -> List[Dict[str, Any]]:
         return python_ast.parse_test_inputs(outputs)
 
-    def get_docstring(self, code: str) -> str:
+    def get_docstring(self, code: str) -> str | None:
         return python_ast.get_docstring(code)
 
     def get_function_signature(self, code: str) -> Dict[str, str]:

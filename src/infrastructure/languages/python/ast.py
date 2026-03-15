@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
+
 from coevolution.core.interfaces.language import LanguageParsingError
 
 
@@ -171,7 +172,7 @@ def _extract_comments(node: ast.AST, lines: List[str]) -> str:
     return "\n".join(reversed(comments))
 
 
-def get_docstring(code: str) -> str:
+def get_docstring(code: str) -> Optional[str]:
     """
     Return the docstring of the first function or class in the code.
     """
@@ -205,7 +206,7 @@ def get_docstring(code: str) -> str:
     except Exception as e:
         logger.debug(f"Failed to extract docstring: {e}")
 
-    return ""
+    return None
 
 
 def parse_method_signature(starter_code: str) -> MethodSignature:
@@ -290,4 +291,5 @@ def get_function_signature(code: str) -> Dict[str, str]:
         return {name: (ptype or "Any") for name, ptype in sig.params}
     except Exception as e:
         logger.debug(f"Failed to get Python function signature: {e}")
+        return {}
         return {}
