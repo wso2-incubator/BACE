@@ -128,7 +128,7 @@ class PopulationConfig:
         initial_prior: Initial probability for new individuals (0.0, 1.0)
         initial_population_size: Size of generation 0 population
         max_population_size: Maximum allowed size. If None, defaults to initial_population_size
-        offspring_rate: Fraction of remaining capacity to fill with offspring each generation (0.0, 1.0]
+        offspring_rate: Fraction of max_population_size to breed as offspring each generation (0.0, 1.0]
                        Controls growth speed toward max_population_size
         elitism_rate: Fraction of next generation that should be elites from current population (0.0, 1.0)
                      Controls elite/offspring ratio in next generation
@@ -141,22 +141,22 @@ class PopulationConfig:
             elitism_rate=0.5
         )
         # max_population_size auto-set to 15, stays constant
-        # Each generation: 7-8 elites + 7-8 offspring = 15 total
+        # Each generation: 7-8 elites (50% of 15) + 7-8 offspring (filling remaining) = 15 total
 
     Example - Variable size (code):
         PopulationConfig(
             initial_prior=0.5,
             initial_population_size=10,
             max_population_size=20,
-            offspring_rate=0.5,
+            offspring_rate=0.3,
             elitism_rate=0.4
         )
         # Gen 0: 10 individuals
-        # Gen 1 target: min(10 + 0.5*(20-10), 20) = 15
-        #   - 6 elites (40% of 15) + 9 offspring = 15
-        # Gen 2 target: min(15 + 0.5*(20-15), 20) = 17-18
-        #   - 7 elites (40% of 17) + 10 offspring = 17
-        # Gradually grows to max_population_size
+        # Gen 1 target:
+        #   - 8 elites (40% of 20) — Wait, actually elitism_rate is applied to CURRENT Gen size or MAX size?
+        #   - Orchestrator uses: elites = select_elites(pop, config.elitism_rate * pop.size)
+        #   - Offspring: min(int(max_size * offspring_rate), max_size - num_elites)
+        # Gradual growth toward max_population_size.
     """
 
     initial_prior: float

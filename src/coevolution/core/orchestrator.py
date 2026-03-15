@@ -948,8 +948,12 @@ class Orchestrator:
         """Helper to breed test offspring using the Breeder for a specific type."""
         test_profile = self.evolved_test_profiles[test_type]
 
-        num_test_offspring = (
-            test_profile.population_config.max_population_size - num_elites
+        num_test_offspring = min(
+            int(
+                test_profile.population_config.max_population_size
+                * test_profile.population_config.offspring_rate
+            ),
+            test_profile.population_config.max_population_size - num_elites,
         )
 
         test_offsprings = test_profile.breeder.breed(context, num_test_offspring)
