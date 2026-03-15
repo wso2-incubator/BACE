@@ -1,4 +1,5 @@
 import textwrap
+
 import pytest
 
 from coevolution.core.interfaces import LanguageParsingError
@@ -17,7 +18,9 @@ class TestIsSyntaxValid:
         assert adapter.parser.is_syntax_valid("def add(a, b):\n    return a + b")
 
     def test_valid_class(self, adapter: PythonLanguage) -> None:
-        assert adapter.parser.is_syntax_valid("class Solution:\n    def solve(self): pass")
+        assert adapter.parser.is_syntax_valid(
+            "class Solution:\n    def solve(self): pass"
+        )
 
     def test_empty_string_is_valid(self, adapter: PythonLanguage) -> None:
         assert adapter.parser.is_syntax_valid("")
@@ -209,6 +212,21 @@ class TestParseTestInputs:
         result = adapter.parser.parse_test_inputs("[{'v': inf}]")
         assert len(result) == 1
         assert math.isinf(result[0]["v"])
+
+    def test_handles_json_infinity_and_nan(self, adapter: PythonLanguage) -> None:
+        import math
+
+        outputs = (
+            '[{"x": 1.5}, {"x": Infinity}, {"x": -Infinity}, {"x": NaN}, {"x": 0.0}]'
+        )
+        result = adapter.parser.parse_test_inputs(outputs)
+
+        assert len(result) == 5
+        assert result[0]["x"] == 1.5
+        assert math.isinf(result[1]["x"]) and result[1]["x"] > 0
+        assert math.isinf(result[2]["x"]) and result[2]["x"] < 0
+        assert math.isnan(result[3]["x"])
+        assert result[4]["x"] == 0.0
 
     def test_returns_empty_on_invalid_input(self, adapter: PythonLanguage) -> None:
         assert adapter.parser.parse_test_inputs("not valid") == []
