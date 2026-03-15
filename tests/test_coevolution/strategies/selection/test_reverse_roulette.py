@@ -3,6 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
+import numpy as np
 
 from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import OPERATION_INITIAL, CoevolutionContext
@@ -10,7 +11,6 @@ from coevolution.core.population import CodePopulation
 from coevolution.strategies.selection.parent_selection import (
     ReverseRouletteWheelParentSelection,
 )
-
 
 @pytest.fixture
 def sample_code_population() -> CodePopulation:
@@ -74,6 +74,9 @@ class TestReverseRouletteWheelParentSelection:
         mock_coevolution_context: CoevolutionContext,
     ) -> None:
         """Test that LOWER probability individuals are selected more often."""
+        # Seed NumPy's RNG to make the test deterministic across runs/platforms.
+        np.random.seed(12345)
+
         strategy: ReverseRouletteWheelParentSelection[CodeIndividual] = (
             ReverseRouletteWheelParentSelection()
         )
