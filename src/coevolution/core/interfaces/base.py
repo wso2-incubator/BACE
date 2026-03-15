@@ -35,6 +35,7 @@ class BaseIndividual(ABC):
         generation_born: int,
         parents: ParentDict | None = None,
         metadata: dict[str, Any] | None = None,
+        explanation: str | None = None,
     ) -> None:
         """
         Initializes the shared state for all individuals.
@@ -46,12 +47,14 @@ class BaseIndividual(ABC):
             generation_born: Generation when this individual was created
             parents: Parent individuals grouped by type {"code": [ids], "test": [ids]}
             metadata: Additional operation-specific metadata
+            explanation: A high-level explanation or plan for the individual
         """
         self._snippet = snippet
         self._creation_op = creation_op
         self._generation_born = generation_born
         self._parents = parents if parents is not None else {"code": [], "test": []}
         self._metadata = metadata if metadata is not None else {}
+        self._explanation = explanation
 
         BaseIndividual._validate_probability(probability)
         self._probability = probability
@@ -159,6 +162,19 @@ class BaseIndividual(ABC):
             Dict containing operation-specific metadata.
         """
         return self._metadata
+
+    @property
+    def explanation(self) -> str | None:
+        """
+        A high-level explanation or plan for this individual.
+
+        This can be extracted from a docstring or provided during
+        the planning phase of generation.
+
+        Returns:
+            The explanation string if available, else None.
+        """
+        return self._explanation
 
     @property
     def generation_born(self) -> int:

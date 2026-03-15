@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
+
 from coevolution.core.interfaces.language import LanguageParsingError
 
 
@@ -171,9 +172,15 @@ def _extract_comments(node: ast.AST, lines: List[str]) -> str:
     return "\n".join(reversed(comments))
 
 
-def get_docstring(code: str) -> str:
+def get_docstring(code: str) -> Optional[str]:
     """
-    Return the docstring of the first function or class in the code.
+    Return the docstring or leading comments for the first function or class
+    defined in the given code, if any.
+
+    Returns:
+        str: The extracted docstring or preceding `#` comments.
+        None: If no suitable docstring/comments are found or if the code
+            cannot be parsed.
     """
     try:
         dedented_code = textwrap.dedent(code)
@@ -182,7 +189,8 @@ def get_docstring(code: str) -> str:
 
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
-                return ast.get_docstring(node) or _extract_comments(node, lines)
+                doc = ast.get_docstring(node) or _extract_comments(node, lines)
+                return doc if doc else None
 
             if isinstance(node, ast.ClassDef):
                 class_doc = ast.get_docstring(node)
@@ -200,12 +208,13 @@ def get_docstring(code: str) -> str:
                     if method_comments:
                         return method_comments
 
-                return _extract_comments(node, lines)
+                cls_doc = _extract_comments(node, lines)
+                return cls_doc if cls_doc else None
 
     except Exception as e:
         logger.debug(f"Failed to extract docstring: {e}")
 
-    return ""
+    return None
 
 
 def parse_method_signature(starter_code: str) -> MethodSignature:

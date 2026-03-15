@@ -90,6 +90,7 @@ class AgentCoderInitializer(BaseLLMInitializer[CodeIndividual]):
             probability=self.pop_config.initial_prior,
             creation_op=OPERATION_INITIAL,
             generation_born=0,
+            explanation=self.parser.get_docstring(code),
         )
 
 

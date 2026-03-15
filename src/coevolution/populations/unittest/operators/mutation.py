@@ -64,6 +64,7 @@ class UnittestMutationOperator(_TestLLMHelpers, BaseLLMOperator[TestIndividual])
                 creation_op=OPERATION_MUTATION,
                 generation_born=test_pop.generation + 1,
                 parents={"code": [], "test": [parent.id]},
+                explanation=self.parser.get_docstring(mutated),
             )
         ]
 

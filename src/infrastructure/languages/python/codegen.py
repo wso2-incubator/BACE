@@ -7,9 +7,8 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from .ast import (
-    remove_main_block,
-)
+
+from .ast import remove_main_block
 
 
 def _parse_val(val: str) -> any:
@@ -126,18 +125,39 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
 
     try:
         import json
-        input_dict = json.loads(input_data)
-        if "inputdata" not in input_dict:
-            raise LanguageTransformationError("Input data must contain 'inputdata' key")
-        input_params = input_dict["inputdata"]
+
+        input_dict = None
+        try:
+            input_dict = json.loads(input_data)
+        except (json.JSONDecodeError, TypeError):
+            try:
+                # Try parsing as a Python literal (often used in tests)
+                input_dict = ast.literal_eval(input_data)
+            except Exception:
+                # Last resort: treat input_data as the actual value if it's already a dict
+                if isinstance(input_data, dict):
+                    input_dict = input_data
+                else:
+                    # If it's a string that's not JSON/literal, it might be meant as the input_str for stdin style,
+                    # but here we expect a dict for functional style.
+                    # We'll try to wrap it if it's not a dict.
+                    input_dict = {"inputdata": input_data}
+
+        # If we got a dict, check if it has 'inputdata' key, otherwise assume it is the inputdata
+        if isinstance(input_dict, dict):
+            input_params = input_dict.get("inputdata", input_dict)
+        else:
+            input_params = input_dict
+
         if not isinstance(input_params, dict):
-            raise LanguageTransformationError("'inputdata' value must be a dict object")
-    except (json.JSONDecodeError, TypeError) as e:
-        raise LanguageTransformationError(f"Failed to parse input data: {e}") from e
-    except LanguageTransformationError:
-        raise
+            # Some old tests pass non-dict as input_data for functions with 1 param
+            # or we might be in a weird state.
+            raise LanguageTransformationError(
+                f"Input data must be a dict or contain 'inputdata' key, got {type(input_params)}"
+            )
+
     except Exception as e:
-        raise LanguageTransformationError(f"Error processing input data: {e}") from e
+        raise LanguageTransformationError(f"Failed to parse input data: {e}") from e
 
     parts: list[str] = [
         "import json",
@@ -259,4 +279,5 @@ def compose_generator_script(generator_code: str, num_inputs: int) -> str:
     script = "import json\n"
     script += remove_main_block(generator_code)
     script += f"\n\nprint(json.dumps(generate_test_inputs({num_inputs})))"
+    return script
     return script

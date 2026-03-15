@@ -79,8 +79,8 @@ class BallerinaParser(ICodeParser):
     def parse_test_inputs(self, outputs: str) -> List[Dict[str, Any]]:
         return ballerina_parser.parse_test_inputs(outputs)
 
-    def get_docstring(self, code: str) -> str:
-        return ""
+    def get_docstring(self, code: str) -> str | None:
+        return None
 
     def get_function_signature(self, code: str) -> Dict[str, str]:
         return ballerina_parser.get_function_signature(code)
