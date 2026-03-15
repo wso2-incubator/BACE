@@ -105,7 +105,3 @@ class TestAdversarialRefinerAdvanced:
         assert "def property_" in child.snippet
         # Check that docstring was extracted as explanation
         assert child.explanation and len(child.explanation) > 10
-        # The refined property should probably check >= 2 or use a different logic.
-        assert "def property_" in child.snippet
-        # Check that docstring was extracted as explanation
-        assert child.explanation and len(child.explanation) > 10
