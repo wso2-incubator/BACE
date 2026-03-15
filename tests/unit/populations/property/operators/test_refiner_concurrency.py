@@ -18,8 +18,8 @@ class MockLLM:
     def generate(self, prompt, **kwargs):
         with self.lock:
             self.call_count += 1
-        # Simulate expensive LLM call
-        time.sleep(0.5)
+        # Simulate expensive LLM call with a short delay to avoid slow tests
+        time.sleep(0.005)
         # Return a response that will trigger "no counter-example found"
         return "<reasoning>No counter-example found</reasoning>"
 
