@@ -128,7 +128,8 @@ class ReverseRouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStr
     for operators that aim to refine or improve low-quality individuals.
 
     Handles edge cases:
-    - All probabilities zero or one: Falls back to uniform random selection
+    - All probabilities one (degenerate): Falls back to uniform random selection
+    - All probabilities zero: Proceeds with equal weights (uniform selection)
     - Single individual: Returns that individual
     - Count > population size: Allows duplicates (sampling with replacement)
     """
