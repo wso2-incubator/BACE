@@ -3,8 +3,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
-import pytest
-
 from coevolution.core.individual import TestIndividual
 from coevolution.core.interfaces import CoevolutionContext, Problem
 from coevolution.core.population import CodePopulation, TestPopulation
