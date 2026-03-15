@@ -117,7 +117,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 snippet=refined_snippet,
                 probability=offspring_prob,
                 creation_op=self.operation_name(),
-                generation_born=context.generation,
+                generation_born=context.code_population.generation,
                 parents={"test": [parent.id]},
                 explanation=f"Refined {parent.id} using counter-example and reasoning.",
                 metadata={
