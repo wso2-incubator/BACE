@@ -34,10 +34,21 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
         import json
         try:
             input_dict = json.loads(input_data)
+            if not isinstance(input_dict, dict):
+                raise LanguageTransformationError(
+                    "Evaluation input JSON must be an object mapping parameter "
+                    "names to values."
+                )
             inner_input = input_dict.get("inputdata", input_dict)
         except (json.JSONDecodeError, TypeError):
             # Fallback for old tests passing raw strings
             inner_input = input_data
+
+        if not isinstance(inner_input, dict):
+            raise LanguageTransformationError(
+                "Evaluation input must be a JSON object with argument names; "
+                'if using an "inputdata" field, it must itself be an object.'
+            )
         
         # We need the function name from the code snippet
         match = FUNCTION_PATTERN.search(code_snippet)

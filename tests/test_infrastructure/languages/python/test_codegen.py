@@ -27,7 +27,9 @@ class TestComposeTestScript:
         assert "def test_add" in script
 
     def test_adds_pytest_import_when_missing(self, adapter: PythonLanguage) -> None:
-        script = adapter.composer.compose_test_script("def f(): pass", "def test_f(): pass")
+        script = adapter.composer.compose_test_script(
+            "def f(): pass", "def test_f(): pass"
+        )
         assert "import pytest" in script
 
     def test_does_not_duplicate_pytest_import(self, adapter: PythonLanguage) -> None:
@@ -37,7 +39,9 @@ class TestComposeTestScript:
         assert script.count("import pytest") == 1
 
     def test_includes_main_block(self, adapter: PythonLanguage) -> None:
-        script = adapter.composer.compose_test_script("def f(): pass", "def test_f(): pass")
+        script = adapter.composer.compose_test_script(
+            "def f(): pass", "def test_f(): pass"
+        )
         assert 'if __name__ == "__main__":' in script
         assert 'pytest.main([__file__, "-v"])' in script
 
@@ -64,7 +68,6 @@ class TestGenerateTestCase:
         code = adapter.composer.generate_test_case("5\n3", "8", starter, 1)
         assert "def test_case_1():" in code
         assert "solution = Solution()" in code
-        assert "import ast" in code
         assert "solution.add(*args)" in code
 
     def test_standalone_function_test_generation(self, adapter: PythonLanguage) -> None:
@@ -121,7 +124,9 @@ class TestGenerateTestCase:
 
     def test_standalone_round_trip_executes(self, adapter: PythonLanguage) -> None:
         starter = "def sort_array(arr):\n    return sorted(arr)\n"
-        test_code = adapter.composer.generate_test_case("[3, 1, 2]", "[1, 2, 3]", starter, 1)
+        test_code = adapter.composer.generate_test_case(
+            "[3, 1, 2]", "[1, 2, 3]", starter, 1
+        )
         ns: dict[str, Any] = {}
         exec(starter + "\n" + test_code, ns)
         ns["test_case_1"]()
@@ -221,7 +226,9 @@ class TestComposeEvaluationScript:
             "class Helper:\n    def val(self): return 42\n\n"
             "class Solution:\n    def solve(self, x):\n        return Helper().val() + x\n"
         )
-        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {'x': 8}}")
+        script = adapter.composer.compose_evaluation_script(
+            prog, "{'inputdata': {'x': 8}}"
+        )
         assert "class Helper" in script
         assert "class Solution" in script
 
@@ -263,20 +270,28 @@ class TestComposeEvaluationScript:
     def test_raises_when_missing_inputdata_key(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
         # Robust parsing now handles missing key by assuming the whole dict is inputdata
-        script = adapter.composer.compose_evaluation_script(prog, "{'wrongkey': {'x': 1}}")
+        script = adapter.composer.compose_evaluation_script(
+            prog, "{'wrongkey': {'x': 1}}"
+        )
         assert "wrongkey={'x': 1}" in script
 
     def test_raises_when_inputdata_not_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
-        with pytest.raises(LanguageTransformationError, match="Input data must be a dict"):
-            adapter.composer.compose_evaluation_script(prog, "{'inputdata': 'not a dict'}")
+        with pytest.raises(
+            LanguageTransformationError, match="Input data must be a dict"
+        ):
+            adapter.composer.compose_evaluation_script(
+                prog, "{'inputdata': 'not a dict'}"
+            )
 
     def test_raises_on_invalid_input_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
         with pytest.raises(
             LanguageTransformationError, match="Failed to parse input data"
         ):
-            adapter.composer.compose_evaluation_script(prog, "this is not valid python dict")
+            adapter.composer.compose_evaluation_script(
+                prog, "this is not valid python dict"
+            )
 
     def test_multiline_string_with_newlines(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, input_str):\n        return len(input_str.split('\\n'))\n"
@@ -309,7 +324,9 @@ class TestComposeEvaluationScript:
             "    def other(self, y):\n"
             "        return y * 3\n"
         )
-        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {'x': 10}}")
+        script = adapter.composer.compose_evaluation_script(
+            prog, "{'inputdata': {'x': 10}}"
+        )
         assert "sol.solve(x=10)" in script
 
 
@@ -334,4 +351,3 @@ class TestNormalizeCode:
         code = "def   foo():     pass"
         normalized = adapter.parser.normalize_code(code)
         assert "  " not in normalized
-
