@@ -1,7 +1,7 @@
 initial_prior: 0.5
-initial_population_size: 10
-max_population_size: 30
-offspring_rate: 0.8
+initial_population_size: 1
+max_population_size: 15
+offspring_rate: 0.2
 elitism_rate: 1.0
 
 alpha: 0.05
@@ -11,3 +11,6 @@ learning_rate: 0.1
 
 cpu_workers: 8
 num_inputs: 60
+
+adversarial_refiner_rate: 1.0
+noop_rate: 0.0

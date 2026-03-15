@@ -2,8 +2,8 @@
 # Uses a code-only warmup schedule (5 generations) before running property-driven phases
 
 experiment:
-  name: "property-public-code-only"
-  description: "Experiment that uses property tests and public tests only, with a code-only warmup (5 generations)."
+  name: "property-tests"
+  description: "Experiment that uses property tests and public tests only, with a simulataneous coevolution"
 
 # Component references
 llm: "llm/gpt-5-mini.yaml"
@@ -11,7 +11,7 @@ code_profile: "profiles/code/standard.yaml"
 property_profile: "profiles/property/standard.yaml"
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
-schedule: "schedules/code-only-5gen.yaml"
+schedule: "schedules/simultaneous-5.yaml"
 
 # Dataset configuration
 dataset:

@@ -173,4 +173,9 @@ class ScheduleBuilder:
                 start_with=alternating_config.get("start_with", "test"),
             )
 
+        # Add simultaneous phase if specified
+        if "simultaneous" in config:
+            sim_config = config["simultaneous"]
+            builder = builder.simultaneous(duration=sim_config.get("duration", 1))
+
         return builder.build()
