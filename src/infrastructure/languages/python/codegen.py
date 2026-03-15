@@ -7,9 +7,8 @@ from coevolution.core.interfaces.language import (
     LanguageParsingError,
     LanguageTransformationError,
 )
-from .ast import (
-    remove_main_block,
-)
+
+from .ast import remove_main_block
 
 
 def _parse_val(val: str) -> any:
@@ -126,14 +125,14 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
 
     try:
         import json
-        import ast as python_ast
+
         input_dict = None
         try:
             input_dict = json.loads(input_data)
         except (json.JSONDecodeError, TypeError):
             try:
                 # Try parsing as a Python literal (often used in tests)
-                input_dict = python_ast.literal_eval(input_data)
+                input_dict = ast.literal_eval(input_data)
             except Exception:
                 # Last resort: treat input_data as the actual value if it's already a dict
                 if isinstance(input_data, dict):
@@ -151,9 +150,11 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
             input_params = input_dict
 
         if not isinstance(input_params, dict):
-             # Some old tests pass non-dict as input_data for functions with 1 param
-             # or we might be in a weird state.
-             raise LanguageTransformationError(f"Input data must be a dict or contain 'inputdata' key, got {type(input_params)}")
+            # Some old tests pass non-dict as input_data for functions with 1 param
+            # or we might be in a weird state.
+            raise LanguageTransformationError(
+                f"Input data must be a dict or contain 'inputdata' key, got {type(input_params)}"
+            )
 
     except Exception as e:
         raise LanguageTransformationError(f"Failed to parse input data: {e}") from e
@@ -250,7 +251,6 @@ def gen_functional_test(
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    import ast\n"
             f"    args = {args_repr}\n"
             f"    expected_output = {output_repr}\n"
             f"    actual_output = {method_name}(*args)\n"
@@ -262,7 +262,6 @@ def gen_functional_test(
         )
     return (
         f"def test_case_{test_number}():\n"
-        f"    import ast\n"
         f"    solution = {class_name}()\n"
         f"    args = {args_repr}\n"
         f"    expected_output = {output_repr}\n"
@@ -280,4 +279,5 @@ def compose_generator_script(generator_code: str, num_inputs: int) -> str:
     script = "import json\n"
     script += remove_main_block(generator_code)
     script += f"\n\nprint(json.dumps(generate_test_inputs({num_inputs})))"
+    return script
     return script
