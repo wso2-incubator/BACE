@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
     """Refines property tests using a two-phase CEGIS-like approach.
 
-    Phase 1: Generate a counter-example (inputdata, output) that invalidates the
+    Phase 1: Generate a counter-example (input_arg, output) that invalidates the
              current property test but is actually correct according to the problem.
     Phase 2: Refine the property test snippet to correctly handle the counter-example.
     """
@@ -203,7 +203,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         try:
             # Validate it's valid JSON and contains required keys
             ce_data = json.loads(content)
-            if "inputdata" not in ce_data or "output" not in ce_data:
+            if "input_arg" not in ce_data or "output" not in ce_data:
                 logger.warning(
                     "AdversarialPropertyRefiner: counter-example JSON missing keys."
                 )

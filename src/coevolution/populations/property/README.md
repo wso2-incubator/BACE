@@ -1,6 +1,6 @@
 # Property Test Population
 
-The **Property** population consists of individuals that define invariant properties or invariants that a correct solution must satisfy. Unlike unit tests which check for specific output equality, property tests are Python functions that take an `(inputdata, output)` pair and return `True` if the property holds.
+The **Property** population consists of individuals that define invariant properties or invariants that a correct solution must satisfy. Unlike unit tests which check for specific output equality, property tests are Python functions that take an `(input_arg, output)` pair and return `True` if the property holds.
 
 ## Architecture & Data Flow
 
@@ -40,7 +40,7 @@ INITIALISATION (gen 0) — PropertyTestInitializer.initialize(problem)
                ▼ [Pruning — Python sandbox only]
                for each property test:
                  for each (input, output) in problem.public_test_cases:
-                   run: property_<name>(inputdata=input, output=output) → True/False
+                   run: property_<name>(input_arg=input, output=output) → True/False
                  reject if any False
                │
                ▼
@@ -52,27 +52,27 @@ EACH EPOCH — PropertyTestEvaluator.execute_tests(code_pop, property_test_pop)
   Phase A — resolve inputs (once per problem, cached)
          IOPairCache.get_generated_inputs() → empty on first call
          → run generator_script in PYTHON sandbox
-         → parse stdout → list[str] of inputdata
+         → parse stdout → list[str] of input_arg strings
          → IOPairCache.store_generated_inputs(inputs)
 
   Phase B — populate (input, output) pairs for new code individuals
          for each code_individual not yet in IOPairCache:
-           for each inputdata in inputs:
-             compose_evaluation_script(code_snippet, inputdata)
+           for each input_arg in inputs:
+             compose_evaluation_script(code_snippet, input_arg)
              run in TARGET-LANGUAGE sandbox → actual_output
-           IOPairCache.store(code_id, [IOPair(inputdata, actual_output), ...])
+           IOPairCache.store(code_id, [IOPair(input_arg, actual_output), ...])
 
   Phase C — evaluate property tests
          for each (code_ind, property_test_ind):
            pairs = IOPairCache.get(code_id)
            for each pair:
              compose Python script:
-               property_snippet + call(inputdata, output)
+               property_snippet + call(input_arg, output)
              run in PYTHON sandbox → True / False / error
            all True  → status="passed",  error_log=None,           matrix[i,j] = 1
            any False → status="failed",  error_log=structured_log, matrix[i,j] = 0
            any error → status="error",   error_log=traceback,      matrix[i,j] = 0
-           (structured_log lists each failing (inputdata, output) pair)
+           (structured_log lists each failing (input_arg, output) pair)
          │
          ▼
   InteractionData  →  Bayesian belief update
@@ -124,8 +124,9 @@ Implements the `IExecutionSystem` interface through a three-phase loop:
 All property tests must follow this signature:
 
 ```python
-def property_name(inputdata, output):
-    # inputdata and output are raw strings
+def property_name(input_arg, output):
+    # input_arg is a dictionary of arguments
+    # output is the raw return value
     # return True if holds, False otherwise
     ...
 ```

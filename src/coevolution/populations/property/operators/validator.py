@@ -1,7 +1,7 @@
 """Shared validation helper for property test operators."""
 
 from __future__ import annotations
-
+import json
 from coevolution.core.interfaces import Test
 from coevolution.core.interfaces.sandbox import ISandbox
 from infrastructure.languages import PythonLanguage
@@ -37,7 +37,10 @@ def validate_property_test(
 
     for test in public_test_cases:
         try:
-            script = compose_property_test_script(snippet, test.input, test.output)
+            # test.input and test.output are JSON strings in the transformed public tests
+            input_dict = json.loads(test.input)
+            output_val = json.loads(test.output)
+            script = compose_property_test_script(snippet, input_dict, output_val)
         except Exception:
             # compose_property_test_script raises LanguageTransformationError
             # if no property_<name> function is found.
