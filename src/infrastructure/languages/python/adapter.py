@@ -14,14 +14,15 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from coevolution.core.interfaces.language import (
-    ILanguage,
     ICodeParser,
-    IScriptComposer,
+    ILanguage,
     ILanguageRuntime,
+    IScriptComposer,
 )
-from .analyzer import PythonTestAnalyzer
+
 from . import ast as python_ast
 from . import codegen as python_codegen
+from .analyzer import PythonTestAnalyzer
 
 
 class PythonParser(ICodeParser):
@@ -240,3 +241,4 @@ class PythonLanguage(ILanguage):
     @property
     def analyzer(self) -> PythonTestAnalyzer:
         return self._analyzer
+

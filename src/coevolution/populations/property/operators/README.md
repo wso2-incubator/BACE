@@ -64,10 +64,9 @@ Properties with **lower belief scores** (meaning they are failing on many valid 
 **Original (Too Restrictive)**:
 
 ```python
-def property_sum_is_greater(inputdata, output):
+def property_sum_is_greater(input_arg, output):
     """Checks if sum is greater than inputs."""
-    data = json.loads(inputdata)
-    return int(output) > data['x'] and int(output) > data['y']
+    return int(output) > input_arg['x'] and int(output) > input_arg['y']
 ```
 
 *Rejected by falsifier because `x=0, y=0` results in `0`, and `0 > 0` is `False`.*
@@ -75,13 +74,12 @@ def property_sum_is_greater(inputdata, output):
 **Refined**:
 
 ```python
-def property_exact_arithmetic_sum(inputdata, output):
+def property_exact_arithmetic_sum(input_arg, output):
     """
     Verifies that the output is exactly the arithmetic sum of x and y.
     This handles zero and negative integers correctly.
     """
-    data = json.loads(inputdata)
-    return int(output) == data['x'] + data['y']
+    return int(output) == input_arg['x'] + input_arg['y']
 ```
 
 ---

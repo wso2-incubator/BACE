@@ -7,7 +7,7 @@ Unlike the standard ExecutionSystem (which runs pytest-style assertions), it:
              of raw input strings.
 
   Phase B — executes each code individual against every input in the target
-             language to collect (inputdata → actual_output) IOPairs.
+             language to collect (input_args → actual_output) IOPairs.
 
   Phase C — evaluates each property test against the collected IOPairs in a
              Python sandbox and builds the observation matrix.
@@ -51,26 +51,26 @@ def _io_generation_worker(
     """Execute one code snippet against one input in the target-language sandbox.
 
     Args:
-        args: (code_id, code_snippet, inputdata, sandbox_config, composer, runtime)
+        args: (code_id, code_snippet, input_arg, sandbox_config, composer, runtime)
 
     Returns:
-        (code_id, inputdata, actual_output) — actual_output is None on error.
+        (code_id, input_arg, actual_output) — actual_output is None on error.
     """
-    code_id, code_snippet, inputdata, sandbox_config, composer, runtime = args
+    code_id, code_snippet, input_arg, sandbox_config, composer, runtime = args
     try:
         setup_logging()
         sandbox = create_sandbox(sandbox_config)
-        script = composer.compose_evaluation_script(code_snippet, inputdata)
+        script = composer.compose_evaluation_script(code_snippet, input_arg)
 
         result = sandbox.execute_code(script, runtime)
 
         if result.error:
-            return code_id, inputdata, None
-        return code_id, inputdata, result.output.strip()
+            return code_id, input_arg, None
+        return code_id, input_arg, result.output.strip()
 
     except Exception as e:
         logger.debug(f"_io_generation_worker error for code {code_id}: {e}")
-        return code_id, inputdata, None
+        return code_id, input_arg, None
 
 
 def _property_eval_worker(
@@ -96,19 +96,19 @@ def _property_eval_worker(
 
         for pair in pairs:
             try:
-                # pair["inputdata"] is json.dumps({"inputdata": {...}})
-                # We want to pass just the inner dict (serialized to JSON) to the property test.
-                # LLM property tests will then call json.loads() on it.
-                raw_input_dict = json.loads(pair["inputdata"])
-                inner_input = raw_input_dict.get("inputdata", raw_input_dict)
+                # pair["input_arg"] is json.dumps({"input_arg": {...}})
+                # We want to pass the inner dict (fully loaded) to the property test.
+                raw_input_dict = json.loads(pair["input_arg"])
+                input_arg_val = raw_input_dict.get("input_arg", raw_input_dict)
+                output_val = json.loads(pair["output"])
 
                 script = compose_property_test_script(
-                    property_snippet, json.dumps(inner_input), pair["output"]
+                    property_snippet, input_arg_val, output_val
                 )
             except Exception as exc:
                 failures.append(
                     {
-                        "inputdata": pair["inputdata"],
+                        "input_arg": pair["input_arg"],
                         "actual_output": pair["output"],
                         "result": f"error formatting script: {exc}",
                     }
@@ -120,7 +120,7 @@ def _property_eval_worker(
             if exec_result.error:
                 failures.append(
                     {
-                        "inputdata": pair["inputdata"],
+                        "input_arg": pair["input_arg"],
                         "actual_output": pair["output"],
                         "result": f"error: {exec_result.error}",
                     }
@@ -132,7 +132,7 @@ def _property_eval_worker(
             if result_line != "True":
                 failures.append(
                     {
-                        "inputdata": pair["inputdata"],
+                        "input_arg": pair["input_arg"],
                         "actual_output": pair["output"],
                         "result": result_line if result_line else "False",
                     }
@@ -166,7 +166,7 @@ def _format_failure_log(failures: list[dict[str, str]]) -> str:
     lines = [f"PROPERTY CHECK FAILURES\n{separator}"]
     for i, f in enumerate(failures, start=1):
         lines.append(
-            f"[{i}] inputdata : {f['inputdata']}\n"
+            f"[{i}] input_arg : {f['input_arg']}\n"
             f"    output    : {f['actual_output']}\n"
             f"    result    : {f['result']}"
         )
@@ -299,7 +299,7 @@ class PropertyTestEvaluator(IExecutionSystem):
            as a proper Python literal (handles multi-line dicts, floats, etc.).
         2. Each element is a ``dict`` mapping the solution's parameter names to
            their values, e.g. ``{"lst": [3, 1, 2]}``.
-        3. Wrap each dict in ``{"inputdata": d}`` and stringify it so the result
+        3. Wrap each dict in ``{"input_arg": d}`` and stringify it so the result
            is directly consumable by ``composer.compose_evaluation_script``.
         """
         clean_code = self._python_lang.parser.remove_main_block(generator_code)
@@ -325,9 +325,9 @@ class PropertyTestEvaluator(IExecutionSystem):
             import json
 
             # Wrap each dict as compose_evaluation_script expects:
-            # json.dumps({"inputdata": {"lst": [3, 1, 2]}}) → one entry per input
+            # json.dumps({"input_arg": {"lst": [3, 1, 2]}}) → one entry per input
             formatted = [
-                json.dumps({"inputdata": d}) for d in parsed if isinstance(d, dict)
+                json.dumps({"input_arg": d}) for d in parsed if isinstance(d, dict)
             ]
             logger.debug(
                 f"PropertyTestEvaluator: generator produced {len(formatted)} inputs."
@@ -363,19 +363,19 @@ class PropertyTestEvaluator(IExecutionSystem):
     ) -> None:
         for code in new_codes:
             pairs: list[IOPair] = []
-            for inputdata in inputs:
+            for input_arg in inputs:
                 _, _, actual_output = _io_generation_worker(
                     (
                         code.id,
                         code.snippet,
-                        inputdata,
+                        input_arg,
                         self.sandbox_config,
                         self.composer,
                         self.runtime,
                     )
                 )
                 if actual_output is not None:
-                    pairs.append(IOPair(inputdata=inputdata, output=actual_output))
+                    pairs.append(IOPair(input_arg=input_arg, output=actual_output))
             self.io_pair_cache.store(code.id, pairs)
 
     def _populate_io_pairs_parallel(
@@ -385,13 +385,13 @@ class PropertyTestEvaluator(IExecutionSystem):
             (
                 code.id,
                 code.snippet,
-                inputdata,
+                input_arg,
                 self.sandbox_config,
                 self.composer,
                 self.runtime,
             )
             for code in new_codes
-            for inputdata in inputs
+            for input_arg in inputs
         ]
         chunk_size = max(1, len(tasks) // (self.cpu_workers * 4))
 
@@ -400,12 +400,12 @@ class PropertyTestEvaluator(IExecutionSystem):
 
         pool = multiprocessing.Pool(processes=self.cpu_workers)
         try:
-            for code_id, inputdata, actual_output in pool.imap_unordered(
+            for code_id, input_arg, actual_output in pool.imap_unordered(
                 _io_generation_worker, tasks, chunksize=chunk_size
             ):
                 if actual_output is not None:
                     raw[code_id].append(
-                        IOPair(inputdata=inputdata, output=actual_output)
+                        IOPair(input_arg=input_arg, output=actual_output)
                     )
         except Exception as e:
             logger.error(f"PropertyTestEvaluator Phase B parallel error: {e}")
@@ -438,7 +438,7 @@ class PropertyTestEvaluator(IExecutionSystem):
                     observation_matrix[ci, ti] = 1 if result.status == "passed" else 0
                 else:
                     pairs = self.io_pair_cache.get(code.id)
-                    sorted_pairs = sorted(pairs, key=lambda p: len(str(p["inputdata"])))
+                    sorted_pairs = sorted(pairs, key=lambda p: len(str(p["input_arg"])))
                     tasks.append(
                         (
                             ci,

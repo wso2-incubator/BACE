@@ -40,7 +40,7 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
                     "Evaluation input JSON must be an object mapping parameter "
                     "names to values."
                 )
-            inner_input = input_dict.get("inputdata", input_dict)
+            inner_input = input_dict.get("input_arg", input_dict)
         except (json.JSONDecodeError, TypeError):
             # Fallback for old tests passing raw strings
             inner_input = input_data

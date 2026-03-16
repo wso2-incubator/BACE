@@ -1,6 +1,6 @@
 """Property test population — shared data types.
 
-IOPair: a single (inputdata, output) pair captured by running a code individual
+IOPair: a single (input_arg, output) pair captured by running a code individual
         against one input in the target language.
 IOPairCache: thread-safe store shared between PropertyTestInitializer and
              PropertyTestEvaluator (and future operators).
@@ -13,9 +13,9 @@ from typing import Optional, TypedDict
 
 
 class IOPair(TypedDict):
-    """A single (inputdata, output) pair produced by executing a code individual."""
+    """A single (input_arg, output) pair produced by executing a code individual."""
 
-    inputdata: str  # raw input string (same format as Test.input)
+    input_arg: str  # raw input string in the property-eval wire format, e.g. json.dumps({"input_arg": <dict>})
     output: str  # raw stdout captured from running the code in the target language
 
 

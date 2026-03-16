@@ -71,7 +71,7 @@ class TestAdversarialPropertyRefiner:
         
         # 2. Mock LLM responses
         # Response 1: Counter-example with reasoning
-        ce_json = json.dumps({"inputdata": "{}", "output": "null"})
+        ce_json = json.dumps({"input_arg": "{}", "output": "null"})
         mock_llm.generate.side_effect = [
             f"<reasoning>Test reasoning</reasoning><counter_example>{ce_json}</counter_example>",  # Phase 1
             "def property_refined(i, o): return True"        # Phase 2

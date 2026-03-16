@@ -93,15 +93,12 @@ GEN_INPUTS_RESPONSE = textwrap.dedent("""\
 
 # Two candidate property snippets (LLM call 2 response)
 PROPERTY_SNIPPET_PASS = textwrap.dedent("""\
-    def property_same_length(inputdata, output):
-        import json
-        inp = json.loads(inputdata)
-        out = json.loads(output)
-        return len(inp["lst"]) == len(out)
+    def property_same_length(input_arg, output):
+        return len(input_arg["lst"]) == len(output)
 """)
 
 PROPERTY_SNIPPET_FAIL = textwrap.dedent("""\
-    def property_always_false(inputdata, output):
+    def property_always_false(input_arg, output):
         return False
 """)
 
@@ -361,7 +358,7 @@ class TestGenPropertyFailures:
 
     def test_snippet_without_property_prefix_rejected(self) -> None:
         """A snippet whose function name doesn't start with property_ is rejected."""
-        bad_snippet = "def check_output(inputdata, output):\n    return True\n"
+        bad_snippet = "def check_output(input_arg, output):\n    return True\n"
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [
             GEN_INPUTS_RESPONSE,
@@ -376,7 +373,7 @@ class TestGenPropertyFailures:
 
     def test_crashing_snippet_rejected(self) -> None:
         crashing = (
-            "def property_crashes(inputdata, output):\n    raise ValueError('boom')\n"
+            "def property_crashes(input_arg, output):\n    raise ValueError('boom')\n"
         )
         init, _, mock_llm = make_initializer()
         mock_llm.generate.side_effect = [

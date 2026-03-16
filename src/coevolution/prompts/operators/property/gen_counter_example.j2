@@ -4,15 +4,15 @@
 
 <task>
 You will be given a programming problem, a starter code template, set of input output pairs, and a candidate property test.
-Your goal is to find a counter-example: a (inputdata, output) pair that is CORRECT according to the problem description, but is rejected by the candidate property test (i.e., the property test returns False).
+Your goal is to find a counter-example: a (input_arg, output) pair that is CORRECT according to the problem description, but is rejected by the candidate property test (i.e., the property test returns False).
 
 1. Analyze the property test and the problem.
 2. Find an edge case or a valid scenario where the property test would incorrectly return False.
-3. Provide the counter-example as a JSON object containing `inputdata` and `output`.
+3. Provide the counter-example as a JSON object containing `input_arg` and `output`.
 
 Rules:
-- `inputdata` and `output` must be the same JSON-encoded string formats used by the property test.
-- The `output` must be a valid output for a correct solution given the `inputdata`.
+- `input_arg` and `output` must be the same structured formats (dict, list, etc.) used by the property test.
+- The `output` must be a valid output for a correct solution given the `input_arg`.
 - The property test function should return False for this pair.
 - Wrap your reasoning in <reasoning> tags. **Always provide reasoning even if you cannot find a counter-example.**
 - If a counter-example is found, wrap the JSON response in <counter_example> tags.
@@ -33,7 +33,7 @@ Rules:
 </candidate_property_test>
 
 <sample_input_output_pairs>
-These are correct (inputdata, output) pairs according to the problem description.
+These are correct (input_arg, output) pairs according to the problem description.
 These pairs already pass the candidate property test.
 However, these are trivial and pass the candidate property test.
 
@@ -49,7 +49,7 @@ Example {{ loop.index }}:
 <instructions>
 1. Analyze the candidate property test.
 2. The provided sample input-output pairs are trivial and pass the candidate property test.
-3. Your goal is to find a DIFFERENT (inputdata, output) pair that is also correct according to the problem, but where the candidate property test returns False.
+3. Your goal is to find a DIFFERENT (input_arg, output) pair that is also correct according to the problem, but where the candidate property test returns False.
 </instructions>
 
 <output_format>
@@ -59,7 +59,7 @@ When a counter-example is found:
 </reasoning>
 <counter_example>
 {
-  "inputdata": "...",
+  "input_arg": "...",
   "output": "..."
 }
 </counter_example>

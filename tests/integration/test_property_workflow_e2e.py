@@ -458,7 +458,7 @@ class TestIOPairCacheE2E:
               evaluator to produce inputs.
     Layer 2 — generated inputs: the input strings produced by running the
               generator script; cached so the script is never re-run.
-    Layer 3 — per-code IOPairs: (inputdata, output) pairs for each code
+    Layer 3 — per-code IOPairs: (input_arg, output) pairs for each code
               individual; cached so code is never re-executed in later epochs.
     """
 
@@ -495,7 +495,7 @@ class TestIOPairCacheE2E:
         """Layer 3: after execute_tests, every code individual has its IOPairs cached.
 
         cache.has(code_id) must be True and cache.get(code_id) must return at
-        least one (inputdata, output) pair for each individual that ran.
+        least one (input_arg, output) pair for each individual that ran.
         """
         code_pop = _make_code_pop([CORRECT_SORT])
         test_pop = TestPopulation(initialized_individuals)
@@ -513,7 +513,7 @@ class TestIOPairCacheE2E:
         print(f"\n[IOPairCache] Cached IO pairs for {list(code_pop)[0].id}:")
         first_pairs = cache.get(list(code_pop)[0].id)
         for pair in first_pairs[:3]:
-            print(f"  input={pair['inputdata']!r}  output={pair['output']!r}")
+            print(f"  input={pair['input_arg']!r}  output={pair['output']!r}")
 
     def test_second_execute_with_same_individuals_is_identical(
         self,

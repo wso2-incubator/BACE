@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from coevolution.core.interfaces.language import ILanguage
+from coevolution.core.interfaces.language import ICodeParser
 from coevolution.populations.differential.operators.llm_operator import (
     DifferentialInputOutput,
     DifferentialLLMOperator,
@@ -55,10 +55,10 @@ def diff_llm_operator(
 @pytest.fixture
 def sample_io_pairs() -> list[DifferentialInputOutput]:
     return [
-        {"inputdata": {"x": 1}, "output": 1},
-        {"inputdata": {"x": 2}, "output": 2},
-        {"inputdata": {"x": 3}, "output": 3},
-        {"inputdata": {"x": 4}, "output": 4},
+        {"input_arg": {"x": 1}, "output": 1},
+        {"input_arg": {"x": 2}, "output": 2},
+        {"input_arg": {"x": 3}, "output": 3},
+        {"input_arg": {"x": 4}, "output": 4},
     ]
 
 

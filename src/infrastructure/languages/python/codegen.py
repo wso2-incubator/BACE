@@ -141,11 +141,10 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
                     # If it's a string that's not JSON/literal, it might be meant as the input_str for stdin style,
                     # but here we expect a dict for functional style.
                     # We'll try to wrap it if it's not a dict.
-                    input_dict = {"inputdata": input_data}
+                    input_dict = {"input_arg": input_data}
 
-        # If we got a dict, check if it has 'inputdata' key, otherwise assume it is the inputdata
         if isinstance(input_dict, dict):
-            input_params = input_dict.get("inputdata", input_dict)
+            input_params = input_dict.get("input_arg", input_dict)
         else:
             input_params = input_dict
 
@@ -153,7 +152,7 @@ def compose_evaluation_script(code_snippet: str, input_data: str) -> str:
             # Some old tests pass non-dict as input_data for functions with 1 param
             # or we might be in a weird state.
             raise LanguageTransformationError(
-                f"Input data must be a dict or contain 'inputdata' key, got {type(input_params)}"
+                f"Input data must be a dict or contain 'input_arg' key, got {type(input_params)}"
             )
 
     except Exception as e:
