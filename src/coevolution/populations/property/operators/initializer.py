@@ -90,7 +90,7 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _call_gen_inputs(self, problem: Problem) -> str:
         public_tests = transform_public_tests(
-            problem.public_test_cases, problem.starter_code, self._python_lang.parser
+            problem.public_test_cases, problem.starter_code, self.parser
         )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/gen_inputs.j2",
