@@ -44,47 +44,37 @@ SORT_TESTS: list[Test] = [
 
 # 1. All elements in the input are present in the output (multiset equality).
 PROPERTY_ELEMENTS_PRESENT = textwrap.dedent("""\
-    def property_all_elements_present(inputdata, output):
-        import json
-        inp = json.loads(inputdata)
-        out = json.loads(output)
-        return sorted(inp["lst"]) == sorted(out)
+    def property_all_elements_present(input_arg, output):
+        return sorted(input_arg["lst"]) == sorted(output)
 """)
 
 # 2. Length is unchanged.
 PROPERTY_SAME_LENGTH = textwrap.dedent("""\
-    def property_same_length(inputdata, output):
-        import json
-        inp = json.loads(inputdata)
-        out = json.loads(output)
-        return len(inp["lst"]) == len(out)
+    def property_same_length(input_arg, output):
+        return len(input_arg["lst"]) == len(output)
 """)
 
 # 3. Output is non-decreasing.
 PROPERTY_NON_DECREASING = textwrap.dedent("""\
-    def property_non_decreasing(inputdata, output):
-        import json
-        out = json.loads(output)
-        return all(out[i] <= out[i + 1] for i in range(len(out) - 1))
+    def property_non_decreasing(input_arg, output):
+        return all(output[i] <= output[i + 1] for i in range(len(output) - 1))
 """)
 
 # Buggy: requires reverse-sorted output — wrong for ascending sort.
 PROPERTY_REVERSE_SORTED = textwrap.dedent("""\
-    def property_reverse_sorted(inputdata, output):
-        import json
-        out = json.loads(output)
-        return out == sorted(out, reverse=True)
+    def property_reverse_sorted(input_arg, output):
+        return output == sorted(output, reverse=True)
 """)
 
 # Buggy: unconditionally returns False.
 PROPERTY_ALWAYS_FALSE = textwrap.dedent("""\
-    def property_always_false(inputdata, output):
+    def property_always_false(input_arg, output):
         return False
 """)
 
 # Buggy: raises at runtime.
 PROPERTY_CRASHES = textwrap.dedent("""\
-    def property_crashes(inputdata, output):
+    def property_crashes(input_arg, output):
         raise ValueError("boom")
 """)
 
@@ -160,6 +150,10 @@ class TestValidSortingProperties:
     def test_non_decreasing_vacuously_true_for_single_element(self) -> None:
         # [42] -> [42]: range(0) is empty, so all() is trivially True.
         single = [Test(input="[42]", output="[42]")]
+        # transformed tests have input/output as JSON strings, but validate_property_test loads them.
+        # However, they should represent a dict for input_arg in our case usually.
+        # For vacuously true sorting, we should follow the same pattern as SORT_TESTS:
+        single = [Test(input='{"lst": [42]}', output="[42]")]
         assert validate_property_test(
             PROPERTY_NON_DECREASING,
             single,
@@ -207,9 +201,8 @@ class TestBuggyProperties:
     def test_property_requiring_at_least_two_elements_rejected(self) -> None:
         # Fails for the single-element test case [42]->[42].
         snippet = textwrap.dedent("""\
-            def property_at_least_two(inputdata, output):
-                import json
-                return len(json.loads(output)) >= 2
+            def property_at_least_two(input_arg, output):
+                return len(output) >= 2
         """)
         assert not validate_property_test(
             snippet,
@@ -254,7 +247,7 @@ class TestEdgeCases:
         )
 
     def test_no_property_function_rejected(self) -> None:
-        bad_snippet = "def check_output(inputdata, output):\n    return True\n"
+        bad_snippet = "def check_output(input_arg, output):\n    return True\n"
         assert not validate_property_test(
             bad_snippet,
             SORT_TESTS,
@@ -297,7 +290,7 @@ class TestEdgeCases:
         # If the snippet prints debug lines before the result, the validator
         # must still accept it as long as the *last* line is "True".
         snippet = textwrap.dedent("""\
-            def property_with_debug_output(inputdata, output):
+            def property_with_debug_output(input_arg, output):
                 print("debug: checking")
                 return True
         """)
