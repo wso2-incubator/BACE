@@ -241,4 +241,4 @@ class PythonLanguage(ILanguage):
     @property
     def analyzer(self) -> PythonTestAnalyzer:
         return self._analyzer
-        return self._analyzer
+
