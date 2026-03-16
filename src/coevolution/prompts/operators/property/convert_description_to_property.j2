@@ -3,10 +3,9 @@
 {{ roles.tester_role() }}
 
 <task>
-You will be given a programming problem, a starter code template, and a specific property description.
+You will be given a programming problem, a starter code template, set of input output pairs, and a specific property description.
 Your goal is to implement a Python function that checks this property.
 
-### Your Task
 Implement the function `property_<name>(inputdata: str, output: str) -> bool` following this template:
 
 ```python
@@ -47,6 +46,17 @@ Rules:
 <starter_code>
 {{ starter_code }}
 </starter_code>
+
+<sample_input_output_pairs>
+These are correct (inputdata, output) pairs. A correct property test MUST return True for all of these.
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
 
 <input/output format>
 If input is via stdin/json, each entry will be a dictionary/map of the form:
