@@ -91,6 +91,7 @@ class TestAdversarialRefinerIntegration:
         """Test that a subtle bad property is correctly refined."""
         # This property is incorrect because it fails for non-positive numbers
         bad_snippet = (
+            "from typing import Any\n"
             "import json\n"
             "def property_result_greater_than_inputs(input_arg: dict, output: Any) -> bool:\n"
             "    x, y = input_arg['x'], input_arg['y']\n"
