@@ -62,10 +62,10 @@ def diff_llm_operator(
 @pytest.fixture
 def sample_io_pairs() -> list[DifferentialInputOutput]:
     return [
-        {"inputdata": {"x": 1}, "output": 1},
-        {"inputdata": {"x": 2}, "output": 2},
-        {"inputdata": {"x": 3}, "output": 3},
-        {"inputdata": {"x": 4}, "output": 4},
+        {"input_arg": {"x": 1}, "output": 1},
+        {"input_arg": {"x": 2}, "output": 2},
+        {"input_arg": {"x": 3}, "output": 3},
+        {"input_arg": {"x": 4}, "output": 4},
     ]
 
 
@@ -76,14 +76,14 @@ def test_get_test_method_from_io(
     starter_code = "class Solution:\n    def f(self, x):\n        return x"
     parent_ids = ["P1", "P2"]
     sample_io_pairs = [
-        {"inputdata": {"x": 1}, "output": 1},
-        {"inputdata": {"x": 2}, "output": 2},
+        {"input_arg": {"x": 1}, "output": 1},
+        {"input_arg": {"x": 2}, "output": 2},
     ]
 
     # This calls into PythonLanguage.compose_test_case internally in DifferentialLLMOperator.get_test_method_from_io
     # Since DifferentialLLMOperator uses hardcoded PythonLanguage for tests, we can test it directly.
     result = diff_llm_operator.get_test_method_from_io(
-        starter_code, sample_io_pairs, parent_ids, io_index=0
+        starter_code, cast(list[DifferentialInputOutput], sample_io_pairs), parent_ids, io_index=0
     )
 
     assert isinstance(result, str)

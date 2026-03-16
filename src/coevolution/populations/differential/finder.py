@@ -53,7 +53,7 @@ def _worker_entry(
         sandbox = create_sandbox(config)
 
         def run_snippet(snippet: str) -> Optional[str]:
-            test_input_formatted = {"inputdata": input_data}
+            test_input_formatted = {"input_arg": input_data}
             script = composer.compose_evaluation_script(
                 snippet, json.dumps(test_input_formatted)
             )
@@ -182,7 +182,7 @@ class DifferentialFinder(IDifferentialFinder):
     def _run_single_sequential(
         self, code: str, input_data: dict[str, Any]
     ) -> Optional[str]:
-        test_input_formatted = {"inputdata": input_data}
+        test_input_formatted = {"input_arg": input_data}
         script = self.composer.compose_evaluation_script(
             code, json.dumps(test_input_formatted)
         )

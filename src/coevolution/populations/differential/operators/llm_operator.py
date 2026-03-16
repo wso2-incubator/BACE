@@ -29,7 +29,7 @@ from infrastructure.languages import PythonLanguage
 
 
 class DifferentialInputOutput(TypedDict):
-    inputdata: dict[str, Any]
+    input_arg: dict[str, Any]
     output: Any
 
 
@@ -118,7 +118,7 @@ class DifferentialLLMOperator(BaseLLMService):
         # We store the input values as individual JSON strings, one per line.
         # This is compatible with how functional tests are currently composed
         # (split by \n and then each line parsed).
-        input_lines = [json.dumps(v) for v in io_pair["inputdata"].values()]
+        input_lines = [json.dumps(v) for v in io_pair["input_arg"].values()]
         input_str = "\n".join(input_lines)
         output_str = json.dumps(io_pair["output"])
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000

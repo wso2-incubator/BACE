@@ -278,7 +278,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                 code_a,
                 code_b,
                 [
-                    {"inputdata": d.input_data, "output": d.output_a}
+                    {"input_arg": d.input_data, "output": d.output_a}
                     for d in divergences
                 ],
             ),
@@ -286,7 +286,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
                 code_b,
                 code_a,
                 [
-                    {"inputdata": d.input_data, "output": d.output_b}
+                    {"input_arg": d.input_data, "output": d.output_b}
                     for d in divergences
                 ],
             ),

@@ -127,7 +127,7 @@ if __name__ == "__main__":
         for idx, diff_result in enumerate(differential_results):
             # Convert DifferentialResult to IO pair format
             io_pair = {
-                "inputdata": diff_result.input_data,
+                "input_arg": diff_result.input_data,
                 "output": diff_result.output_a,  # Use output_a as the expected output
             }
 
@@ -194,8 +194,8 @@ class Solution:
 """
 
         io_pairs = [
-            {"inputdata": {"l": 1, "r": 10}, "output": 5},
-            {"inputdata": {"l": 100, "r": 200}, "output": 51},
+            {"input_arg": {"l": 1, "r": 10}, "output": 5},
+            {"input_arg": {"l": 100, "r": 200}, "output": 51},
         ]
 
         test_method = build_test_method_from_io(starter_code, io_pairs, "NAMES_TEST")
@@ -229,7 +229,7 @@ class Solution:
 
         # Input dict with parameters in reverse order
         io_pairs = [
-            {"inputdata": {"r": 10, "l": 1}, "output": 5},  # r before l
+            {"input_arg": {"r": 10, "l": 1}, "output": 5},  # r before l
         ]
 
         test_method = build_test_method_from_io(starter_code, io_pairs, "ORDER_TEST")
@@ -264,9 +264,9 @@ class Solution:
 
         # Simulate multiple differential findings
         differential_io_pairs = [
-            [{"inputdata": {"l": 1, "r": 10}, "output": 5}],
-            [{"inputdata": {"l": 10, "r": 20}, "output": 6}],
-            [{"inputdata": {"l": 20, "r": 30}, "output": 6}],
+            [{"input_arg": {"l": 1, "r": 10}, "output": 5}],
+            [{"input_arg": {"l": 10, "r": 20}, "output": 6}],
+            [{"input_arg": {"l": 20, "r": 30}, "output": 6}],
         ]
 
         test_methods = []
