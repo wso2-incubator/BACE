@@ -1,6 +1,5 @@
 """Integration tests for AdversarialPropertyRefiner using real LLM."""
 
-import json
 import os
 
 import pytest
@@ -33,9 +32,9 @@ ADD_PROBLEM = Problem(
     question_id="integration/add",
     starter_code="def add(x: int, y: int) -> int:\n    ...\n",
     public_test_cases=[
-        Test(input=json.dumps({"x": 2, "y": 3}), output="5"),
-        Test(input=json.dumps({"x": 0, "y": 0}), output="0"),
-        Test(input=json.dumps({"x": -1, "y": 1}), output="0"),
+        Test(input="2\n3", output="5"),
+        Test(input="0\n0", output="0"),
+        Test(input="-1\n1", output="0"),
     ],
     private_test_cases=[],
 )
@@ -131,10 +130,11 @@ class TestAdversarialRefinerIntegration:
         self, refiner: AdversarialPropertyRefiner
     ) -> None:
         """Test that the refiner gives up after several failed attempts."""
-        # This property is vacuously correct and robust
+        # This property is robustly correct and extremely simple
         correct_snippet = (
-            "def property_always_true(input_arg: dict, output: Any) -> bool:\n"
-            "    return True\n"
+            "def property_sum_is_correct(input_arg: dict, output: Any) -> bool:\n"
+            "    x, y = input_arg['x'], input_arg['y']\n"
+            "    return output == x + y\n"
         )
 
         parent = TestIndividual(
