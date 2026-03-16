@@ -299,7 +299,7 @@ class PropertyTestEvaluator(IExecutionSystem):
            as a proper Python literal (handles multi-line dicts, floats, etc.).
         2. Each element is a ``dict`` mapping the solution's parameter names to
            their values, e.g. ``{"lst": [3, 1, 2]}``.
-        3. Wrap each dict in ``{"input_args": d}`` and stringify it so the result
+        3. Wrap each dict in ``{"input_arg": d}`` and stringify it so the result
            is directly consumable by ``composer.compose_evaluation_script``.
         """
         clean_code = self._python_lang.parser.remove_main_block(generator_code)
