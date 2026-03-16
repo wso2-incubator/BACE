@@ -3,21 +3,19 @@
 {{ roles.tester_role() }}
 
 <task>
-You will be given a programming problem, a starter code template, set of input output pairs, and a candidate property test.
-Your goal is to find a counter-example: a (input_arg, output) pair that is CORRECT according to the problem description, but is rejected by the candidate property test (i.e., the property test returns False).
+You will be given a programming problem, a starter code template, a set of input-output pairs, and a candidate property test.
+Your goal is to determine if the candidate property test is **correct** or **incorrect**. A property test is incorrect if it would return `False` for a correct solution.
 
-1. Analyze the property test and the problem.
-2. Find an edge case or a valid scenario where the property test would incorrectly return False.
-3. Provide the counter-example as a JSON object containing `input_arg` and `output`.
+1. Analyze the property test and the problem description carefully.
+2. Brainstorm scenarios, edge cases, or valid inputs where this property test might incorrectly return `False`.
+3. You do NOT need to provide a concrete input/output pair. Instead, provide detailed reasoning explaining why the property is flawed.
+4. Indicate your conclusion using the `<is_valid>` tag.
 
 Rules:
-- `input_arg` and `output` must be the same structured formats (dict, list, etc.) used by the property test.
-- The `output` must be a valid output for a correct solution given the `input_arg`.
-- The property test function should return False for this pair.
-- Wrap your reasoning in <reasoning> tags. **Always provide reasoning even if you cannot find a counter-example.**
-- If a counter-example is found, wrap the JSON response in <counter_example> tags.
-- **If no counter-example can be found (i.e., the property test seems correct), DO NOT include <counter_example> tags.**
-
+- Wrap your detailed reasoning and descriptions of counter-example scenarios in `<reasoning>` tags.
+- If the property test seems correct and robust, include `<is_valid>True</is_valid>`.
+- If the property test is incorrect (i.e., it would fail a valid solution), include `<is_valid>False</is_valid>`.
+- **Always provide reasoning.**
 </task>
 
 <problem>
@@ -34,8 +32,7 @@ Rules:
 
 <sample_input_output_pairs>
 These are correct (input_arg, output) pairs according to the problem description.
-These pairs already pass the candidate property test.
-However, these are trivial and pass the candidate property test.
+They are known to pass the candidate property test.
 
 {% for test in public_tests %}
 
@@ -48,24 +45,15 @@ Example {{ loop.index }}:
 
 <instructions>
 1. Analyze the candidate property test.
-2. The provided sample input-output pairs are trivial and pass the candidate property test.
-3. Your goal is to find a DIFFERENT (input_arg, output) pair that is also correct according to the problem, but where the candidate property test returns False.
+2. Think about valid solutions to the problem. Are there any that would violate this property?
+3. Describe such scenarios in your reasoning.
+4. Conclude whether the property is invalid.
 </instructions>
 
 <output_format>
-When a counter-example is found:
 <reasoning>
-...
+[Describe why the property might be incorrect, mentioning specific input/output scenarios that would be incorrectly rejected.]
 </reasoning>
-<counter_example>
-{
-  "input_arg": "...",
-  "output": "..."
-}
-</counter_example>
-
-When no counter-example is found:
-<reasoning>
-...
-</reasoning>
+<is_valid>True or False</is_valid>
 </output_format>
+

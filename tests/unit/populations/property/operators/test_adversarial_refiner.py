@@ -1,6 +1,5 @@
 """Tests for AdversarialPropertyRefiner."""
 
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -70,10 +69,9 @@ class TestAdversarialPropertyRefiner:
         mock_context.test_populations = {"property": pop}
         
         # 2. Mock LLM responses
-        # Response 1: Counter-example with reasoning
-        ce_json = json.dumps({"input_arg": "{}", "output": "null"})
+        # Response 1: Validating reasoning with <is_valid>False (flawed) tag
         mock_llm.generate.side_effect = [
-            f"<reasoning>Test reasoning</reasoning><counter_example>{ce_json}</counter_example>",  # Phase 1
+            "<reasoning>Test reasoning</reasoning><is_valid>False</is_valid>",  # Phase 1
             "def property_refined(i, o): return True"        # Phase 2
         ]
         
@@ -85,7 +83,7 @@ class TestAdversarialPropertyRefiner:
         assert offspring[0].parents["test"] == [parent.id]
         assert offspring[0].snippet == "def property_refined(i, o): return True"
         assert offspring[0].metadata["reasoning"] == "Test reasoning"
-        assert "counter_example" in offspring[0].metadata
+        assert "counter_example" not in offspring[0].metadata
 
     def test_execute_no_counter_example(self, refiner, mock_llm, mock_context) -> None:
         # Setup population
@@ -98,8 +96,8 @@ class TestAdversarialPropertyRefiner:
         pop = TestPopulation(individuals=[parent])
         mock_context.test_populations = {"property": pop}
         
-        # Mock LLM response: Reasoning only, no counter-example tags
-        mock_llm.generate.return_value = "<reasoning>The property test correctly validates the sorting algorithm.</reasoning> Everything is fine."
+        # Mock LLM response: Reasoning only, invalid tag is False -> valid
+        mock_llm.generate.return_value = "<reasoning>The property test correctly validates the sorting algorithm.</reasoning><is_valid>True</is_valid>"
         
         # Execute
         offspring = refiner.execute(mock_context)
@@ -140,8 +138,8 @@ class TestAdversarialPropertyRefiner:
         pop = TestPopulation(individuals=[parent])
         mock_context.test_populations = {"property": pop}
         
-        # 2. Mock LLM response: No counter-example
-        mock_llm.generate.return_value = "<reasoning>No CE found</reasoning>"
+        # 2. Mock LLM response: Correct
+        mock_llm.generate.return_value = "<reasoning>No flaw found</reasoning><is_valid>True</is_valid>"
         
         # 3. Execute
         offspring = refiner.execute(mock_context)
