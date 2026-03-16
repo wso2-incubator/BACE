@@ -15,7 +15,7 @@ from typing import Optional, TypedDict
 class IOPair(TypedDict):
     """A single (input_arg, output) pair produced by executing a code individual."""
 
-    input_arg: str  # raw input string (same format as Test.input)
+    input_arg: str  # raw input string in the property-eval wire format, e.g. json.dumps({"input_arg": <dict>})
     output: str  # raw stdout captured from running the code in the target language
 
 
