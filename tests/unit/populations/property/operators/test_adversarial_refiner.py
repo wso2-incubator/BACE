@@ -96,7 +96,7 @@ class TestAdversarialPropertyRefiner:
         pop = TestPopulation(individuals=[parent])
         mock_context.test_populations = {"property": pop}
         
-        # Mock LLM response: Reasoning only, invalid tag is False -> valid
+        # Mock LLM response: reasoning only; property is marked valid with <is_valid>True</is_valid>
         mock_llm.generate.return_value = "<reasoning>The property test correctly validates the sorting algorithm.</reasoning><is_valid>True</is_valid>"
         
         # Execute
