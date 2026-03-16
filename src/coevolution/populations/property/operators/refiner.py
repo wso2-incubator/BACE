@@ -19,6 +19,8 @@ from coevolution.strategies.llm_base import (
     llm_retry,
 )
 
+from .helpers import transform_public_tests
+
 if TYPE_CHECKING:
     from coevolution.core.interfaces.language import ICodeParser
     from coevolution.core.interfaces.probability import IProbabilityAssigner
@@ -168,11 +170,15 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         Phase 1: Generate a counter-example and reasoning for a property test.
         Returns (counter_example_json, reasoning_str) or None.
         """
+        public_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/gen_counter_example.j2",
             question_content=problem.question_content,
             starter_code=problem.starter_code,
             snippet=parent.snippet,
+            public_tests=public_tests,
         )
         response = self._generate(prompt)
 
@@ -204,6 +210,12 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 raise ValueError(
                     "AdversarialPropertyRefiner: counter-example JSON missing required keys."
                 )
+            logger.trace(
+                f"Counter-example generation prompt for {parent.id}\n: {prompt}"
+            )
+            logger.trace(
+                f"Counter-example generation response for {parent.id}\n: {response}"
+            )
             return content, reasoning
         except json.JSONDecodeError:
             logger.warning(
@@ -225,6 +237,9 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         """
         Phase 2: Refine a property test using a counter-example and reasoning.
         """
+        public_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/refine_property.j2",
             question_content=problem.question_content,
@@ -233,6 +248,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             counter_example=counter_example,
             reasoning=reasoning,
             current_explanations=current_explanations,
+            public_tests=public_tests,
         )
         response = self._generate(prompt)
         blocks = self.parser.extract_code_blocks(response)
@@ -243,6 +259,9 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         snippet = self.parser.remove_main_block(snippet)
         if not self.parser.is_syntax_valid(snippet):
             raise LLMSyntaxError("refine_property: invalid syntax")
+
+        logger.trace(f"Refine property prompt for {parent.id}\n: {prompt}")
+        logger.trace(f"Refine property response for {parent.id}\n: {response}")
 
         return snippet
 

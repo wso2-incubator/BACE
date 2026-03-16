@@ -3,7 +3,7 @@
 {{ roles.tester_role() }}
 
 <task>
-You will be given a programming problem, a starter code template, and a candidate property test (Python snippet).
+You will be given a programming problem, a starter code template, set of input output pairs, and a candidate property test.
 Your goal is to find a counter-example: a (inputdata, output) pair that is CORRECT according to the problem description, but is rejected by the candidate property test (i.e., the property test returns False).
 
 1. Analyze the property test and the problem.
@@ -18,16 +18,6 @@ Rules:
 - If a counter-example is found, wrap the JSON response in <counter_example> tags.
 - **If no counter-example can be found (i.e., the property test seems correct), DO NOT include <counter_example> tags.**
 
-Example Response:
-<reasoning>
-The property test checks if the output is sorted, but it fails to handle cases where the input is already sorted.
-</reasoning>
-<counter_example>
-{
-  "inputdata": "{\"param1\": [1, 2, 3]}",
-  "output": "[1, 2, 3]"
-}
-</counter_example>
 </task>
 
 <problem>
@@ -41,6 +31,26 @@ The property test checks if the output is sorted, but it fails to handle cases w
 <candidate_property_test>
 {{ snippet }}
 </candidate_property_test>
+
+<sample_input_output_pairs>
+These are correct (inputdata, output) pairs according to the problem description.
+These pairs already pass the candidate property test.
+However, these are trivial and pass the candidate property test.
+
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<instructions>
+1. Analyze the candidate property test.
+2. The provided sample input-output pairs are trivial and pass the candidate property test.
+3. Your goal is to find a DIFFERENT (inputdata, output) pair that is also correct according to the problem, but where the candidate property test returns False.
+</instructions>
 
 <output_format>
 When a counter-example is found:

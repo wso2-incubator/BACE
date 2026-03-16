@@ -3,7 +3,7 @@
 {{ roles.tester_role() }}
 
 <task>
-You will be given a programming problem and a starter code template.
+You will be given a programming problem, a starter code template, and a set of sample input-output pairs.
 Your goal is to brainstorm a set of diverse property tests (invariants) that a correct solution must satisfy.
 
 For example, for a sorting function:
@@ -31,6 +31,17 @@ Example:
 <starter_code>
 {{ starter_code }}
 </starter_code>
+
+<sample_input_output_pairs>
+These are correct (inputdata, output) pairs according to the problem description.
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
 
 <output_format>
 # Reasoning steps: ... 

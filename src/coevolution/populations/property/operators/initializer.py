@@ -89,10 +89,14 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _call_gen_inputs(self, problem: Problem) -> str:
+        public_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/gen_inputs.j2",
             question_content=problem.question_content,
             starter_code=problem.starter_code,
+            public_tests=public_tests,
         )
         response = self._generate(prompt)
         blocks = self._python_lang.parser.extract_code_blocks(response)
@@ -194,10 +198,14 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
 
     @llm_retry((LLMGenerationError, ValueError))
     def _call_describe_properties(self, problem: Problem) -> list[str]:
+        public_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/describe_properties.j2",
             question_content=problem.question_content,
             starter_code=problem.starter_code,
+            public_tests=public_tests,
         )
         response = self._generate(prompt)
         # Extract content between <property_description> tags
@@ -212,11 +220,15 @@ class PropertyTestInitializer(BaseLLMInitializer[TestIndividual]):
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _call_convert_to_property(self, description: str, problem: Problem) -> str:
+        public_tests = transform_public_tests(
+            problem.public_test_cases, problem.starter_code, self.parser
+        )
         prompt = self.prompt_manager.render_prompt(
             "operators/property/convert_description_to_property.j2",
             description=description,
             question_content=problem.question_content,
             starter_code=problem.starter_code,
+            public_tests=public_tests,
         )
         response = self._generate(prompt)
         blocks = self.parser.extract_code_blocks(response)

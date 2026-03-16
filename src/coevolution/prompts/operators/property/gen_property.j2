@@ -3,7 +3,7 @@
 {{ roles.tester_role() }}
 
 <task>
-You will be given a programming problem and a starter code template.
+You will be given a programming problem, a starter code template, and a set of sample input-output pairs.
 Generate correct Python functions that assert specific properties or invariants
 a correct solution must satisfy.
 
@@ -53,16 +53,15 @@ Rules:
 {{ starter_code }}
 </starter_code>
 
-<input/output format>
-If input is via stdin/json, each entry will be a dictionary/map of the form:
-{"input_str": "<generated_input_string>"}
-If input is functional, each entry will be of the form:
-{"param1": value1, "param2": value2, ...}
+<sample_input_output_pairs>
+These are correct (inputdata, output) pairs. A correct property test MUST return True for all of these.
+Use these pairs to understand the expected input/output schema.
 
-Output format will be a JSON-encoded string of the solution's return value.
-Examples:
-- list: '[1, 2, 3]'
-- str: "'hello'"
-- int: "2"
-- dict: '{"a": 1, "b": 2}'
-</input/output format>
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>

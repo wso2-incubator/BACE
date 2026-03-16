@@ -3,9 +3,9 @@
 {{ roles.tester_role() }}
 
 <task>
-- You are an expert Python programmer.
 - You are given a programming problem described in a <problem> block.
-- You are also given the starter code in a <starter_code> block — use its parameter names as the dict keys.
+- You are given the starter code in a <starter_code> block — use its parameter names as the dict keys.
+- You are given the sample input-output pairs in a <sample_input_output_pairs> block. Use these to understand the expected input/output schema.
 - Your task is to write a Python function that generates diverse and valid test inputs for the problem.
 - The inputs should cover typical cases, edge cases, boundary conditions, and varied data structures as implied by the specification.
 - Each input must be a dict mapping the solution function's parameter names (as string keys) to their Python values.
@@ -23,6 +23,17 @@
 {{ starter_code }}
 ```
 </starter_code>
+
+<sample_input_output_pairs>
+These are example correct (inputdata, output) pairs. Use these to understand the expected input/output schema.
+{% for test in public_tests %}
+
+Example {{ loop.index }}
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
 
 <output_format>
 Provide only the python script inside a code block as follows:
