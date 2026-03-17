@@ -108,7 +108,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             logger.debug(
                 f"AdversarialPropertyRefiner: falsification failed: {exc}"
             )
-            # Increment attempts on failure to generate CE (including LLM errors)
+            # Increment attempts on failure during falsification reasoning (including LLM errors)
             with self._lock:
                 parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
