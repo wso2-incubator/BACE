@@ -103,7 +103,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         falsification_attempts = parent.metadata.get("falsification_attempts", 0)
 
         try:
-            ce_data = self._generate_counter_example(parent, problem)
+            reasoning = self._generate_falsification_reasoning(parent, problem)
         except Exception as exc:
             logger.debug(
                 f"AdversarialPropertyRefiner: falsification failed: {exc}"
@@ -113,7 +113,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
 
-        if not ce_data:
+        if not reasoning:
             logger.debug(
                 f"AdversarialPropertyRefiner: no flaw found for {parent.id}"
             )
@@ -121,8 +121,6 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             with self._lock:
                 parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
-
-        reasoning = ce_data
 
         # 3. Phase 2: Refine property
         current_explanations = [
@@ -161,7 +159,7 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         ]
 
     @llm_retry((LLMGenerationError, ValueError))
-    def _generate_counter_example(
+    def _generate_falsification_reasoning(
         self, parent: TestIndividual, problem: Problem
     ) -> str | None:
         """
