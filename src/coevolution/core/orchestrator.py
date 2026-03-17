@@ -28,6 +28,7 @@ from .interfaces import (
     TestProfile,
 )
 from .population import CodePopulation, TestPopulation
+from coevolution.core.interfaces.operators import RegisteredOperator
 
 
 class Orchestrator:
@@ -130,6 +131,35 @@ class Orchestrator:
         self.bayesian_system = bayesian_system
         self.ledger_factory = ledger_factory
         self.composer = composer
+
+        # --- Wire Extensible Repair Operators ---
+        self._wire_repair_operators()
+
+    def _wire_repair_operators(self) -> None:
+        """
+        Collects specialized repair operators from all test populations
+        and wires them into the code population's breeder.
+        """
+        all_repair_ops: list[RegisteredOperator[CodeIndividual]] = []
+        for test_type, profile in self.evolved_test_profiles.items():
+            if profile.repair_operators:
+                logger.info(
+                    f"Orchestrator: Collecting {len(profile.repair_operators)} repair operators from '{test_type}' population."
+                )
+                all_repair_ops.extend(profile.repair_operators)
+
+        if all_repair_ops:
+            # Inject into code breeder
+            # Note: We assume the code breeder is compatible with RegisteredOperator[CodeIndividual]
+            from coevolution.strategies.breeding.breeder import Breeder
+
+            code_breeder = self.code_profile.breeder
+            if isinstance(code_breeder, Breeder):
+                code_breeder.add_operators(all_repair_ops)
+            else:
+                logger.warning(
+                    "Orchestrator: Code breeder is not an instance of Breeder class; skipping repair operator wiring."
+                )
 
     def run(self, problem: Problem) -> tuple[CodePopulation, dict[str, TestPopulation]]:
         """
@@ -984,4 +1014,5 @@ class Orchestrator:
         `execution_results` and an index-aligned `observation_matrix` and
         return them wrapped in an `InteractionData` object.
         """
+        return self.execution_system.execute_tests(code_population, test_population)
         return self.execution_system.execute_tests(code_population, test_population)

@@ -10,22 +10,20 @@ from coevolution.core.interfaces import (
     TestProfile,
 )
 from coevolution.core.interfaces.language import ILanguage
-from infrastructure.llm_client import LLMClient
-
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.strategies.breeding.breeder import Breeder
+from coevolution.core.interfaces.operators import RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TestDiversityEliteSelector
 from coevolution.strategies.selection.parent_selection import (
     RouletteWheelParentSelection,
 )
+from infrastructure.llm_client import LLMClient
 
-from .operators.mutation import UnittestMutationOperator
+from ..registry import registry
 from .operators.crossover import UnittestCrossoverOperator
 from .operators.edit import UnittestEditOperator
 from .operators.initializer import UnittestInitializer
-
-
-from ..registry import registry
+from .operators.mutation import UnittestMutationOperator
 
 
 @registry.test_factory("unittest")

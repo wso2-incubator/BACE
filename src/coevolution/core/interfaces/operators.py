@@ -6,12 +6,21 @@ Operators are self-contained units of evolutionary work. The Breeder only
 calls execute(context) and operation_name().
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from .base import BaseIndividual
 
 if TYPE_CHECKING:
     from .context import CoevolutionContext
+
+
+@dataclass
+class RegisteredOperator[T: BaseIndividual]:
+    """Pairs an operator with its sampling weight."""
+
+    weight: float
+    operator: "IOperator[T]"
 
 
 class IOperator[T: BaseIndividual](Protocol):
@@ -40,4 +49,4 @@ class IOperator[T: BaseIndividual](Protocol):
         ...
 
 
-__all__ = ["IOperator"]
+__all__ = ["IOperator", "RegisteredOperator"]

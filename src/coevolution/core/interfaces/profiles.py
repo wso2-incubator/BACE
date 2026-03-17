@@ -3,7 +3,7 @@
 Profile classes for bundling population configurations and strategies.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 from .config import BayesianConfig, PopulationConfig
@@ -11,6 +11,7 @@ from .config import BayesianConfig, PopulationConfig
 if TYPE_CHECKING:
     from ..individual import CodeIndividual, TestIndividual
     from .breeder import IBreeder
+    from .operators import RegisteredOperator
     from .config import EvolutionConfig
     from .initializer import IPopulationInitializer
     from .language import IScriptComposer
@@ -72,6 +73,7 @@ class TestProfile:
     elite_selector: "IEliteSelectionStrategy[TestIndividual]"
     bayesian_config: BayesianConfig
     execution_system: "Optional[IExecutionSystem]" = None
+    repair_operators: list["RegisteredOperator[CodeIndividual]"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@
 
 from .mutation import CodeMutationOperator
 from .crossover import CodeCrossoverOperator
-from .edit import CodeEditOperator, IFailingTestSelector
+from .edit import CodeGenericEditOperator
 from .initializer import (
     BaseCodeInitializer,
     PlanningCodeInitializer,
@@ -12,8 +12,7 @@ from .initializer import (
 __all__ = [
     "CodeMutationOperator",
     "CodeCrossoverOperator",
-    "CodeEditOperator",
-    "IFailingTestSelector",
+    "CodeGenericEditOperator",
     "BaseCodeInitializer",
     "StandardCodeInitializer",
     "PlanningCodeInitializer",

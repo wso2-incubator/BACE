@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+
 
 from loguru import logger
 
-from coevolution.core.individual import CodeIndividual, TestIndividual
+from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import (
     OPERATION_EDIT,
     CoevolutionContext,
@@ -16,31 +16,31 @@ from coevolution.core.interfaces import (
 from coevolution.core.interfaces.language import ICodeParser
 from coevolution.core.interfaces.probability import IProbabilityAssigner
 from coevolution.core.interfaces.selection import IParentSelectionStrategy
+from coevolution.core.interfaces.types import OPERATION_GENERIC_EDIT
 from coevolution.strategies.llm_base import (
     BaseLLMOperator,
     ILanguageModel,
     LLMGenerationError,
+    LLMSyntaxError,
     llm_retry,
 )
+from coevolution.strategies.selection.failing_test_selection import FailingTestSelector
 
 from ._helpers import _CodeLLMHelpers
 
 type TestPopulationType = str
 
 
-class IFailingTestSelector(Protocol):
-    """Protocol for selecting failing tests for code individuals."""
+class CodeGenericEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
+    """Self-sufficient operator for feedback-driven mutation (Edit).
 
-    @staticmethod
-    def select_k_failing_tests(
-        coevolution_context: CoevolutionContext,
-        code_individual: CodeIndividual,
-        k: int = 10,
-    ) -> list[tuple[TestIndividual, TestPopulationType]]: ...
-
-
-class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
-    """Edit: select parent + failing tests → targeted LLM fix → new CodeIndividual."""
+    On each execute(context) call:
+      1. Selects K failing tests (across all test populations).
+      2. Selects 1 parent CodeIndividual using RouletteWheelSelection.
+      3. Calls LLM to 'fix' the code based on the failure feedback.
+      4. Assigns probability to offspring.
+      5. Returns exactly one new CodeIndividual.
+    """
 
     def __init__(
         self,
@@ -49,15 +49,15 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         language_name: str,
         parent_selector: IParentSelectionStrategy[CodeIndividual],
         prob_assigner: IProbabilityAssigner,
-        failing_test_selector: IFailingTestSelector,
+        failing_test_selector: type[FailingTestSelector] = FailingTestSelector,
         k_failing_tests: int = 10,
     ) -> None:
         super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
-        self.failing_test_selector = failing_test_selector
         self.k_failing_tests = k_failing_tests
+        self._failing_test_selector = failing_test_selector
 
     def operation_name(self) -> str:
-        return OPERATION_EDIT
+        return OPERATION_GENERIC_EDIT
 
     @llm_retry(
         (
@@ -65,6 +65,7 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             LanguageParsingError,
             LanguageTransformationError,
             LLMGenerationError,
+            LLMSyntaxError,
         )
     )
     def execute(self, context: CoevolutionContext) -> list[CodeIndividual]:
@@ -77,7 +78,7 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             return []
         parent = parents[0]
 
-        failing = self.failing_test_selector.select_k_failing_tests(
+        failing = self._failing_test_selector.select_k_failing_tests(
             context, parent, k=self.k_failing_tests
         )
         if not failing:
@@ -122,4 +123,4 @@ class CodeEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         ]
 
 
-__all__ = ["CodeEditOperator", "IFailingTestSelector"]
+__all__ = ["CodeGenericEditOperator"]
