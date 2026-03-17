@@ -18,10 +18,11 @@ from coevolution.core.interfaces.base import BaseIndividual
 
 if TYPE_CHECKING:
     from coevolution.core.interfaces.context import CoevolutionContext
-    from coevolution.core.interfaces.operators import IOperator, RegisteredOperator
+    from coevolution.core.interfaces.operators import IOperator
 
 
 # RegisteredOperator is now imported from coevolution.core.interfaces.operators
+from coevolution.core.interfaces.operators import RegisteredOperator
 
 
 class Breeder[T: BaseIndividual]:
