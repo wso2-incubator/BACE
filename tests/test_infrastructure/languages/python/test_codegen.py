@@ -172,7 +172,7 @@ class TestComposeEvaluationScript:
     def test_basic_solution_class(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'a': 1, 'b': 2}}"
+            prog, "{'input_arg': {'a': 1, 'b': 2}}"
         )
         assert "class Solution" in script
         assert "sol = Solution()" in script
@@ -184,7 +184,7 @@ class TestComposeEvaluationScript:
     def test_generated_script_executes_correctly(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'a': 1, 'b': 2}}"
+            prog, "{'input_arg': {'a': 1, 'b': 2}}"
         )
         captured = io.StringIO()
         sys.stdout = captured
@@ -197,7 +197,7 @@ class TestComposeEvaluationScript:
     def test_wraps_loose_functions_into_solution(self, adapter: PythonLanguage) -> None:
         prog = "def multiply(x, y):\n    return x * y\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'x': 3, 'y': 4}}"
+            prog, "{'input_arg': {'x': 3, 'y': 4}}"
         )
         assert "class Solution" in script
         assert "def multiply(self, x, y)" in script
@@ -208,7 +208,7 @@ class TestComposeEvaluationScript:
     def test_string_parameters(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def process(self, text, count):\n        return text * count\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'text': 'hello', 'count': 3}}"
+            prog, "{'input_arg': {'text': 'hello', 'count': 3}}"
         )
         assert "process(" in script
         assert "'hello'" in script
@@ -217,7 +217,7 @@ class TestComposeEvaluationScript:
     def test_preserves_imports(self, adapter: PythonLanguage) -> None:
         prog = "import math\n\nclass Solution:\n    def sqrt_sum(self, a, b):\n        return math.sqrt(a + b)\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'a': 3, 'b': 6}}"
+            prog, "{'input_arg': {'a': 3, 'b': 6}}"
         )
         assert "import math" in script
 
@@ -227,14 +227,14 @@ class TestComposeEvaluationScript:
             "class Solution:\n    def solve(self, x):\n        return Helper().val() + x\n"
         )
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'x': 8}}"
+            prog, "{'input_arg': {'x': 8}}"
         )
         assert "class Helper" in script
         assert "class Solution" in script
 
     def test_no_parameters_function(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def get_answer(self):\n        return 42\n"
-        script = adapter.composer.compose_evaluation_script(prog, "{'inputdata': {}}")
+        script = adapter.composer.compose_evaluation_script(prog, "{'input_arg': {}}")
         assert "get_answer()" in script
 
     def test_list_as_parameter(self, adapter: PythonLanguage) -> None:
@@ -242,7 +242,7 @@ class TestComposeEvaluationScript:
             "class Solution:\n    def sum_list(self, nums):\n        return sum(nums)\n"
         )
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'nums': [1, 2, 3, 4, 5]}}"
+            prog, "{'input_arg': {'nums': [1, 2, 3, 4, 5]}}"
         )
         assert "sum_list(" in script
         assert "[1, 2, 3, 4, 5]" in script
@@ -250,7 +250,7 @@ class TestComposeEvaluationScript:
     def test_boolean_parameter(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def toggle(self, flag):\n        return not flag\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'flag': True}}"
+            prog, "{'input_arg': {'flag': True}}"
         )
         assert "toggle(" in script
         assert "flag=True" in script
@@ -260,12 +260,12 @@ class TestComposeEvaluationScript:
             LanguageParsingError, match="Failed to parse programmer code"
         ):
             adapter.composer.compose_evaluation_script(
-                "class Solution: invalid syntax here", "{'inputdata': {}}"
+                "class Solution: invalid syntax here", "{'input_arg': {}}"
             )
 
     def test_raises_when_no_solution_found(self, adapter: PythonLanguage) -> None:
         with pytest.raises(LanguageTransformationError, match="No Solution class"):
-            adapter.composer.compose_evaluation_script("x = 1", "{'inputdata': {}}")
+            adapter.composer.compose_evaluation_script("x = 1", "{'input_arg': {}}")
 
     def test_raises_when_missing_inputdata_key(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, x):\n        return x\n"
@@ -281,7 +281,7 @@ class TestComposeEvaluationScript:
             LanguageTransformationError, match="Input data must be a dict"
         ):
             adapter.composer.compose_evaluation_script(
-                prog, "{'inputdata': 'not a dict'}"
+                prog, "{'input_arg': 'not a dict'}"
             )
 
     def test_raises_on_invalid_input_dict(self, adapter: PythonLanguage) -> None:
@@ -295,7 +295,7 @@ class TestComposeEvaluationScript:
 
     def test_multiline_string_with_newlines(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def solve(self, input_str):\n        return len(input_str.split('\\n'))\n"
-        input_data = "{'inputdata': {'input_str': 'line1\\nline2\\nline3'}}"
+        input_data = "{'input_arg': {'input_str': 'line1\\nline2\\nline3'}}"
         script = adapter.composer.compose_evaluation_script(prog, input_data)
         captured = io.StringIO()
         sys.stdout = captured
@@ -308,7 +308,7 @@ class TestComposeEvaluationScript:
     def test_whitespace_in_input_dict(self, adapter: PythonLanguage) -> None:
         prog = "class Solution:\n    def add(self, a, b):\n        return a + b\n"
         script = adapter.composer.compose_evaluation_script(
-            prog, "{ 'inputdata' : { 'a' : 1 , 'b' : 2 } }"
+            prog, "{ 'input_arg' : { 'a' : 1 , 'b' : 2 } }"
         )
         assert "add(" in script
         assert "a=1" in script
@@ -325,7 +325,7 @@ class TestComposeEvaluationScript:
             "        return y * 3\n"
         )
         script = adapter.composer.compose_evaluation_script(
-            prog, "{'inputdata': {'x': 10}}"
+            prog, "{'input_arg': {'x': 10}}"
         )
         assert "sol.solve(x=10)" in script
 

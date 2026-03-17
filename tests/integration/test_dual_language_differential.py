@@ -93,7 +93,7 @@ public function add(int a, int b) returns int {
             b = test_input["b"]
 
             # Format input for Ballerina
-            input_formatted = json.dumps({"inputdata": {"a": a, "b": b}})
+            input_formatted = json.dumps({"input_arg": {"a": a, "b": b}})
 
             # Execute correct code
             script_a = ballerina.composer.compose_evaluation_script(

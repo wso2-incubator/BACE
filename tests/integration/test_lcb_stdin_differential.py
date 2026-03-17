@@ -6,13 +6,14 @@ the differential test generation preserves string outputs correctly.
 """
 
 import pytest
+
 from coevolution.populations.differential.finder import DifferentialFinder
 from coevolution.populations.differential.operators.llm_operator import (
+    DifferentialInputOutput,
     DifferentialLLMOperator,
 )
 from infrastructure.languages.python import PythonLanguage
 from infrastructure.sandbox import SandboxConfig
-
 
 pytestmark = pytest.mark.integration
 
@@ -97,8 +98,8 @@ if __name__ == "__main__":
 
     # Convert first divergence to IO pair
     div = results[0]
-    io_pair = {
-        "inputdata": div.input_data,
+    io_pair: DifferentialInputOutput = {
+        "input_arg": div.input_data,
         "output": div.output_a,
     }
 

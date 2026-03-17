@@ -118,6 +118,9 @@ class RouletteWheelParentSelection[T: BaseIndividual](IParentSelectionStrategy[T
 
         return selected
 
+    def __repr__(self) -> str:
+        return "RouletteWheelParentSelection()"
+
 
 class ReverseRouletteWheelParentSelection[T: BaseIndividual](
     IParentSelectionStrategy[T]

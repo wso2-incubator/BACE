@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -140,7 +140,7 @@ def test_breed_code_still_works_correctly(mock_orchestrator: Orchestrator) -> No
     expected_offspring_count = 4  # min(int(15 * 0.3), 15 - 5) = min(4, 10) = 4
     assert len(offspring) == 4
     mock_breeder.breed.assert_called_once_with(context, expected_offspring_count)
-    mock_orchestrator.code_profile.breeder = mock_breeder  # type: ignore
+    mock_breeder.breed.reset_mock()
 
     context = MagicMock(spec=CoevolutionContext)
 
