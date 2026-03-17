@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import threading
 from typing import TYPE_CHECKING
@@ -104,26 +103,24 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         falsification_attempts = parent.metadata.get("falsification_attempts", 0)
 
         try:
-            ce_data = self._generate_counter_example(parent, problem)
+            reasoning = self._generate_falsification_reasoning(parent, problem)
         except Exception as exc:
             logger.debug(
-                f"AdversarialPropertyRefiner: counter-example generation failed: {exc}"
+                f"AdversarialPropertyRefiner: falsification failed: {exc}"
             )
-            # Increment attempts on failure to generate CE (including LLM errors)
+            # Increment attempts on failure during falsification reasoning (including LLM errors)
             with self._lock:
                 parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
 
-        if not ce_data:
+        if not reasoning:
             logger.debug(
-                f"AdversarialPropertyRefiner: no counter-example found for {parent.id}"
+                f"AdversarialPropertyRefiner: no flaw found for {parent.id}"
             )
-            # Increment attempts when no CE is found
+            # Increment attempts when no flaw is found
             with self._lock:
                 parent.metadata["falsification_attempts"] = falsification_attempts + 1
             return []
-
-        counter_example_json, reasoning = ce_data
 
         # 3. Phase 2: Refine property
         current_explanations = [
@@ -131,13 +128,13 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         ]
         try:
             refined_snippet = self._refine_property(
-                parent, counter_example_json, reasoning, problem, current_explanations
+                parent, reasoning, problem, current_explanations
             )
         except Exception as exc:
             logger.debug(
                 f"AdversarialPropertyRefiner: property refinement failed: {exc}"
             )
-            # Note: We don't necessarily increment falsification_attempts here because we DID find a CE.
+            # Note: We don't necessarily increment falsification_attempts here because we DID find a flaw.
             return []
 
         # 4. Create offspring
@@ -155,7 +152,6 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
                 explanation=self.parser.get_docstring(refined_snippet),
                 metadata={
                     "refined_from": parent.id,
-                    "counter_example": json.loads(counter_example_json),
                     "reasoning": reasoning,
                     "falsification_attempts": 0,  # Reset for the new child
                 },
@@ -163,12 +159,12 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         ]
 
     @llm_retry((LLMGenerationError, ValueError))
-    def _generate_counter_example(
+    def _generate_falsification_reasoning(
         self, parent: TestIndividual, problem: Problem
-    ) -> tuple[str, str] | None:
+    ) -> str | None:
         """
-        Phase 1: Generate a counter-example and reasoning for a property test.
-        Returns (counter_example_json, reasoning_str) or None.
+        Phase 1: Determine if the property is incorrect and provide reasoning.
+        Returns reasoning_str if incorrect, else None.
         """
         public_tests = transform_public_tests(
             problem.public_test_cases, problem.starter_code, self.parser
@@ -188,54 +184,56 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         )
         reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
 
-        # Extract counter-example
-        ce_match = re.search(
-            r"<counter_example>(.*?)</counter_example>", response, re.DOTALL
+        # Extract and validate is_valid
+        valid_match = re.search(
+            r"<is_valid>(.*?)</is_valid>", response, re.DOTALL
         )
-        if not ce_match:
-            if reasoning:
-                logger.debug(
-                    f"AdversarialPropertyRefiner: no counter-example found. Reasoning: {reasoning}"
-                )
-            return None
+        if not valid_match:
+            raise ValueError("Missing <is_valid> tag in falsification LLM response.")
 
-        content = ce_match.group(1).strip()
-        try:
-            # Validate it's valid JSON and contains required keys
-            ce_data = json.loads(content)
-            if "input_arg" not in ce_data or "output" not in ce_data:
-                logger.warning(
-                    "AdversarialPropertyRefiner: counter-example JSON missing keys."
+        valid_raw = valid_match.group(1).strip().lower()
+        if valid_raw not in ("true", "false"):
+            raise ValueError(
+                f"Malformed <is_valid> value in falsification LLM response: {valid_raw!r}"
+            )
+
+        is_valid = valid_raw == "true"
+
+        if not is_valid:
+            logger.trace(
+                f"Falsification prompt for {parent.id}\n: {prompt}"
+            )
+            logger.trace(
+                f"Falsification response for {parent.id}\n: {response}"
+            )
+            # When the model claims the property is invalid, we require non-empty reasoning.
+            # An empty reasoning block indicates a malformed response; trigger a retry.
+            if not reasoning:
+                logger.debug(
+                    "AdversarialPropertyRefiner: model marked property invalid but "
+                    "provided empty reasoning; raising ValueError to trigger retry."
                 )
                 raise ValueError(
-                    "AdversarialPropertyRefiner: counter-example JSON missing required keys."
+                    "Falsification reasoning missing despite <is_valid> being false."
                 )
-            logger.trace(
-                f"Counter-example generation prompt for {parent.id}\n: {prompt}"
+            return reasoning
+
+        if reasoning:
+            logger.debug(
+                f"AdversarialPropertyRefiner: property deemed valid. Reasoning: {reasoning}"
             )
-            logger.trace(
-                f"Counter-example generation response for {parent.id}\n: {response}"
-            )
-            return content, reasoning
-        except json.JSONDecodeError:
-            logger.warning(
-                "AdversarialPropertyRefiner: counter-example JSON decode error."
-            )
-            raise ValueError(
-                "AdversarialPropertyRefiner: counter-example JSON could not be decoded."
-            )
+        return None
 
     @llm_retry((LLMGenerationError, LLMSyntaxError, ValueError))
     def _refine_property(
         self,
         parent: TestIndividual,
-        counter_example: str,
         reasoning: str,
         problem: Problem,
         current_explanations: list[str],
     ) -> str:
         """
-        Phase 2: Refine a property test using a counter-example and reasoning.
+        Phase 2: Refine a property test using reasoning from the falsifier.
         """
         public_tests = transform_public_tests(
             problem.public_test_cases, problem.starter_code, self.parser
@@ -245,7 +243,6 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             question_content=problem.question_content,
             starter_code=problem.starter_code,
             snippet=parent.snippet,
-            counter_example=counter_example,
             reasoning=reasoning,
             current_explanations=current_explanations,
             public_tests=public_tests,

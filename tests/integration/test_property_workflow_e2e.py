@@ -81,9 +81,9 @@ ADD_PROBLEM = Problem(
     question_id="integration/add",
     starter_code="def add(x: int, y: int) -> int:\n    ...\n",
     public_test_cases=[
-        Test(input="2 3", output="5"),
-        Test(input="0 0", output="0"),
-        Test(input="-1 1", output="0"),
+        Test(input="2\n3", output="5"),
+        Test(input="0\n0", output="0"),
+        Test(input="-1\n1", output="0"),
     ],
     private_test_cases=[],
 )
