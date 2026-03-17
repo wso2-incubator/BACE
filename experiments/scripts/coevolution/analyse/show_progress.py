@@ -117,6 +117,21 @@ def extract_operator_rates(prof: dict[str, Any]) -> str:
 
 
 
+def render_individual_snippet(ind_id: str, snippet: str, title_prefix: str = "") -> Panel:
+    """Helper to render a syntax-highlighted code/test snippet panel."""
+    title = f"[bold]{title_prefix} {fmt_id(ind_id)}[/bold]" if title_prefix else f"[bold]{fmt_id(ind_id)}[/bold]"
+    return Panel(
+        Syntax(
+            snippet,
+            "python",
+            theme="ansi_dark",
+            line_numbers=True,
+            word_wrap=True,
+        ),
+        title=title,
+        border_style="dim",
+    )
+
 # ─── RENDERERS ────────────────────────────────────────────────────────────────
 
 
@@ -259,19 +274,7 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
             for e in code_creations:
                 snippet = e.get("snippet", "")
                 ind_id = e.get("individual_id", "?")
-                console.print(
-                    Panel(
-                        Syntax(
-                            snippet,
-                            "python",
-                            theme="ansi_dark",
-                            line_numbers=True,
-                            word_wrap=True,
-                        ),
-                        title=f"[bold]Seed Individual {fmt_id(ind_id)}[/bold]",
-                        border_style="dim",
-                    )
-                )
+                console.print(render_individual_snippet(ind_id, snippet, "Seed Individual"))
 
         # Group test snippets
         test_creations = [
@@ -300,19 +303,7 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
                 for e in creations:
                     snippet = e.get("snippet", "")
                     ind_id = e.get("individual_id", "?")
-                    test_panels.append(
-                        Panel(
-                            Syntax(
-                                snippet,
-                                "python",
-                                theme="ansi_dark",
-                                line_numbers=True,
-                                word_wrap=True,
-                            ),
-                            title=f"[bold]{fmt_id(ind_id)}[/bold]",
-                            border_style="dim",
-                        )
-                    )
+                    test_panels.append(render_individual_snippet(ind_id, snippet))
                 console.print(Columns(test_panels, equal=True))
 
     # Show private matrix for Gen 0 if it exists
@@ -480,6 +471,7 @@ def render_cycle(
     test_gen: int,
     ind_metadata: dict[str, dict[str, Any]],
     latest_probs: dict[str, float],
+    snippets: dict[str, str],
     show_errors: bool = False,
 ) -> None:
     phase_name = epoch_meta.get("phase_name", "Unknown")
@@ -588,10 +580,10 @@ def render_cycle(
 
     # 3. Succession
     # Show selection/breeding events present in this cycle
-    display_succession_in_cycle(events)
+    display_succession_in_cycle(events, snippets)
 
 
-def display_succession_in_cycle(events: list[dict[str, Any]]) -> None:
+def display_succession_in_cycle(events: list[dict[str, Any]], snippets: dict[str, str]) -> None:
     elites = [e for e in events if e["event_type"] == "SELECTED_AS_ELITE"]
     newborns = [e for e in events if e["event_type"] == "CREATED" and e.get("creation_op") != "INITIAL"]
 
@@ -647,6 +639,16 @@ def display_succession_in_cycle(events: list[dict[str, Any]]) -> None:
                     parents_str = ", ".join(map(fmt_id, parents_list)) if parents_list else "—"
                     table.add_row(fmt_id(str(row.get("individual_id"))), str(row.get("creation_op")), parents_str, f"{row.get('probability', 0.0):.4f}")
                 console.print(table)
+
+    # 4. Offspring Snippets
+    if newborns:
+        console.print("\n[bold cyan]Offspring Snippets[/bold cyan]")
+        for n in newborns:
+            ind_id = str(n.get("individual_id", "?"))
+            snippet = snippets.get(ind_id)
+            if snippet:
+                op = n.get("creation_op", "Evolved")
+                console.print(render_individual_snippet(ind_id, snippet, f"Newborn ({op})"))
 
 
 # ─── CLI ENTRY ────────────────────────────────────────────────────────────────
@@ -768,6 +770,7 @@ def main(
             test_gen,
             ind_metadata,
             latest_probs,
+            snippets,
             show_errors=show_errors
         )
 
