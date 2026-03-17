@@ -206,6 +206,16 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
             logger.trace(
                 f"Falsification response for {parent.id}\n: {response}"
             )
+            # When the model claims the property is invalid, we require non-empty reasoning.
+            # An empty reasoning block indicates a malformed response; trigger a retry.
+            if not reasoning:
+                logger.debug(
+                    "AdversarialPropertyRefiner: model marked property invalid but "
+                    "provided empty reasoning; raising ValueError to trigger retry."
+                )
+                raise ValueError(
+                    "Falsification reasoning missing despite <is_valid> being false."
+                )
             return reasoning
 
         if reasoning:
