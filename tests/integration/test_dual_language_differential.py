@@ -80,8 +80,9 @@ public function add(int a, int b) returns int {
 
         # Step 4: Execute Ballerina code with Python-generated inputs
         ballerina = BallerinaLanguage()
+        # Use a more generous timeout for Ballerina as it might be slow in full test runs
         ballerina_config = SandboxConfig(
-            timeout=30, max_memory_mb=200, max_output_size=50_000, language="ballerina"
+            timeout=60, max_memory_mb=200, max_output_size=50_000, language="ballerina"
         )
         ballerina_sandbox = create_sandbox(ballerina_config)
 

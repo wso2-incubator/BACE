@@ -140,14 +140,17 @@ def test_breed_code_still_works_correctly(mock_orchestrator: Orchestrator) -> No
     expected_offspring_count = 4  # min(int(15 * 0.3), 15 - 5) = min(4, 10) = 4
     assert len(offspring) == 4
     mock_breeder.breed.assert_called_once_with(context, expected_offspring_count)
-    mock_breeder.breed.reset_mock()
 
-    context = MagicMock(spec=CoevolutionContext)
+    # Use a fresh mock for second call to avoid any interference
+    mock_breeder_2 = MagicMock()
+    mock_breeder_2.breed.return_value = [MagicMock()] * 4
+    mock_orchestrator.code_profile.breeder = mock_breeder_2  # type: ignore
 
-    # Execute breeding
-    offspring = mock_orchestrator._breed_code(context, num_elites=num_elites)
+    context_2 = MagicMock(spec=CoevolutionContext)
+
+    # Execute breeding again
+    offspring_2 = mock_orchestrator._breed_code(context_2, num_elites=num_elites)
 
     # Verify offspring count
-    expected_offspring_count = 4  # min(int(15 * 0.3), 15 - 5) = min(4, 10) = 4
-    assert len(offspring) == 4
-    mock_breeder.breed.assert_called_once_with(context, expected_offspring_count)
+    assert len(offspring_2) == 4
+    mock_breeder_2.breed.assert_called_once_with(context_2, expected_offspring_count)
