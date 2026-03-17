@@ -21,7 +21,7 @@ class MockLLM:
         # Simulate expensive LLM call with a short delay to avoid slow tests
         time.sleep(0.005)
         # Return a response that will trigger "no counter-example found"
-        return "<reasoning>No counter-example found</reasoning>"
+        return "<reasoning>No counter-example found</reasoning><is_valid>true</is_valid>"
 
 def test_refiner_concurrency_stinker_race():
     """
