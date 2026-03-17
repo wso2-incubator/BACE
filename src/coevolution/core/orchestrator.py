@@ -1015,4 +1015,3 @@ class Orchestrator:
         return them wrapped in an `InteractionData` object.
         """
         return self.execution_system.execute_tests(code_population, test_population)
-        return self.execution_system.execute_tests(code_population, test_population)
