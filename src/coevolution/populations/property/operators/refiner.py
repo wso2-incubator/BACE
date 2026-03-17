@@ -184,13 +184,20 @@ class AdversarialPropertyRefiner(BaseLLMOperator[TestIndividual]):
         )
         reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
 
-        # Extract is_valid
+        # Extract and validate is_valid
         valid_match = re.search(
             r"<is_valid>(.*?)</is_valid>", response, re.DOTALL
         )
-        is_valid = True
-        if valid_match:
-            is_valid = valid_match.group(1).strip().lower() == "true"
+        if not valid_match:
+            raise ValueError("Missing <is_valid> tag in falsification LLM response.")
+
+        valid_raw = valid_match.group(1).strip().lower()
+        if valid_raw not in ("true", "false"):
+            raise ValueError(
+                f"Malformed <is_valid> value in falsification LLM response: {valid_raw!r}"
+            )
+
+        is_valid = valid_raw == "true"
 
         if not is_valid:
             logger.trace(
