@@ -8,7 +8,6 @@ from loguru import logger
 
 from coevolution.core.individual import CodeIndividual
 from coevolution.core.interfaces import (
-    OPERATION_EDIT,
     CoevolutionContext,
     LanguageParsingError,
     LanguageTransformationError,
@@ -105,13 +104,13 @@ class CodeGenericEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
         edited_code = self._validated_code(edited_code, problem.starter_code, "edit")
 
         probability = self.prob_assigner.assign_probability(
-            OPERATION_EDIT, [parent.probability]
+            OPERATION_GENERIC_EDIT, [parent.probability]
         )
         return [
             CodeIndividual(
                 snippet=edited_code,
                 probability=probability,
-                creation_op=OPERATION_EDIT,
+                creation_op=OPERATION_GENERIC_EDIT,
                 generation_born=code_pop.generation + 1,
                 parents={
                     "code": [parent.id],
