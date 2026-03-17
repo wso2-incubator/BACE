@@ -18,6 +18,7 @@ OPERATION_CROSSOVER: Literal["crossover"] = "crossover"
 OPERATION_EDIT: Literal["edit"] = "edit"
 OPERATION_REPRODUCTION: Literal["reproduction"] = "reproduction"
 OPERATION_MUTATION: Literal["mutation"] = "mutation"
+OPERATION_GENERIC_EDIT: Literal["generic_edit"] = "generic_edit"
 
 
 class LifecycleEvent(Enum):

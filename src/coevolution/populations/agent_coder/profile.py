@@ -11,7 +11,8 @@ from coevolution.core.interfaces import (
 from coevolution.core.interfaces.language import ILanguage
 from infrastructure.llm_client import LLMClient
 
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.strategies.breeding.breeder import Breeder
+from coevolution.core.interfaces.operators import RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TopKEliteSelector
 from coevolution.strategies.selection.parent_selection import (

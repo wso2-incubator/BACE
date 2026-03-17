@@ -3,30 +3,24 @@
 from __future__ import annotations
 
 from coevolution.core.individual import TestIndividual
-from coevolution.core.interfaces import (
-    BayesianConfig,
-    PopulationConfig,
-    TestProfile,
-)
+from coevolution.core.interfaces import BayesianConfig, PopulationConfig, TestProfile
 from coevolution.core.interfaces.language import ILanguage
-from infrastructure.llm_client import LLMClient
-from infrastructure.sandbox.types import SandboxConfig
-
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.strategies.breeding.breeder import Breeder
+from coevolution.core.interfaces.operators import RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import TestDiversityEliteSelector
 from coevolution.strategies.selection.parent_selection import (
     RouletteWheelParentSelection,
 )
-
-from .finder import DifferentialFinder
-from .selector import FunctionallyEqSelector
-from .operators.llm_operator import DifferentialLLMOperator
-from .operators.discovery import DifferentialDiscoveryOperator
-from .operators.initializer import DifferentialInitializer
-
+from infrastructure.llm_client import LLMClient
+from infrastructure.sandbox.types import SandboxConfig
 
 from ..registry import registry
+from .finder import DifferentialFinder
+from .operators.discovery import DifferentialDiscoveryOperator
+from .operators.initializer import DifferentialInitializer
+from .operators.llm_operator import DifferentialLLMOperator
+from .selector import FunctionallyEqSelector
 
 
 @registry.test_factory("differential")

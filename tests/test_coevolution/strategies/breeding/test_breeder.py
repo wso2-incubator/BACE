@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from coevolution.core.interfaces.base import BaseIndividual
-from coevolution.core.interfaces.operators import IOperator
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.core.interfaces.operators import IOperator, RegisteredOperator
+from coevolution.strategies.breeding.breeder import Breeder
 
 if TYPE_CHECKING:
     from coevolution.core.interfaces.context import CoevolutionContext

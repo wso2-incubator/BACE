@@ -9,7 +9,7 @@ parent selection, LLM call, probability assignment, and individual construction.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -21,12 +21,8 @@ if TYPE_CHECKING:
     from coevolution.core.interfaces.operators import IOperator
 
 
-@dataclass
-class RegisteredOperator[T: BaseIndividual]:
-    """Pairs an operator with its sampling weight."""
-
-    weight: float
-    operator: "IOperator[T]"
+# RegisteredOperator is now imported from coevolution.core.interfaces.operators
+from coevolution.core.interfaces.operators import RegisteredOperator
 
 
 class Breeder[T: BaseIndividual]:
@@ -62,6 +58,19 @@ class Breeder[T: BaseIndividual]:
         # Pre-compute for random.choices
         self._op_weights = [ro.weight for ro in registered_operators]
         self._op_list = [ro.operator for ro in registered_operators]
+
+    def add_operators(self, new_operators: list[RegisteredOperator[T]]) -> None:
+        """
+        Dynamically add new operators to the breeder's pool.
+        Forces a re-computation of weights and operator lists.
+        """
+        if not new_operators:
+            return
+
+        self._operators.extend(new_operators)
+        self._op_weights = [ro.weight for ro in self._operators]
+        self._op_list = [ro.operator for ro in self._operators]
+        logger.debug(f"Breeder: added {len(new_operators)} new operators. Total: {len(self._operators)}")
 
     def _sample_operator(self) -> "IOperator[T]":
         import random

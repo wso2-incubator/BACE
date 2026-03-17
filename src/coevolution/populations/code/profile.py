@@ -11,7 +11,8 @@ from coevolution.core.interfaces import (
 from coevolution.core.interfaces.language import ILanguage
 from infrastructure.llm_client import LLMClient
 
-from coevolution.strategies.breeding.breeder import Breeder, RegisteredOperator
+from coevolution.strategies.breeding.breeder import Breeder
+from coevolution.core.interfaces.operators import RegisteredOperator
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 from coevolution.strategies.selection.elite import (
     CodeDiversityEliteSelector,
@@ -24,7 +25,7 @@ from coevolution.strategies.selection.parent_selection import (
 
 from .operators.mutation import CodeMutationOperator
 from .operators.crossover import CodeCrossoverOperator
-from .operators.edit import CodeEditOperator
+from .operators.edit import CodeGenericEditOperator
 from .operators.initializer import (
     BaseCodeInitializer,
     PlanningCodeInitializer,
@@ -47,7 +48,7 @@ def create_default_code_profile(
     elitism_rate: float = 0.2,
     mutation_rate: float = 0.2,
     crossover_rate: float = 0.2,
-    edit_rate: float = 0.6,
+    generic_edit_rate: float = 0.6,
     init_pop_batch_size: int = 2,
     llm_workers: int = 4,
     diversity_enabled: bool = True,
@@ -57,11 +58,11 @@ def create_default_code_profile(
 ) -> CodeProfile:
     """Create a standard code population profile."""
     # ... (function body)
-    total_rate = mutation_rate + crossover_rate + edit_rate
+    total_rate = mutation_rate + crossover_rate + generic_edit_rate
     if not (0.99 <= total_rate <= 1.01):
         raise ValueError(
             f"Operation rates must sum to 1.0, got {total_rate:.4f} "
-            f"(mutation={mutation_rate}, crossover={crossover_rate}, edit={edit_rate})"
+            f"(mutation={mutation_rate}, crossover={crossover_rate}, generic_edit={generic_edit_rate})"
         )
 
     population_config = PopulationConfig(
@@ -94,7 +95,7 @@ def create_default_code_profile(
         parent_selector,
         prob_assigner,
     )
-    edit_op = CodeEditOperator(
+    generic_edit_op = CodeGenericEditOperator(
         llm_client,
         language_adapter.parser,
         language_adapter.language,
@@ -108,7 +109,7 @@ def create_default_code_profile(
         registered_operators=[
             RegisteredOperator(weight=mutation_rate, operator=mutation_op),
             RegisteredOperator(weight=crossover_rate, operator=crossover_op),
-            RegisteredOperator(weight=edit_rate, operator=edit_op),
+            RegisteredOperator(weight=generic_edit_rate, operator=generic_edit_op),
         ],
         llm_workers=llm_workers,
     )
