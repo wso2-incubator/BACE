@@ -1,4 +1,4 @@
-"""CodeEditOperator — guides code repair using failing tests."""
+"""CodeGenericEditOperator — guides code repair using failing tests."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ class CodeGenericEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
 
         parents = self.parent_selector.select_parents(code_pop, 1, context)
         if not parents:
-            logger.warning("CodeEditOperator: no parents available")
+            logger.warning("CodeGenericEditOperator: no parents available")
             return []
         parent = parents[0]
 
@@ -81,9 +81,10 @@ class CodeGenericEditOperator(_CodeLLMHelpers, BaseLLMOperator[CodeIndividual]):
             context, parent, k=self.k_failing_tests
         )
         if not failing:
-            logger.debug("CodeEditOperator: no failing tests for this parent, skipping")
+            logger.debug(
+                "CodeGenericEditOperator: no failing tests for this parent, skipping"
+            )
             return []
-
         failing_tests_data = []
         for test_ind, test_pop_type in failing:
             exec_result = context.interactions[test_pop_type].execution_results
