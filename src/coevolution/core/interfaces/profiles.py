@@ -73,7 +73,7 @@ class TestProfile:
     elite_selector: "IEliteSelectionStrategy[TestIndividual]"
     bayesian_config: BayesianConfig
     execution_system: "Optional[IExecutionSystem]" = None
-    repair_operators: list["RegisteredOperator[CodeIndividual]"] = field(default_factory=list)
+    repair_operators: tuple["RegisteredOperator[CodeIndividual]", ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
