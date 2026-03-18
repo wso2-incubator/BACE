@@ -192,4 +192,51 @@ class ReverseRouletteWheelParentSelection[T: BaseIndividual](
         return "ReverseRouletteWheelParentSelection()"
 
 
-__all__ = ["RouletteWheelParentSelection", "ReverseRouletteWheelParentSelection"]
+class UniformRandomParentSelection[T: BaseIndividual](IParentSelectionStrategy[T]):
+    """
+    Uniform random parent selection strategy.
+
+    Selects parents with uniform probability, regardless of their fitness
+    or belief values. This is useful for maintaining high diversity or
+    when the selection pressure should be minimal.
+
+    The strategy handles:
+    - Single individual: Returns that individual
+    - Count > population size: Allows duplicates (sampling with replacement)
+    """
+
+    def select_parents(
+        self,
+        population: BasePopulation[T],
+        count: int,
+        coevolution_context: CoevolutionContext,
+    ) -> list[T]:
+        if count < 1:
+            raise ValueError(f"count must be at least 1, got {count}")
+
+        if population.size == 0:
+            raise ValueError("Cannot select parents from empty population")
+
+        if population.size < count:
+            raise ValueError("Population size must be at least equal to count")
+
+        # Uniform random selection
+        indices = np.random.choice(population.size, size=count, replace=True)
+        selected = [population.individuals[int(idx)] for idx in indices]
+
+        logger.debug(
+            f"Uniform random selected {count} parents: "
+            f"{[ind.id for ind in selected]}"
+        )
+
+        return selected
+
+    def __repr__(self) -> str:
+        return "UniformRandomParentSelection()"
+
+
+__all__ = [
+    "RouletteWheelParentSelection",
+    "ReverseRouletteWheelParentSelection",
+    "UniformRandomParentSelection",
+]
