@@ -1,8 +1,9 @@
 # Ablation Study: Code-Only Evolution (No Test Coevolution)
 #
 # This configuration tests whether test coevolution is necessary by:
-# - Evolving ONLY code against a fixed unittest baseline
-# - NO test evolution (unittest population initialized once, never bred)
+# - Evolving ONLY code against public tests
+# - NO test evolution 
+# - NO unittest evolution
 # - NO differential testing
 # - NO alternating phases
 #
@@ -19,7 +20,7 @@
 
 experiment:
   name: "ablation-code-only"
-  description: "Ablation study: code evolution against fixed tests (no test coevolution)"
+  description: "Ablation study: code evolution against fixed public tests (no test coevolution)"
 
 # ============================================================================
 # COMPONENT REFERENCES
@@ -27,12 +28,6 @@ experiment:
 
 llm: "llm/gpt-5-mini.yaml"
 code_profile: "profiles/code/standard.yaml"
-
-# Fixed unittest baseline (initialized but never evolved)
-unittest_profile: "profiles/unittest/standard.yaml"
-
-# NO differential testing
-# differential_profile: INTENTIONALLY OMITTED
 
 public_profile: "profiles/public/standard.yaml"
 sandbox: "sandbox/sandbox-default.yaml"
@@ -45,19 +40,13 @@ schedule: "schedules/code-only-5gen.yaml"
 # ============================================================================
 
 dataset:
+  config_path: "datasets/lcb.yaml"
+
+subset:
   version: "release_v6"
   start_date: "2025-03-01"
   end_date: "2025-05-10"
   difficulty: "hard"
-
-# ============================================================================
-# PROBLEM SELECTION
-# ============================================================================
-
-subset:
-  start_index: 0
-  end_index: null  # null = process all
-  problem_ids: null  # null = use index range
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -65,5 +54,5 @@ subset:
 
 logging:
   console_level: "DEBUG"
-  file_level: "DEBUG"
-  log_file_base_name: "ablation_code_only"
+  file_level: "TRACE"
+  log_file_base_name: "ablation_code_with_public_"
