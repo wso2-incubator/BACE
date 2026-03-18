@@ -7,7 +7,7 @@ from coevolution.core.individual import TestIndividual
 from coevolution.core.interfaces import CoevolutionContext, Problem
 from coevolution.core.population import CodePopulation, TestPopulation
 from coevolution.populations.property.operators.refiner import AdversarialPropertyRefiner
-from coevolution.strategies.selection.parent_selection import ReverseRouletteWheelParentSelection
+from coevolution.strategies.selection.parent_selection import UniformRandomParentSelection
 from coevolution.strategies.probability.assigner import ProbabilityAssigner
 
 class MockLLM:
@@ -38,7 +38,7 @@ def test_refiner_concurrency_stinker_race():
         llm=mock_llm,
         parser=mock_parser,
         language_name="python",
-        parent_selector=ReverseRouletteWheelParentSelection(),
+        parent_selector=UniformRandomParentSelection(),
         prob_assigner=ProbabilityAssigner()
     )
 
@@ -93,7 +93,7 @@ def test_refiner_concurrency_starvation_avoidance():
         llm=mock_llm,
         parser=mock_parser,
         language_name="python",
-        parent_selector=ReverseRouletteWheelParentSelection(),
+        parent_selector=UniformRandomParentSelection(),
         prob_assigner=ProbabilityAssigner()
     )
 
@@ -137,7 +137,7 @@ def test_refiner_concurrency_retry_limit_honored():
         llm=mock_llm,
         parser=mock_parser,
         language_name="python",
-        parent_selector=ReverseRouletteWheelParentSelection(),
+        parent_selector=UniformRandomParentSelection(),
         prob_assigner=ProbabilityAssigner(),
         max_falsification_attempts=1 # Tight limit
     )
