@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -82,7 +81,7 @@ def evaluate(
     # Setup Execution System Components
     python_lang = PythonLanguage()
     sandbox_config = SandboxConfig(
-        timeout=180,
+        timeout=30,
     )
     execution_system = ExecutionSystem(
         sandbox_config=sandbox_config,
@@ -161,7 +160,9 @@ def evaluate(
                 )
                 for func in public_test_functions + private_test_functions
             ]
-            all_tests_pop = TestPopulation(individuals=all_test_individuals, generation=0)
+            all_tests_pop = TestPopulation(
+                individuals=all_test_individuals, generation=0
+            )
 
             # 3. Execute
             try:

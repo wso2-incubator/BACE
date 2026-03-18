@@ -6,7 +6,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import tenacity
 import typer
@@ -46,31 +46,61 @@ for logger_name in ["httpx", "openai", "urllib3"]:
 logger.remove()
 logger.add(RichHandler(console=console), level="WARNING")
 
-PLAN_PROMPT_TEMPLATE = """Problem:
+DECOMPOSE_PROMPT_TEMPLATE = """Problem:
 {question_content}
 
 Starter Code:
 {starter_code}
 
-Please provide a comprehensive step-by-step plan to solve the problem. 
-Your plan should be detailed and logic-oriented, mapping out how to handle edge cases and the core algorithmic steps.
+Please decompose this problem into a list of helper functions.
+For each helper function, provide:
+1. Its name.
+2. Its signature (arguments and return type).
+3. A comprehensive description of its responsibility. The developer will not know the problem statement.
+
+**Important Instructions**:
+- These helper functions must be global-level functions.
+- Provide a clear and strict signature for each.
+- Your response must follow this format for each helper:
+<helper>
+Name: [Name]
+Signature: [Signature]
+Description: [Description]
+</helper>
 """
 
-SOLUTION_PROMPT_TEMPLATE = """Problem:
+IMPLEMENT_HELPER_PROMPT_TEMPLATE = """Problem:
 {question_content}
 
-Implementation Plan:
-{plan}
+Helper Function to Implement:
+Name: {helper_name}
+Signature: {helper_signature}
+Description: {helper_description}
+
+Please provide the Python implementation for this helper function.
+Wrap your code in ```python blocks.
+"""
+
+ASSEMBLY_PROMPT_TEMPLATE = """Problem:
+{question_content}
+
+Helper Functions (already implemented):
+{helpers_code}
 
 Starter Code:
 {starter_code}
 
-Based on the problem description and the implementation plan above, please provide a complete Python solution.
-Wrap your code in ```python blocks. Strictly stick to the Starter Code format. 
+Based on the problem description and the helper functions provided above, please provide the implementation for the Starter Code.
+Your implementation should use the provided helper functions.
+
+**Important Instructions**:
+- Strictly follow the Starter Code format.
+- Do NOT re-implement the helper functions inside the code block; assume they are available at the global level.
+- Wrap your code in ```python blocks.
 """
 
 
-class PlanningLogger:
+class ModularLogger:
     def __init__(self, log_path: Path):
         self.log_path = log_path
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +130,25 @@ class JsonlLogger:
                 f.write(json.dumps(data) + "\n")
 
 
+def parse_decomposition(response: str) -> List[Dict[str, str]]:
+    helpers = []
+    # Match <helper> blocks
+    helper_blocks = re.findall(r"<helper>(.*?)</helper>", response, re.DOTALL)
+    for block in helper_blocks:
+        name_match = re.search(r"Name:\s*(.*)", block)
+        sig_match = re.search(r"Signature:\s*(.*)", block)
+        desc_match = re.search(r"Description:\s*(.*)", block)
+        if name_match and sig_match and desc_match:
+            helpers.append(
+                {
+                    "name": name_match.group(1).strip(),
+                    "signature": sig_match.group(1).strip(),
+                    "description": desc_match.group(1).strip(),
+                }
+            )
+    return helpers
+
+
 def process_problem(
     problem: Any,
     llm_client: Any,
@@ -108,13 +157,15 @@ def process_problem(
     total_problems: int,
     progress: Progress,
     task_id: Any,
-) -> Tuple[str, bool, str, str, str]:
-    """Process a single problem and return results and log buffer."""
+) -> Tuple[str, bool, str, str, List[Dict[str, Any]]]:
+    """Process a single problem and return results."""
 
     log_stream = io.StringIO()
     p_console = Console(file=log_stream, force_terminal=True, width=120)
 
     problem_passed = True
+    final_snippet = ""
+    helpers_data = []
 
     progress.update(
         task_id, description=f"Processing: {problem.question_title[:40]}..."
@@ -127,9 +178,9 @@ def process_problem(
         Panel(problem.question_content, title="Question Content", border_style="blue")
     )
 
-    # Step 1: Generate Plan
-    p_console.print("\n[bold cyan]Generating Implementation Plan...[/bold cyan]")
-    plan_prompt = PLAN_PROMPT_TEMPLATE.format(
+    # Stage 1: Decomposition
+    p_console.print("\n[bold cyan]Stage 1: Decomposing Problem...[/bold cyan]")
+    decompose_prompt = DECOMPOSE_PROMPT_TEMPLATE.format(
         question_content=problem.question_content,
         starter_code=problem.starter_code,
     )
@@ -141,32 +192,37 @@ def process_problem(
             wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
             retry=tenacity.retry_if_exception_type(Exception),
         )
-        def generate_plan() -> str:
-            return str(llm_client.generate(plan_prompt))
+        def generate_decomposition() -> str:
+            return str(llm_client.generate(decompose_prompt))
 
-        plan_response = generate_plan()
+        decomposition_response = generate_decomposition()
+        helpers = parse_decomposition(decomposition_response)
+
         p_console.print(
             Panel(
-                Syntax(plan_response, "markdown", theme="monokai", padding=1),
-                title="Implementation Plan",
+                Syntax(decomposition_response, "markdown", theme="monokai", padding=1),
+                title="Decomposition Response",
             )
         )
+        p_console.print(f"Parsed {len(helpers)} helper functions.")
     except Exception as e:
-        p_console.print(f"[bold red]Failed to generate plan: {e}[/bold red]")
-        plan_response = "Failed to generate plan."
+        p_console.print(f"[bold red]Failed to decompose: {e}[/bold red]")
         problem_passed = False
+        helpers = []
 
-    # Step 2: Generate solution
-    generated_code = ""
-    if problem_passed:
-        for sol_attempt in range(3):
-            p_console.print(
-                f"\n[bold cyan]Generating Python solution (Attempt {sol_attempt + 1}/3)...[/bold cyan]"
-            )
-            solution_prompt = SOLUTION_PROMPT_TEMPLATE.format(
+    # Stage 2: Sub-Implementation
+    helper_implementations = []
+    if problem_passed and helpers:
+        p_console.print(
+            "\n[bold cyan]Stage 2: Implementing Sub-Functions...[/bold cyan]"
+        )
+        for helper in helpers:
+            p_console.print(f"Implementing: {helper['name']}...")
+            impl_prompt = IMPLEMENT_HELPER_PROMPT_TEMPLATE.format(
                 question_content=problem.question_content,
-                plan=plan_response,
-                starter_code=problem.starter_code,
+                helper_name=helper["name"],
+                helper_signature=helper["signature"],
+                helper_description=helper["description"],
             )
 
             try:
@@ -176,54 +232,83 @@ def process_problem(
                     wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
                     retry=tenacity.retry_if_exception_type(Exception),
                 )
-                def generate_solution() -> str:
-                    return str(llm_client.generate(solution_prompt))
+                def generate_helper_impl() -> str:
+                    return str(llm_client.generate(impl_prompt))
 
-                solution_response = generate_solution()
+                impl_response = generate_helper_impl()
 
-                # Extract code from Markdown blocks
+                # Extract code
                 code_match = re.search(
-                    r"```python\n(.*?)\n```", solution_response, re.DOTALL
+                    r"```python\n(.*?)\n```", impl_response, re.DOTALL
                 )
-                if code_match:
-                    extracted_code = code_match.group(1).strip()
-                else:
-                    extracted_code = solution_response.strip()
+                helper_code = (
+                    code_match.group(1).strip() if code_match else impl_response.strip()
+                )
 
-                # Validate syntax
-                if python_lang.parser.is_syntax_valid(extracted_code):
-                    generated_code = extracted_code
-                    p_console.print(
-                        Panel(
-                            Syntax(
-                                solution_response,
-                                "markdown",
-                                theme="monokai",
-                                padding=1,
-                            ),
-                            title="LLM Solution Response (Valid Syntax)",
-                        )
-                    )
-                    break
-                else:
-                    p_console.print(
-                        f"[bold red]Attempt {sol_attempt + 1}/3: Generated code has invalid syntax.[/bold red]"
-                    )
-                    if sol_attempt == 2:
-                        problem_passed = False
-                        generated_code = extracted_code
+                helper_implementations.append(helper_code)
+                helpers_data.append({**helper, "code": helper_code})
+
+                p_console.print(f"Implemented {helper['name']}.")
             except Exception as e:
                 p_console.print(
-                    f"[bold red]Failed to generate solution: {e}[/bold red]"
+                    f"[bold red]Failed to implement {helper['name']}: {e}[/bold red]"
                 )
-                if sol_attempt == 2:
-                    problem_passed = False
-                continue
-    else:
-        generated_code = ""
+                problem_passed = False
+                break
+
+    # Stage 3: Assembly
+    if problem_passed:
+        p_console.print(
+            "\n[bold cyan]Stage 3: Assembling Final Solution...[/bold cyan]"
+        )
+        helpers_code_flat = "\n\n".join(helper_implementations)
+        assembly_prompt = ASSEMBLY_PROMPT_TEMPLATE.format(
+            question_content=problem.question_content,
+            helpers_code=helpers_code_flat,
+            starter_code=problem.starter_code,
+        )
+
+        try:
+
+            @tenacity.retry(
+                stop=tenacity.stop_after_attempt(5),
+                wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
+                retry=tenacity.retry_if_exception_type(Exception),
+            )
+            def generate_assembly() -> str:
+                return str(llm_client.generate(assembly_prompt))
+
+            assembly_response = generate_assembly()
+
+            # Extract code
+            code_match = re.search(
+                r"```python\n(.*?)\n```", assembly_response, re.DOTALL
+            )
+            main_code = (
+                code_match.group(1).strip() if code_match else assembly_response.strip()
+            )
+
+            # Final snippet combines helpers and main code
+            final_snippet = helpers_code_flat + "\n\n" + main_code
+
+            if python_lang.parser.is_syntax_valid(final_snippet):
+                p_console.print(
+                    Panel(
+                        Syntax(final_snippet, "python", theme="monokai", padding=1),
+                        title="Final Assembled Solution (Valid Syntax)",
+                    )
+                )
+            else:
+                p_console.print(
+                    "[bold red]Generated solution has invalid syntax.[/bold red]"
+                )
+                problem_passed = False
+        except Exception as e:
+            p_console.print(f"[bold red]Failed to assemble solution: {e}[/bold red]")
+            problem_passed = False
 
     status_str = (
-        "[bold green]GENERATED[/bold green]"
+        "[bold green]PASSED[/bold green]"
         if problem_passed
         else "[bold red]FAILED[/bold red]"
     )
@@ -234,8 +319,8 @@ def process_problem(
         problem.question_id,
         problem_passed,
         log_stream.getvalue(),
-        generated_code,
-        plan_response,
+        final_snippet,
+        helpers_data,
     )
 
 
@@ -254,19 +339,19 @@ def run(
     ),
     end_date: Optional[str] = typer.Option("2025-05-10", help="End date (YYYY-MM-DD)"),
     output_dir: Path = typer.Option(
-        Path("logs/planning"), help="Directory to save logs"
+        Path("logs/modular"), help="Directory to save logs"
     ),
     workers: int = typer.Option(16, help="Number of parallel workers"),
 ) -> None:
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
-    log_file = output_dir / f"{run_id}_planning.txt"
+    log_file = output_dir / f"{run_id}_modular.txt"
     jsonl_file = output_dir / f"{run_id}_solutions.jsonl"
-    logger = PlanningLogger(log_file)
+    logger = ModularLogger(log_file)
     jsonl_logger = JsonlLogger(jsonl_file)
 
     console.print(
         Panel(
-            f"Starting Two-Step Planning Run: [bold cyan]{run_id}[/bold cyan]\n"
+            f"Starting Modular Generation Run: [bold cyan]{run_id}[/bold cyan]\n"
             f"Log file: [yellow]{log_file}[/yellow]\n"
             f"JSONL file: [yellow]{jsonl_file}[/yellow]\n"
             f"Workers: [green]{workers}[/green]"
@@ -294,7 +379,7 @@ def run(
 
     total_problems = len(problems)
     results = []
-    generated_count = 0
+    solved_problems = 0
 
     with Progress(
         SpinnerColumn(),
@@ -304,7 +389,7 @@ def run(
         console=console,
     ) as progress:
         overall_task = progress.add_task(
-            "[cyan]Processing problems...", total=total_problems
+            "[cyan]Processing modular problems...", total=total_problems
         )
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -324,16 +409,16 @@ def run(
 
             for future in future_to_problem:
                 try:
-                    q_id, passed, log_block, snippet, plan = future.result()
+                    q_id, passed, log_block, snippet, helpers = future.result()
                     results.append((q_id, passed))
                     if passed:
-                        generated_count += 1
+                        solved_problems += 1
                     logger.log_problem_block(log_block)
                     jsonl_logger.log(
                         {
                             "question_id": q_id,
                             "snippet": snippet,
-                            "plan": plan,
+                            "helpers": helpers,
                             "status": None,
                         }
                     )
@@ -341,12 +426,12 @@ def run(
                     console.print(f"[bold red]Exception in worker: {e}[/bold red]")
 
     # Final result table
-    table = Table(title="Planning Results")
+    table = Table(title="Modular Generation Results")
     table.add_column("Question ID", style="cyan")
     table.add_column("Status", style="bold")
 
     for q_id, passed in results:
-        status_text = "[green]Generated[/green]" if passed else "[red]Failed[/red]"
+        status_text = "[green]Passed[/green]" if passed else "[red]Failed[/red]"
         table.add_row(q_id, status_text)
 
     console.print(table)
@@ -354,8 +439,8 @@ def run(
     summary_panel = Panel(
         Group(
             f"Total Problems: {total_problems}",
-            f"Generated: [bold green]{generated_count}[/bold green]",
-            f"Success Rate: [bold yellow]{(generated_count / total_problems) * 100:.2f}%[/bold yellow]"
+            f"Solved: [bold green]{solved_problems}[/bold green]",
+            f"Success Rate: [bold yellow]{(solved_problems / total_problems) * 100:.2f}%[/bold yellow]"
             if total_problems > 0
             else "N/A",
         ),

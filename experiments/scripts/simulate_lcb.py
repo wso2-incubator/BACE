@@ -323,7 +323,9 @@ def process_problem(
                 generated_code = extracted_code
                 p_console.print(
                     Panel(
-                        Syntax(solution_response, "markdown", theme="monokai", padding=1),
+                        Syntax(
+                            solution_response, "markdown", theme="monokai", padding=1
+                        ),
                         title="LLM Solution Response (Valid Syntax)",
                     )
                 )
@@ -334,7 +336,9 @@ def process_problem(
                 )
                 if sol_attempt == 2:
                     problem_passed = False
-                    generated_code = extracted_code  # Store it anyway but mark as failed
+                    generated_code = (
+                        extracted_code  # Store it anyway but mark as failed
+                    )
         except Exception as e:
             p_console.print(f"[bold red]Failed to generate solution: {e}[/bold red]")
             if sol_attempt == 2:
@@ -361,7 +365,9 @@ def process_problem(
 
 @app.command()
 def simulate(
-    config: Path = typer.Option(..., help="Path to LLM config YAML"),
+    llm: Path = typer.Option(
+        Path("configs/llm/gpt-5-mini.yaml"), help="Path to LLM config YAML"
+    ),
     count: Optional[int] = typer.Option(None, help="Number of problems to process"),
     difficulty: str = typer.Option(
         "hard", help="Difficulty of problems to load (easy, medium, hard)"
@@ -392,7 +398,7 @@ def simulate(
     )
 
     # Load LLM Config
-    with open(config, "r") as f:
+    with open(llm, "r") as f:
         llm_cfg = yaml.safe_load(f)
 
     llm_client = create_llm_client(**llm_cfg)

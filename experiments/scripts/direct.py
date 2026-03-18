@@ -46,31 +46,18 @@ for logger_name in ["httpx", "openai", "urllib3"]:
 logger.remove()
 logger.add(RichHandler(console=console), level="WARNING")
 
-PLAN_PROMPT_TEMPLATE = """Problem:
+DIRECT_PROMPT_TEMPLATE = """Problem:
 {question_content}
 
 Starter Code:
 {starter_code}
 
-Please provide a comprehensive step-by-step plan to solve the problem. 
-Your plan should be detailed and logic-oriented, mapping out how to handle edge cases and the core algorithmic steps.
-"""
-
-SOLUTION_PROMPT_TEMPLATE = """Problem:
-{question_content}
-
-Implementation Plan:
-{plan}
-
-Starter Code:
-{starter_code}
-
-Based on the problem description and the implementation plan above, please provide a complete Python solution.
+Based on the problem description above, please provide a complete Python solution.
 Wrap your code in ```python blocks. Strictly stick to the Starter Code format. 
 """
 
 
-class PlanningLogger:
+class DirectLogger:
     def __init__(self, log_path: Path):
         self.log_path = log_path
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,13 +95,14 @@ def process_problem(
     total_problems: int,
     progress: Progress,
     task_id: Any,
-) -> Tuple[str, bool, str, str, str]:
+) -> Tuple[str, bool, str, str]:
     """Process a single problem and return results and log buffer."""
 
     log_stream = io.StringIO()
     p_console = Console(file=log_stream, force_terminal=True, width=120)
 
     problem_passed = True
+    generated_code = ""
 
     progress.update(
         task_id, description=f"Processing: {problem.question_title[:40]}..."
@@ -127,100 +115,64 @@ def process_problem(
         Panel(problem.question_content, title="Question Content", border_style="blue")
     )
 
-    # Step 1: Generate Plan
-    p_console.print("\n[bold cyan]Generating Implementation Plan...[/bold cyan]")
-    plan_prompt = PLAN_PROMPT_TEMPLATE.format(
-        question_content=problem.question_content,
-        starter_code=problem.starter_code,
-    )
-
-    try:
-
-        @tenacity.retry(
-            stop=tenacity.stop_after_attempt(5),
-            wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
-            retry=tenacity.retry_if_exception_type(Exception),
-        )
-        def generate_plan() -> str:
-            return str(llm_client.generate(plan_prompt))
-
-        plan_response = generate_plan()
+    # Direct Generation solution
+    for sol_attempt in range(3):
         p_console.print(
-            Panel(
-                Syntax(plan_response, "markdown", theme="monokai", padding=1),
-                title="Implementation Plan",
-            )
+            f"\n[bold cyan]Generating Python solution (Attempt {sol_attempt + 1}/3)...[/bold cyan]"
         )
-    except Exception as e:
-        p_console.print(f"[bold red]Failed to generate plan: {e}[/bold red]")
-        plan_response = "Failed to generate plan."
-        problem_passed = False
+        prompt = DIRECT_PROMPT_TEMPLATE.format(
+            question_content=problem.question_content,
+            starter_code=problem.starter_code,
+        )
 
-    # Step 2: Generate solution
-    generated_code = ""
-    if problem_passed:
-        for sol_attempt in range(3):
-            p_console.print(
-                f"\n[bold cyan]Generating Python solution (Attempt {sol_attempt + 1}/3)...[/bold cyan]"
+        try:
+
+            @tenacity.retry(
+                stop=tenacity.stop_after_attempt(5),
+                wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
+                retry=tenacity.retry_if_exception_type(Exception),
             )
-            solution_prompt = SOLUTION_PROMPT_TEMPLATE.format(
-                question_content=problem.question_content,
-                plan=plan_response,
-                starter_code=problem.starter_code,
+            def generate_solution() -> str:
+                return str(llm_client.generate(prompt))
+
+            solution_response = generate_solution()
+
+            # Extract code from Markdown blocks
+            code_match = re.search(
+                r"```python\n(.*?)\n```", solution_response, re.DOTALL
             )
+            if code_match:
+                extracted_code = code_match.group(1).strip()
+            else:
+                extracted_code = solution_response.strip()
 
-            try:
-
-                @tenacity.retry(
-                    stop=tenacity.stop_after_attempt(5),
-                    wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
-                    retry=tenacity.retry_if_exception_type(Exception),
-                )
-                def generate_solution() -> str:
-                    return str(llm_client.generate(solution_prompt))
-
-                solution_response = generate_solution()
-
-                # Extract code from Markdown blocks
-                code_match = re.search(
-                    r"```python\n(.*?)\n```", solution_response, re.DOTALL
-                )
-                if code_match:
-                    extracted_code = code_match.group(1).strip()
-                else:
-                    extracted_code = solution_response.strip()
-
-                # Validate syntax
-                if python_lang.parser.is_syntax_valid(extracted_code):
-                    generated_code = extracted_code
-                    p_console.print(
-                        Panel(
-                            Syntax(
-                                solution_response,
-                                "markdown",
-                                theme="monokai",
-                                padding=1,
-                            ),
-                            title="LLM Solution Response (Valid Syntax)",
-                        )
-                    )
-                    break
-                else:
-                    p_console.print(
-                        f"[bold red]Attempt {sol_attempt + 1}/3: Generated code has invalid syntax.[/bold red]"
-                    )
-                    if sol_attempt == 2:
-                        problem_passed = False
-                        generated_code = extracted_code
-            except Exception as e:
+            # Validate syntax
+            if python_lang.parser.is_syntax_valid(extracted_code):
+                generated_code = extracted_code
                 p_console.print(
-                    f"[bold red]Failed to generate solution: {e}[/bold red]"
+                    Panel(
+                        Syntax(
+                            solution_response,
+                            "markdown",
+                            theme="monokai",
+                            padding=1,
+                        ),
+                        title="LLM Solution Response (Valid Syntax)",
+                    )
+                )
+                break
+            else:
+                p_console.print(
+                    f"[bold red]Attempt {sol_attempt + 1}/3: Generated code has invalid syntax.[/bold red]"
                 )
                 if sol_attempt == 2:
                     problem_passed = False
-                continue
-    else:
-        generated_code = ""
+                    generated_code = extracted_code
+        except Exception as e:
+            p_console.print(f"[bold red]Failed to generate solution: {e}[/bold red]")
+            if sol_attempt == 2:
+                problem_passed = False
+            continue
 
     status_str = (
         "[bold green]GENERATED[/bold green]"
@@ -235,7 +187,6 @@ def process_problem(
         problem_passed,
         log_stream.getvalue(),
         generated_code,
-        plan_response,
     )
 
 
@@ -253,20 +204,18 @@ def run(
         "2025-03-01", help="Start date (YYYY-MM-DD)"
     ),
     end_date: Optional[str] = typer.Option("2025-05-10", help="End date (YYYY-MM-DD)"),
-    output_dir: Path = typer.Option(
-        Path("logs/planning"), help="Directory to save logs"
-    ),
+    output_dir: Path = typer.Option(Path("logs/direct"), help="Directory to save logs"),
     workers: int = typer.Option(16, help="Number of parallel workers"),
 ) -> None:
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
-    log_file = output_dir / f"{run_id}_planning.txt"
+    log_file = output_dir / f"{run_id}_direct.txt"
     jsonl_file = output_dir / f"{run_id}_solutions.jsonl"
-    logger = PlanningLogger(log_file)
+    logger = DirectLogger(log_file)
     jsonl_logger = JsonlLogger(jsonl_file)
 
     console.print(
         Panel(
-            f"Starting Two-Step Planning Run: [bold cyan]{run_id}[/bold cyan]\n"
+            f"Starting Direct Code Generation Run: [bold cyan]{run_id}[/bold cyan]\n"
             f"Log file: [yellow]{log_file}[/yellow]\n"
             f"JSONL file: [yellow]{jsonl_file}[/yellow]\n"
             f"Workers: [green]{workers}[/green]"
@@ -324,7 +273,7 @@ def run(
 
             for future in future_to_problem:
                 try:
-                    q_id, passed, log_block, snippet, plan = future.result()
+                    q_id, passed, log_block, snippet = future.result()
                     results.append((q_id, passed))
                     if passed:
                         generated_count += 1
@@ -333,7 +282,6 @@ def run(
                         {
                             "question_id": q_id,
                             "snippet": snippet,
-                            "plan": plan,
                             "status": None,
                         }
                     )
@@ -341,7 +289,7 @@ def run(
                     console.print(f"[bold red]Exception in worker: {e}[/bold red]")
 
     # Final result table
-    table = Table(title="Planning Results")
+    table = Table(title="Direct Generation Results")
     table.add_column("Question ID", style="cyan")
     table.add_column("Status", style="bold")
 
