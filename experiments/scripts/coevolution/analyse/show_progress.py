@@ -715,6 +715,16 @@ def main(
     snippets: dict[str, str] = {}
 
     for e in events:
+        # 1. Handle Belief Updates (Update probabilities from batches)
+        if e.get("event_type") == "BELIEF_UPDATE":
+            ids = e.get("ids", [])
+            posterior = e.get("posterior", [])
+            for i, iid in enumerate(ids):
+                if i < len(posterior):
+                    latest_probs[str(iid)] = float(posterior[i])
+            continue
+
+        # 2. Handle Individual-level events
         iid = e.get("individual_id")
         if not iid:
             continue
@@ -810,17 +820,11 @@ def main(
             test_ids = last_private.get("test_ids", [])
             num_tests = len(test_ids)
 
-            # Identify champion among survivors (highest probability)
-            code_survivors = [
-                s for s in survivors if str(s.get("individual_id", "")).startswith("C")
-            ]
-            if code_survivors:
-                champion_meta = code_survivors[0]  # Sorted by prob
-                champion_id = champion_meta["individual_id"]
-                # Use cached latest probability which is more reliable
-                champion_prob = latest_probs.get(
-                    champion_id, champion_meta.get("probability", 0.0)
-                )
+            # Identify champion (highest probability code individual in final evaluation)
+            final_code_ids = [cid for cid in code_ids if str(cid).startswith("C")]
+            if final_code_ids:
+                champion_id = max(final_code_ids, key=lambda cid: latest_probs.get(str(cid), 0.0))
+                champion_prob = latest_probs.get(str(champion_id), 0.0)
 
                 # Find its row in the matrix
                 try:
