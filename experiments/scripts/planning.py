@@ -46,35 +46,13 @@ for logger_name in ["httpx", "openai", "urllib3"]:
 logger.remove()
 logger.add(RichHandler(console=console), level="WARNING")
 
-PROMPT_TEMPLATE = """Problem:
-{question_content}
-
-Input:
-{test_input}
-
-Expected Output:
-{test_output}
-
-Please simulate step-by-step trace how to get to the correct output for the given input.
-Your response must follow this format:
-<simulation>
-[Step-by-step trace here]
-</simulation>
-<status>{{Success|Fail}}</status>
-
-**Important Instruction**: If you cannot trace the output exactly, then mark the status as Fail.
-"""
-
 PLAN_PROMPT_TEMPLATE = """Problem:
 {question_content}
-
-Trace Simulations:
-{simulations}
 
 Starter Code:
 {starter_code}
 
-Based on the problem description and the trace simulations above, please provide a comprehensive step-by-step plan to solve the problem. 
+Please provide a comprehensive step-by-step plan to solve the problem. 
 Your plan should be detailed and logic-oriented, mapping out how to handle edge cases and the core algorithmic steps.
 """
 
@@ -92,7 +70,7 @@ Wrap your code in ```python blocks. Strictly stick to the Starter Code format.
 """
 
 
-class SimulationLogger:
+class PlanningLogger:
     def __init__(self, log_path: Path):
         self.log_path = log_path
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,21 +100,6 @@ class JsonlLogger:
                 f.write(json.dumps(data) + "\n")
 
 
-def parse_llm_response(response: str) -> tuple[str, str]:
-    simulation = ""
-    status = "Fail"
-
-    sim_match = re.search(r"<simulation>(.*?)</simulation>", response, re.DOTALL)
-    if sim_match:
-        simulation = sim_match.group(1).strip()
-
-    status_match = re.search(r"<status>(.*?)</status>", response, re.DOTALL)
-    if status_match:
-        status = status_match.group(1).strip()
-
-    return simulation, status
-
-
 def process_problem(
     problem: Any,
     llm_client: Any,
@@ -145,17 +108,13 @@ def process_problem(
     total_problems: int,
     progress: Progress,
     task_id: Any,
-) -> Tuple[str, bool, str, List[Dict[str, Any]], str, str]:
+) -> Tuple[str, bool, str, str, str]:
     """Process a single problem and return results and log buffer."""
 
-    # Create a virtual console to capture rich output for this problem
     log_stream = io.StringIO()
-    # We use force_terminal=True to ensure rich decorations (panels, colors) are captured
     p_console = Console(file=log_stream, force_terminal=True, width=120)
 
     problem_passed = True
-    problem_responses = []
-    successful_simulations = []
 
     progress.update(
         task_id, description=f"Processing: {problem.question_title[:40]}..."
@@ -168,104 +127,14 @@ def process_problem(
         Panel(problem.question_content, title="Question Content", border_style="blue")
     )
 
-    for tc_idx, test_case in enumerate(problem.public_test_cases):
-        p_console.print(
-            f"\n[bold yellow]Test Case {tc_idx + 1}/{len(problem.public_test_cases)}[/bold yellow]"
-        )
-        p_console.print(f"Input: {test_case.input}")
-        p_console.print(f"Expected Output: {test_case.output}")
-
-        case_passed = False
-        attempts = []
-
-        for attempt in range(3):
-            prompt = PROMPT_TEMPLATE.format(
-                question_content=problem.question_content,
-                test_input=test_case.input,
-                test_output=test_case.output,
-            )
-
-            try:
-
-                @tenacity.retry(
-                    stop=tenacity.stop_after_attempt(5),
-                    wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
-                    retry=tenacity.retry_if_exception_type(Exception),
-                )
-                def generate_with_retry() -> str:
-                    return str(llm_client.generate(prompt))
-
-                response = generate_with_retry()
-                simulation, status = parse_llm_response(response)
-
-                attempts.append(
-                    {
-                        "attempt": attempt + 1,
-                        "response": response,
-                        "simulation": simulation,
-                        "status": status,
-                    }
-                )
-
-                if status.lower() == "success":
-                    p_console.print(
-                        f"Attempt {attempt + 1}/3: [bold green]Success![/bold green]"
-                    )
-                    case_passed = True
-                    successful_simulations.append(
-                        {
-                            "index": tc_idx + 1,
-                            "input": test_case.input,
-                            "output": test_case.output,
-                            "simulation": simulation,
-                        }
-                    )
-                    break
-                else:
-                    p_console.print(
-                        f"Attempt {attempt + 1}/3: [bold red]Fail[/bold red]"
-                    )
-            except Exception as e:
-                p_console.print(
-                    f"Attempt {attempt + 1}/3: [bold red]ERROR - {e}[/bold red]"
-                )
-                break
-
-        problem_responses.append(
-            {"test_case": tc_idx, "attempts": attempts, "passed": case_passed}
-        )
-
-        # Show the last simulation trace in the log
-        if attempts:
-            last_trace = str(attempts[-1]["simulation"])
-            p_console.print(
-                Panel(
-                    Syntax(last_trace, "text", theme="monokai", padding=1),
-                    title="Simulation Trace",
-                )
-            )
-
-        if not case_passed:
-            problem_passed = False
-
-    # Generate Plan
+    # Step 1: Generate Plan
     p_console.print("\n[bold cyan]Generating Implementation Plan...[/bold cyan]")
-    simulations_text = "\n\n".join(
-        [
-            f"Test Case {sim['index']}:\nInput: {sim['input']}\nOutput: {sim['output']}\nSimulation:\n{sim['simulation']}"
-            for sim in successful_simulations
-        ]
-    )
     plan_prompt = PLAN_PROMPT_TEMPLATE.format(
         question_content=problem.question_content,
-        simulations=simulations_text
-        if simulations_text
-        else "No successful simulations.",
         starter_code=problem.starter_code,
     )
 
     try:
-
         @tenacity.retry(
             stop=tenacity.stop_after_attempt(5),
             wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
@@ -284,65 +153,68 @@ def process_problem(
     except Exception as e:
         p_console.print(f"[bold red]Failed to generate plan: {e}[/bold red]")
         plan_response = "Failed to generate plan."
+        problem_passed = False
 
-    # Generate solution
+    # Step 2: Generate solution
     generated_code = ""
-    for sol_attempt in range(3):
-        p_console.print(
-            f"\n[bold cyan]Generating Python solution (Attempt {sol_attempt + 1}/3)...[/bold cyan]"
-        )
-        solution_prompt = SOLUTION_PROMPT_TEMPLATE.format(
-            question_content=problem.question_content,
-            plan=plan_response,
-            starter_code=problem.starter_code,
-        )
-
-        try:
-
-            @tenacity.retry(
-                stop=tenacity.stop_after_attempt(5),
-                wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
-                retry=tenacity.retry_if_exception_type(Exception),
+    if problem_passed:
+        for sol_attempt in range(3):
+            p_console.print(
+                f"\n[bold cyan]Generating Python solution (Attempt {sol_attempt + 1}/3)...[/bold cyan]"
             )
-            def generate_solution() -> str:
-                return str(llm_client.generate(solution_prompt))
-
-            solution_response = generate_solution()
-
-            # Extract code from Markdown blocks
-            code_match = re.search(
-                r"```python\n(.*?)\n```", solution_response, re.DOTALL
+            solution_prompt = SOLUTION_PROMPT_TEMPLATE.format(
+                question_content=problem.question_content,
+                plan=plan_response,
+                starter_code=problem.starter_code,
             )
-            if code_match:
-                extracted_code = code_match.group(1).strip()
-            else:
-                extracted_code = solution_response.strip()
 
-            # Validate syntax
-            if python_lang.parser.is_syntax_valid(extracted_code):
-                generated_code = extracted_code
-                p_console.print(
-                    Panel(
-                        Syntax(solution_response, "markdown", theme="monokai", padding=1),
-                        title="LLM Solution Response (Valid Syntax)",
+            try:
+                @tenacity.retry(
+                    stop=tenacity.stop_after_attempt(5),
+                    wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
+                    retry=tenacity.retry_if_exception_type(Exception),
+                )
+                def generate_solution() -> str:
+                    return str(llm_client.generate(solution_prompt))
+
+                solution_response = generate_solution()
+
+                # Extract code from Markdown blocks
+                code_match = re.search(
+                    r"```python\n(.*?)\n```", solution_response, re.DOTALL
+                )
+                if code_match:
+                    extracted_code = code_match.group(1).strip()
+                else:
+                    extracted_code = solution_response.strip()
+
+                # Validate syntax
+                if python_lang.parser.is_syntax_valid(extracted_code):
+                    generated_code = extracted_code
+                    p_console.print(
+                        Panel(
+                            Syntax(solution_response, "markdown", theme="monokai", padding=1),
+                            title="LLM Solution Response (Valid Syntax)",
+                        )
                     )
-                )
-                break
-            else:
-                p_console.print(
-                    f"[bold red]Attempt {sol_attempt + 1}/3: Generated code has invalid syntax.[/bold red]"
-                )
+                    break
+                else:
+                    p_console.print(
+                        f"[bold red]Attempt {sol_attempt + 1}/3: Generated code has invalid syntax.[/bold red]"
+                    )
+                    if sol_attempt == 2:
+                        problem_passed = False
+                        generated_code = extracted_code
+            except Exception as e:
+                p_console.print(f"[bold red]Failed to generate solution: {e}[/bold red]")
                 if sol_attempt == 2:
                     problem_passed = False
-                    generated_code = extracted_code  # Store it anyway but mark as failed
-        except Exception as e:
-            p_console.print(f"[bold red]Failed to generate solution: {e}[/bold red]")
-            if sol_attempt == 2:
-                problem_passed = False
-            continue
+                continue
+    else:
+        generated_code = ""
 
     status_str = (
-        "[bold green]PASSED[/bold green]"
+        "[bold green]GENERATED[/bold green]"
         if problem_passed
         else "[bold red]FAILED[/bold red]"
     )
@@ -353,14 +225,13 @@ def process_problem(
         problem.question_id,
         problem_passed,
         log_stream.getvalue(),
-        problem_responses,
         generated_code,
         plan_response,
     )
 
 
 @app.command()
-def simulate(
+def run(
     config: Path = typer.Option(..., help="Path to LLM config YAML"),
     count: Optional[int] = typer.Option(None, help="Number of problems to process"),
     difficulty: str = typer.Option(
@@ -372,19 +243,19 @@ def simulate(
     ),
     end_date: Optional[str] = typer.Option("2025-05-10", help="End date (YYYY-MM-DD)"),
     output_dir: Path = typer.Option(
-        Path("logs/simulate"), help="Directory to save logs"
+        Path("logs/planning"), help="Directory to save logs"
     ),
     workers: int = typer.Option(16, help="Number of parallel workers"),
 ) -> None:
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
-    log_file = output_dir / f"{run_id}_simulation.txt"
+    log_file = output_dir / f"{run_id}_planning.txt"
     jsonl_file = output_dir / f"{run_id}_solutions.jsonl"
-    logger = SimulationLogger(log_file)
+    logger = PlanningLogger(log_file)
     jsonl_logger = JsonlLogger(jsonl_file)
 
     console.print(
         Panel(
-            f"Starting Multithreaded LCB Simulation Run: [bold cyan]{run_id}[/bold cyan]\n"
+            f"Starting Two-Step Planning Run: [bold cyan]{run_id}[/bold cyan]\n"
             f"Log file: [yellow]{log_file}[/yellow]\n"
             f"JSONL file: [yellow]{jsonl_file}[/yellow]\n"
             f"Workers: [green]{workers}[/green]"
@@ -412,7 +283,7 @@ def simulate(
 
     total_problems = len(problems)
     results = []
-    solved_problems = 0
+    generated_count = 0
 
     with Progress(
         SpinnerColumn(),
@@ -422,7 +293,7 @@ def simulate(
         console=console,
     ) as progress:
         overall_task = progress.add_task(
-            "[cyan]Simulating problems...", total=total_problems
+            "[cyan]Processing problems...", total=total_problems
         )
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -442,10 +313,10 @@ def simulate(
 
             for future in future_to_problem:
                 try:
-                    q_id, passed, log_block, _, snippet, plan = future.result()
+                    q_id, passed, log_block, snippet, plan = future.result()
                     results.append((q_id, passed))
                     if passed:
-                        solved_problems += 1
+                        generated_count += 1
                     logger.log_problem_block(log_block)
                     jsonl_logger.log(
                         {
@@ -459,12 +330,12 @@ def simulate(
                     console.print(f"[bold red]Exception in worker: {e}[/bold red]")
 
     # Final result table
-    table = Table(title="LCB Simulation Results")
+    table = Table(title="Planning Results")
     table.add_column("Question ID", style="cyan")
     table.add_column("Status", style="bold")
 
     for q_id, passed in results:
-        status_text = "[green]Passed[/green]" if passed else "[red]Failed[/red]"
+        status_text = "[green]Generated[/green]" if passed else "[red]Failed[/red]"
         table.add_row(q_id, status_text)
 
     console.print(table)
@@ -472,8 +343,8 @@ def simulate(
     summary_panel = Panel(
         Group(
             f"Total Problems: {total_problems}",
-            f"Solved: [bold green]{solved_problems}[/bold green]",
-            f"Accuracy: [bold yellow]{(solved_problems / total_problems) * 100:.2f}%[/bold yellow]"
+            f"Generated: [bold green]{generated_count}[/bold green]",
+            f"Success Rate: [bold yellow]{(generated_count / total_problems) * 100:.2f}%[/bold yellow]"
             if total_problems > 0
             else "N/A",
         ),

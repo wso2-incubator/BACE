@@ -1,7 +1,5 @@
 import json
 import re
-import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -46,10 +44,10 @@ def save_solutions(jsonl_path: Path, solutions: List[Dict[str, Any]]) -> None:
 @app.command()
 def evaluate(
     jsonl_file: Path = typer.Argument(
-        ..., help="Path to the JSONL file with generated solutions"
+        ..., help="Path to the JSONL file with generated code snippets"
     ),
     difficulty: str = typer.Option(
-        "hard", help="Difficulty of problems (must match simulation)"
+        "hard", help="Difficulty of problems in the LCB dataset"
     ),
     version: str = typer.Option("release_v6", help="LCB dataset version"),
     start_date: Optional[str] = typer.Option(
@@ -60,6 +58,10 @@ def evaluate(
         4, help="Number of parallel workers for execution system"
     ),
 ) -> None:
+    """
+    Evaluate code snippets from a JSONL file against the LCB dataset.
+    The JSONL file should contain 'question_id' and 'snippet' fields.
+    """
     if not jsonl_file.exists():
         console.print(f"[bold red]File not found: {jsonl_file}[/bold red]")
         raise typer.Exit(1)
