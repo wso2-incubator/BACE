@@ -111,6 +111,17 @@ class TestGenerateTestCase:
         exec(starter + "\n" + test_code, ns)
         ns["test_case_1"]()  # must not raise
 
+    def test_stdin_numeric_string_preserved(self, adapter: PythonLanguage) -> None:
+        starter = textwrap.dedent("""
+            class Solution:
+                def sol(self, input_str: str) -> str:
+                    return input_str
+        """)
+        # "123456" should remain as '123456' in the generated test code
+        code = adapter.composer.generate_test_case("123456", "123456", starter, 1)
+        assert "input_str = '123456'" in code
+        assert "input_str = 123456" not in code
+
     def test_functional_round_trip_executes(self, adapter: PythonLanguage) -> None:
         starter = textwrap.dedent("""
             class Solution:

@@ -190,7 +190,9 @@ def gen_stdin_test(
     return_type: Optional[str],
 ) -> str:
     """Generate a stdin test function from inputs."""
-    input_val = _parse_val(input_data)
+    # For stdin tests, the input into the method is always a string.
+    # We should NOT use _parse_val which might convert numeric strings to ints.
+    input_val = input_data
     output_val = _parse_val(output_data)
 
     # Intelligence at generation time: align expected output to signature type
