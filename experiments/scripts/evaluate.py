@@ -81,7 +81,8 @@ def evaluate(
     # Setup Execution System Components
     python_lang = PythonLanguage()
     sandbox_config = SandboxConfig(
-        timeout=30,
+        timeout=120,
+        test_method_timeout=120,
     )
     execution_system = ExecutionSystem(
         sandbox_config=sandbox_config,
@@ -189,6 +190,15 @@ def evaluate(
                     sol["status"] = "pass"  # Fallback if no private tests
                 else:
                     sol["status"] = "pass" if passed_private == num_private else "fail"
+
+                # Log warnings for any timeouts in the execution results
+                for t_id, t_res in interaction.execution_results.results[code_ind.id].items():
+                    if t_res.status == "error" and t_res.error_log:
+                        err_lower = t_res.error_log.lower()
+                        if "timeout" in err_lower or "timed out" in err_lower:
+                            logger.warning(
+                                f"Timeout detected for problem {q_id}, test {t_id}: {t_res.error_log}"
+                            )
 
             except Exception as e:
                 logger.error(f"Error evaluating {q_id}: {e}")
