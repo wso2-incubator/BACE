@@ -314,9 +314,11 @@ def main(
             num_final_pass_at_10 = count_perfect_in_top(10)
             num_final_pass_at_15 = count_perfect_in_top(15)
 
-        num_initial_passing = len(
-            matrices[0].sum(axis=1)[matrices[0].sum(axis=1) == matrices[0].shape[1]]
-        )
+        # Calculate Initial P@10 (using perfect solutions in matrices[0])
+        initial_matrix = matrices[0]
+        initial_num_tests = initial_matrix.shape[1]
+        initial_pass_counts = initial_matrix.sum(axis=1)
+        num_initial_pass_at_10 = int((initial_pass_counts == initial_num_tests).sum()) if initial_num_tests > 0 else 0
 
         summary_data.append(
             {
@@ -328,7 +330,7 @@ def main(
                 if champion_passing_info
                 else "N/A",
                 "champion_probability": champion_probability,
-                "initial_pass_at_10": num_initial_passing,
+                "initial_pass_at_10": num_initial_pass_at_10,
                 "final_pass_at_15": num_final_pass_at_15,
                 "final_pass_at_10": num_final_pass_at_10,
             }
@@ -353,6 +355,7 @@ def main(
     table.add_column("Champion ID", style="yellow")
     table.add_column("Score", justify="center")
     table.add_column("Prob", justify="right")
+    table.add_column("Init P@10", justify="center", style="bold yellow")
     table.add_column("Final P@10", justify="center", style="bold green")
 
     for row in complete_runs:
@@ -368,6 +371,7 @@ def main(
             str(row["champion_code_ids"]),
             str(row["champion_passing"]),
             f"{row['champion_probability']:.4f}",
+            str(row["initial_pass_at_10"]),
             str(row["final_pass_at_10"]),
         )
 
