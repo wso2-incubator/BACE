@@ -243,7 +243,7 @@ def run(
 
     total_problems = len(problems)
     results = []
-    generated_count = 0
+    solved_problems = 0
 
     with Progress(
         SpinnerColumn(),
@@ -271,12 +271,12 @@ def run(
                 for i, problem in enumerate(problems)
             }
 
-            for future in future_to_problem:
+            for fut in future_to_problem:
                 try:
-                    q_id, passed, log_block, snippet = future.result()
+                    q_id, passed, log_block, snippet = fut.result()
                     results.append((q_id, passed))
                     if passed:
-                        generated_count += 1
+                        solved_problems += 1
                     logger.log_problem_block(log_block)
                     jsonl_logger.log(
                         {
@@ -302,8 +302,8 @@ def run(
     summary_panel = Panel(
         Group(
             f"Total Problems: {total_problems}",
-            f"Generated: [bold green]{generated_count}[/bold green]",
-            f"Success Rate: [bold yellow]{(generated_count / total_problems) * 100:.2f}%[/bold yellow]"
+            f"Solved: [bold green]{solved_problems}[/bold green]",
+            f"Pass Rate: [bold cyan]{(solved_problems / total_problems) * 100:.2f}%[/bold cyan]"
             if total_problems > 0
             else "N/A",
         ),

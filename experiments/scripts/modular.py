@@ -6,7 +6,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import tenacity
 import typer
@@ -130,7 +130,7 @@ class JsonlLogger:
                 f.write(json.dumps(data) + "\n")
 
 
-def parse_decomposition(response: str) -> List[Dict[str, str]]:
+def parse_decomposition(response: str) -> list[dict[str, str]]:
     helpers = []
     # Match <helper> blocks
     helper_blocks = re.findall(r"<helper>(.*?)</helper>", response, re.DOTALL)
@@ -157,7 +157,7 @@ def process_problem(
     total_problems: int,
     progress: Progress,
     task_id: Any,
-) -> Tuple[str, bool, str, str, List[Dict[str, Any]]]:
+) -> Tuple[str, bool, str, str, list[dict[str, Any]]]:
     """Process a single problem and return results."""
 
     log_stream = io.StringIO()
@@ -407,9 +407,9 @@ def run(
                 for i, problem in enumerate(problems)
             }
 
-            for future in future_to_problem:
+            for fut in future_to_problem:
                 try:
-                    q_id, passed, log_block, snippet, helpers = future.result()
+                    q_id, passed, log_block, snippet, helpers = fut.result()
                     results.append((q_id, passed))
                     if passed:
                         solved_problems += 1
