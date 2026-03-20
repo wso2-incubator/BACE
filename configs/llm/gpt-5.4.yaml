@@ -1,0 +1,9 @@
+# GPT-5 Mini Configuration
+# High performance, lower cost model for codevolution experiments
+
+provider: "openai"
+model: "gpt-5.4"
+reasoning_effort: "low"
+
+# Token limit configuration
+max_output_tokens: 100_000_000  # 100 million tokens (100x default of 1M)
