@@ -142,3 +142,41 @@ def test_reset_explored_pairs(discovery_operator: DifferentialDiscoveryOperator)
     discovery_operator._explored_pairs_cache.add(("A", "B"))
     discovery_operator.reset_explored_pairs()
     assert len(discovery_operator._explored_pairs_cache) == 0
+
+def test_execute_ignores_equal_outputs(discovery_operator: DifferentialDiscoveryOperator) -> None:
+    # Setup context and problem
+    problem = Problem(
+        question_title="Test Title",
+        question_content="Question内容",
+        question_id="test_q",
+        starter_code="def f(x): pass",
+        public_test_cases=[],
+        private_test_cases=[]
+    )
+    context = MagicMock(spec=CoevolutionContext)
+    context.problem = problem
+    context.code_population = CodePopulation(individuals=[], generation=0)
+    
+    code_a = CodeIndividual(snippet="snippet A", probability=0.8, creation_op="init", generation_born=0)
+    code_b = CodeIndividual(snippet="snippet B", probability=0.7, creation_op="init", generation_born=0)
+    group = FunctionallyEquivGroup(
+        code_individuals=[code_a, code_b],
+        passing_test_individuals={}
+    )
+    cast(MagicMock, discovery_operator.func_eq_selector.select_functionally_equivalent_codes).return_value = [group]
+    
+    cast(MagicMock, discovery_operator.llm_service.generate_script).return_value = "generator_script_content"
+    
+    # Differential finder returns only identical outputs
+    equal_divergence = DifferentialResult(input_data={"x": 1}, output_a="2", output_b="2")
+    cast(MagicMock, discovery_operator.differential_finder.find_differential).return_value = [equal_divergence]
+    
+    # Run execute
+    offspring = discovery_operator.execute(context)
+    
+    # Should not produce offspring because the input didn't cause divergence
+    assert len(offspring) == 0
+    cast(MagicMock, discovery_operator.llm_service.generate_script).assert_called_once()
+    cast(MagicMock, discovery_operator.differential_finder.find_differential).assert_called_once()
+    cast(MagicMock, discovery_operator.llm_service.get_test_method_from_io).assert_not_called()
+

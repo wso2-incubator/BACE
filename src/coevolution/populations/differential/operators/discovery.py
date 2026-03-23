@@ -215,12 +215,14 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
         for ctx in discovery_ctxs:
             task = ctx.task
             try:
-                divergences = self.differential_finder.find_differential(
+                all_divergences = self.differential_finder.find_differential(
                     task.code_a.snippet,
                     task.code_b.snippet,
                     ctx.generator_script,
                     limit=self.divergence_limit,
                 )
+                divergences = [d for d in all_divergences if d.output_a != d.output_b]
+
                 if not divergences:
                     logger.debug(
                         f"No divergences for pair ({task.code_a.id}, {task.code_b.id})"
