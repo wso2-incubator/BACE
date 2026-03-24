@@ -19,20 +19,21 @@ import coevolution.utils.logging as logging_utils
 from coevolution.dataset.lcb import (
     Difficulty,
     LCBCodeGenerationProblem,
-    LCBDatasetTestBlockBuilder,
-    LCBTestBlockRebuilder,
     load_code_generation_dataset,
 )
 from coevolution.factories import (
     OrchestratorBuilder,
     ScheduleBuilder,
     build_orchestrator_from_config,
-    create_agent_coder_code_profile,
+)
+from coevolution.populations.agent_coder.profile import create_agent_coder_code_profile
+from coevolution.populations.unittest.profile import (
     create_public_test_profile,
     create_unittest_test_profile,
 )
 from coevolution.services.bayesian import BayesianSystem
 from coevolution.services.execution import ExecutionSystem
+from infrastructure.languages import create_language_adapter
 from infrastructure.llm_client import create_llm_client
 from infrastructure.sandbox import SandboxConfig
 
@@ -151,7 +152,11 @@ def main(
         # Run specific problems
         python run_coevolution.py --problem-ids Q123 Q456 Q789
     """
-    logging_utils.setup_logging(
+    # Generate run_id if not provided
+    if run_id is None:
+        run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
+
+    run_id = logging_utils.setup_logging(
         console_level="DEBUG",
         file_level="DEBUG",
         run_id=run_id,
@@ -159,10 +164,6 @@ def main(
     )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
-
-    # Generate run_id if not provided
-    if run_id is None:
-        run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S")
     logger.info(f"Run ID: {run_id}")
 
     # =========================================================================
@@ -186,6 +187,7 @@ def main(
         max_memory_mb=100,
         max_output_size=10_000_000,
         test_method_timeout=30,
+        language="python",
     )
 
     # Get worker count from environment variable, fallback to 4
@@ -194,18 +196,23 @@ def main(
         f"Using worker count: {cpu_count} (from COEVOLUTION_WORKERS env var or default)"
     )
 
-    # 3. Execution System (Heavy Resource: Process Pool)
+    # 3. Language Adapter
+    language_adapter = create_language_adapter("python")
+
+    # 4. Execution System (Heavy Resource: Process Pool)
     # Created once so the process pool persists across problems.
+    # Note: ExecutionSystem now requires composer/runtime/analyzer from language adapter
     execution_system = ExecutionSystem(
         sandbox_config=exec_sandbox_config,
         enable_multiprocessing=True,
         cpu_workers=cpu_count,
+        composer=language_adapter.composer,
+        runtime=language_adapter.runtime,
+        analyzer=language_adapter.analyzer,
     )
 
-    # 4. Auxiliary Systems
+    # 5. Auxiliary Systems
     bayesian_system = BayesianSystem()
-    test_block_rebuilder = LCBTestBlockRebuilder()
-    dataset_test_block_builder = LCBDatasetTestBlockBuilder()
 
     logger.info("Infrastructure components ready.")
 
@@ -215,13 +222,17 @@ def main(
     logger.info("Configuring Coevolution Strategy...")
 
     # 1. Profiles (The "Blueprints" for populations)
+    # Updated to pass language_adapter and llm_workers
     agent_coder_code_profile = create_agent_coder_code_profile(
         llm_client=llm_client,
+        language_adapter=language_adapter,
         initial_prior=0.2,
+        llm_workers=cpu_count,
     )
 
     unittest_profile = create_unittest_test_profile(
         llm_client=llm_client,
+        language_adapter=language_adapter,
         initial_prior=0.2,
         initial_population_size=20,
         max_population_size=20,
@@ -248,14 +259,13 @@ def main(
     # 3. Orchestrator Configuration
     config = (
         OrchestratorBuilder()
+        .with_composer(language_adapter.composer)
         .with_evolution_config(schedule)
         .with_code_profile(agent_coder_code_profile)
         .add_test_profile("unittest", unittest_profile)
         .with_public_test_profile(public_profile)
         .with_execution_system(execution_system)
         .with_bayesian_system(bayesian_system)
-        .with_test_block_rebuilder(test_block_rebuilder)
-        .with_dataset_test_block_builder(dataset_test_block_builder)
         .build()
     )
 
@@ -327,6 +337,15 @@ def main(
     for i, problem in enumerate(selected_problems):
         # Calculate global index for logging clarity
         global_idx = (start_index if not problem_ids else 0) + i
+
+        # Re-initialize logging for this specific problem context.
+        # This updates the global environment so child workers know which directory to log to.
+        run_id = logging_utils.setup_logging(
+            console_level="DEBUG",
+            file_level="DEBUG",
+            run_id=run_id,
+            problem_id=problem.question_id,
+        )
 
         # We use Context Managers to tag logs with the current problem
         # This keeps the logs clean even though we reuse the engine
