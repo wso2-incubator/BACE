@@ -40,5 +40,5 @@ logging:
   log_file_base_name: "coevolution_run"
 
 rephraser:
-  enabled: true
-  n: 10
+  enabled: false
+  n: 0
