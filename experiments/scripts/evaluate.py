@@ -109,6 +109,10 @@ def evaluate(
             q_id = sol["question_id"]
             snippet = sol["snippet"]
 
+            # Initialize error logs
+            sol["public_error_logs"] = []
+            sol["private_error_logs"] = []
+
             if not snippet:
                 sol["status"] = "fail (no code)"
                 progress.advance(task)
@@ -183,6 +187,16 @@ def evaluate(
 
                 sol["public_pass_rate"] = f"{passed_public}/{num_public}"
                 sol["private_pass_rate"] = f"{passed_private}/{num_private}"
+
+                # Capture error logs for failed tests
+                execution_results = interaction.execution_results.results[code_ind.id]
+                for idx, test_ind in enumerate(all_test_individuals):
+                    test_res = execution_results.get(test_ind.id)
+                    if test_res and test_res.status != "passed" and test_res.error_log:
+                        if idx < num_public:
+                            sol["public_error_logs"].append(test_res.error_log)
+                        else:
+                            sol["private_error_logs"].append(test_res.error_log)
 
                 # Status ONLY depends on private tests
                 if num_private == 0:
