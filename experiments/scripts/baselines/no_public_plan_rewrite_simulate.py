@@ -194,6 +194,7 @@ def process_problem(
     task_id: Any,
     plan_iterations: int,
     sim_iterations: int,
+    final_refine_iterations: int,
 ) -> Tuple[str, bool, str, str, str, List[str], List[str], List[str]]:
     """Process a single problem with example-free modification and simulation-based plan/code refinement loop."""
 
@@ -308,17 +309,18 @@ def process_problem(
             p_console.print(Panel(Syntax(current_code, "python", theme="monokai", padding=1), title=f"Code v{i+2}"))
 
         # Step 6: Final Code Refinement
-        p_console.print("\n[bold cyan]Step 6: Final Code Refinement...[/bold cyan]")
-        code_refine_p = CODE_REFINEMENT_PROMPT_TEMPLATE.format(
-            question_content=modified_problem,
-            plan=current_plan,
-            starter_code=problem.starter_code,
-            current_code=current_code
-        )
-        res_refine = generate(code_refine_p)
-        current_code = extract_code(res_refine)
-        snippets.append(current_code)
-        p_console.print(Panel(Syntax(current_code, "python", theme="monokai", padding=1), title="Code (Final Refined)"))
+        for i in range(final_refine_iterations):
+            p_console.print(f"\n[bold cyan]Step 6.{i+1}: Final Code Refinement...[/bold cyan]")
+            code_refine_p = CODE_REFINEMENT_PROMPT_TEMPLATE.format(
+                question_content=modified_problem,
+                plan=current_plan,
+                starter_code=problem.starter_code,
+                current_code=current_code
+            )
+            res_refine = generate(code_refine_p)
+            current_code = extract_code(res_refine)
+            snippets.append(current_code)
+            p_console.print(Panel(Syntax(current_code, "python", theme="monokai", padding=1), title=f"Code (Final Refined v{i+1})"))
 
         problem_passed = True
 
@@ -353,6 +355,7 @@ def run(
     workers: int = typer.Option(8, help="Number of parallel workers"),
     plan_iterations: int = typer.Option(2, help="Number of plan refinement iterations"),
     sim_iterations: int = typer.Option(2, help="Number of simulation & code refinement loop iterations"),
+    final_refine_iterations: int = typer.Option(1, help="Number of final code refinement iterations"),
 ) -> None:
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
     log_file = output_dir / f"{run_id}_no_public_plan_rewrite_simulate.txt"
@@ -367,7 +370,8 @@ def run(
             f"JSONL file: [yellow]{jsonl_file}[/yellow]\n"
             f"Workers: [green]{workers}[/green]\n"
             f"Plan Iterations: [green]{plan_iterations}[/green]\n"
-            f"Simulation Iterations: [green]{sim_iterations}[/green]"
+            f"Simulation Iterations: [green]{sim_iterations}[/green]\n"
+            f"Final Refine Iterations: [green]{final_refine_iterations}[/green]"
         )
     )
 
@@ -416,6 +420,7 @@ def run(
                     overall_task,
                     plan_iterations,
                     sim_iterations,
+                    final_refine_iterations,
                 ): problem
                 for i, problem in enumerate(problems)
             }
