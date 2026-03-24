@@ -1,0 +1,36 @@
+experiment:
+  name: "code-only-test"
+  description: "debugging code-only"
+
+# ============================================================================
+# COMPONENT REFERENCES
+# ============================================================================
+
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/standard.yaml"
+
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+
+# Code-only schedule (no test evolution phases)
+schedule: "schedules/no-evolution.yaml"
+
+# ============================================================================
+# DATASET CONFIGURATION
+# ============================================================================
+
+dataset:
+  config_path: "datasets/lcb.yaml"
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "medium"
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  console_level: "DEBUG"
+  file_level: "TRACE"
+  log_file_base_name: "test_run_"
