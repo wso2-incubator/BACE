@@ -71,7 +71,7 @@ def create_llm_client(
         # Gemini default: token limits enabled
         limit_enabled = True if enable_token_limit is None else enable_token_limit
         client = GeminiLLMClient(
-            model, max_output_tokens, limit_enabled, **client_kwargs
+            model, max_output_tokens, limit_enabled, reasoning_effort, **client_kwargs
         )
     elif provider == "transformers":
         from .transformers import TransformersClient

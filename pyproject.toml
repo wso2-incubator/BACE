@@ -145,6 +145,7 @@ dependencies = [
     "pyvis>=0.3.2",
     "transformers>=4.57.6",
     "torch>=2.10.0",
+    "google-genai>=1.68.0",
 ]
 
 [dependency-groups]
