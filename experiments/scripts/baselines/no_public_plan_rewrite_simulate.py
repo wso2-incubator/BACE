@@ -360,24 +360,51 @@ def run(
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
     log_file = output_dir / f"{run_id}_no_public_plan_rewrite_simulate.txt"
     jsonl_file = output_dir / f"{run_id}_solutions.jsonl"
+    config_file = output_dir / f"{run_id}_config.txt"
+    
     logger_txt = DirectLogger(log_file)
     jsonl_logger = JsonlLogger(jsonl_file)
 
-    console.print(
-        Panel(
-            f"Starting No-Public-Plan-Rewrite-Simulate Gen Run: [bold cyan]{run_id}[/bold cyan]\n"
-            f"Log file: [yellow]{log_file}[/yellow]\n"
-            f"JSONL file: [yellow]{jsonl_file}[/yellow]\n"
-            f"Workers: [green]{workers}[/green]\n"
-            f"Plan Iterations: [green]{plan_iterations}[/green]\n"
-            f"Simulation Iterations: [green]{sim_iterations}[/green]\n"
-            f"Final Refine Iterations: [green]{final_refine_iterations}[/green]"
-        )
+    # Initial Run Configuration Panel
+    run_config_panel = Panel(
+        Group(
+            f"Starting No-Public-Plan-Rewrite-Simulate Gen Run: [bold cyan]{run_id}[/bold cyan]",
+            f"Log file: [yellow]{log_file}[/yellow]",
+            f"JSONL file: [yellow]{jsonl_file}[/yellow]",
+            f"Config file: [yellow]{config_file}[/yellow]",
+            "",
+            f"Workers: [green]{workers}[/green]",
+            f"Plan Iterations: [green]{plan_iterations}[/green]",
+            f"Simulation Iterations: [green]{sim_iterations}[/green]",
+            f"Final Refine Iterations: [green]{final_refine_iterations}[/green]",
+            "",
+            f"Difficulty: [blue]{difficulty}[/blue]",
+            f"Version: [blue]{version}[/blue]",
+            f"Start Date: [blue]{start_date}[/blue]",
+            f"End Date: [blue]{end_date}[/blue]",
+            f"Count: [blue]{count}[/blue]",
+        ),
+        title="Run Configuration",
+        border_style="bold cyan",
     )
+    console.print(run_config_panel)
 
     # Load LLM Config
     with open(llm, "r") as f:
         llm_cfg = yaml.safe_load(f)
+
+    llm_config_panel = Panel(
+        Syntax(yaml.dump(llm_cfg), "yaml", theme="monokai", padding=1),
+        title=f"LLM Configuration: {llm.name}",
+        border_style="bold green"
+    )
+    console.print(llm_config_panel)
+
+    # Save to Config File
+    with open(config_file, "w", encoding="utf-8") as f:
+        cfg_console = Console(file=f, force_terminal=True, width=120)
+        cfg_console.print(run_config_panel)
+        cfg_console.print(llm_config_panel)
 
     llm_client = create_llm_client(**llm_cfg)
     python_lang = PythonLanguage()
@@ -396,7 +423,7 @@ def run(
 
     total_problems = len(problems)
     results = []
-    solved_problems = 0
+    generated_problems = 0
 
     with Progress(
         SpinnerColumn(),
@@ -430,7 +457,7 @@ def run(
                     q_id, passed, log_block, snippet, modified_prob, all_snippets, all_plans, all_sims = fut.result()
                     results.append((q_id, passed))
                     if passed:
-                        solved_problems += 1
+                        generated_problems += 1
                     logger_txt.log_problem_block(log_block)
                     jsonl_logger.log(
                         {
@@ -446,6 +473,19 @@ def run(
                 except Exception as e:
                     console.print(f"[bold red]Exception in worker: {e}[/bold red]")
 
+    # LLM Usage Summary
+    usage_table = Table(title="LLM Usage Summary", border_style="bold blue")
+    usage_table.add_column("Metric", style="cyan")
+    usage_table.add_column("Value", style="bold yellow")
+    
+    usage_table.add_row("Model", llm_client.model)
+    usage_table.add_row("Total Input Tokens", f"{llm_client.total_input_tokens:,}")
+    usage_table.add_row("Total Output Tokens", f"{llm_client.total_output_tokens:,}")
+    usage_table.add_row("Total Tokens", f"{llm_client.total_tokens:,}")
+    
+    usage_panel = Panel(usage_table, border_style="bold blue")
+    console.print(usage_panel)
+
     # Final result table
     table = Table(title="No-Public-Plan-Rewrite-Simulate Results")
     table.add_column("Question ID", style="cyan")
@@ -460,25 +500,35 @@ def run(
     summary_panel = Panel(
         Group(
             f"Total Problems: {total_problems}",
-            f"Solved: [bold green]{solved_problems}[/bold green]",
-            f"Pass Rate: [bold cyan]{(solved_problems / total_problems) * 100:.2f}%[/bold cyan]" if total_problems > 0 else "N/A",
+            f"Generated: [bold green]{generated_problems}[/bold green]",
         ),
         title="Summary",
         border_style="bold green",
     )
     console.print(summary_panel)
 
-    # Capture final table and summary for the log file
+    # Capture final tables and summaries for the log and config files
     log_final_stream = io.StringIO()
     log_final_console = Console(file=log_final_stream, force_terminal=True, width=120)
+    log_final_console.print(usage_panel)
     log_final_console.print(table)
     log_final_console.print(summary_panel)
+    final_output = log_final_stream.getvalue()
 
+    # Append to log file
     with open(log_file, "a", encoding="utf-8") as f:
         f.write("\n" + "=" * 120 + "\n")
         f.write("FINAL SUMMARY\n")
         f.write("=" * 120 + "\n")
-        f.write(log_final_stream.getvalue())
+        f.write(final_output)
+        f.write(f"\nRun completed at {datetime.now()}\n")
+        
+    # Append to config file
+    with open(config_file, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 120 + "\n")
+        f.write("LLM USAGE AND RUN SUMMARY\n")
+        f.write("=" * 120 + "\n")
+        f.write(final_output)
         f.write(f"\nRun completed at {datetime.now()}\n")
 
 
