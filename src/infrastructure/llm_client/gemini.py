@@ -104,6 +104,10 @@ class GeminiLLMClient(LLMClient):
             # Pass max_output_tokens if specified (conversion might be needed if they naming is different)
             # max_output_tokens=self.max_output_tokens,
             **kwargs,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+            tools=None,
         )
 
         response = self.client.models.generate_content(
