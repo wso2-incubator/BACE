@@ -128,6 +128,9 @@ class GeminiLLMClient(LLMClient):
         # Extract usage metadata for accurate token tracking
         usage = response.usage_metadata
         if usage:
+            # Input tokens
+            self._add_input_tokens(usage.prompt_token_count or 0)
+
             # Output tokens include candidates (final answer) and thoughts (for thinking models)
             output_tokens = (usage.candidates_token_count or 0) + (
                 usage.thoughts_token_count or 0
@@ -142,6 +145,7 @@ class GeminiLLMClient(LLMClient):
             self._add_output_tokens(output_tokens)
         else:
             # Fallback to estimation if usage_metadata is missing
+            self._add_input_tokens(self._estimate_tokens(prompt))
             self._add_output_tokens(self._estimate_tokens(result))
 
         return result

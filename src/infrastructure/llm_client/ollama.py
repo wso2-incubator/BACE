@@ -51,5 +51,22 @@ class OllamaClient(LLMClient):
 
         logger.debug(f"Generated {len(content)} characters")
         logger.trace(f"Response (first 200 chars): {content[:200]}...")
-        self._add_output_tokens(self._estimate_tokens(content))
+
+        # Track usage
+        input_tokens = response.get("prompt_eval_count", 0)
+        output_tokens = response.get("eval_count", 0)
+
+        if input_tokens > 0:
+            self._add_input_tokens(input_tokens)
+        else:
+            # Fallback to estimation
+            prompt_str = str(prompt) if not isinstance(prompt, str) else prompt
+            self._add_input_tokens(self._estimate_tokens(prompt_str))
+
+        if output_tokens > 0:
+            self._add_output_tokens(output_tokens)
+        else:
+            # Fallback to estimation
+            self._add_output_tokens(self._estimate_tokens(content))
+
         return content

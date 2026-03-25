@@ -45,7 +45,16 @@ class OpenAIChatClient(LLMClient):
         result = str(content)
         logger.debug(f"Generated {len(result)} characters")
         logger.trace(f"Response (first 200 chars): {result[:200]}...")
-        self._add_output_tokens(self._estimate_tokens(result))
+
+        # Track usage
+        usage = getattr(response, "usage", None)
+        if usage:
+            self._add_input_tokens(getattr(usage, "prompt_tokens", 0))
+            self._add_output_tokens(getattr(usage, "completion_tokens", 0))
+        else:
+            self._add_input_tokens(self._estimate_tokens(prompt))
+            self._add_output_tokens(self._estimate_tokens(result))
+
         return result
 
 
@@ -70,29 +79,29 @@ class OpenAIClient(LLMClient):
             f"reasoning_effort: {reasoning_effort}"
         )
 
-    def _add_openai_output_tokens(self, response: "Response") -> None:
-        """Add output tokens from OpenAI Response API response.
+    def _add_openai_tokens(self, response: "Response") -> None:
+        """Add input and output tokens from OpenAI Response API response.
 
         Args:
             response: The OpenAI Response API response object.
         """
-        if (
-            hasattr(response, "usage")
-            and response.usage is not None
-            and hasattr(response.usage, "output_tokens")
-        ):
-            output_tokens = response.usage.output_tokens
-            return super()._add_output_tokens(output_tokens)
+        if hasattr(response, "usage") and response.usage is not None:
+            # Input tokens
+            if hasattr(response.usage, "input_tokens"):
+                self._add_input_tokens(response.usage.input_tokens)
+
+            # Output tokens
+            if hasattr(response.usage, "output_tokens"):
+                self._add_output_tokens(response.usage.output_tokens)
         else:
             logger.warning(
-                "Response object does not have usage.output_tokens; "
-                "cannot track output tokens accurately."
+                "Response object does not have usage information; "
                 "using approximate character-based estimation instead."
             )
 
-            return super()._add_output_tokens(
-                self._estimate_tokens(response.output_text)
-            )
+            # Note: We don't have the original prompt here easily,
+            # but usually this method is called after generation.
+            self._add_output_tokens(self._estimate_tokens(response.output_text))
 
     def generate(self, prompt: Union[str, "ResponseInputParam"], **kwargs: Any) -> str:
         # Allow overriding reasoning effort for this specific call
@@ -121,7 +130,7 @@ class OpenAIClient(LLMClient):
         logger.debug(f"Generated {len(result)} characters")
         logger.trace(f"Response (first 200 chars): {result[:200]}...")
 
-        self._add_openai_output_tokens(response)
+        self._add_openai_tokens(response)
         return result
 
     def set_reasoning_effort(self, reasoning_effort: str) -> None:

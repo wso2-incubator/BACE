@@ -52,5 +52,19 @@ class TransformersClient(LLMClient):
 
         logger.debug(f"Generated {len(content)} characters")
         logger.trace(f"Response (first 200 chars): {content[:200]}...")
-        self._add_output_tokens(self._estimate_tokens(content))
+
+        # Track usage
+        tokenizer = getattr(self.pipe, "tokenizer", None)
+        if tokenizer:
+            prompt_str = str(prompt) if not isinstance(prompt, str) else prompt
+            input_tokens = len(tokenizer.encode(prompt_str))
+            output_tokens = len(tokenizer.encode(content))
+            self._add_input_tokens(input_tokens)
+            self._add_output_tokens(output_tokens)
+        else:
+            # Fallback to estimation
+            prompt_str = str(prompt) if not isinstance(prompt, str) else prompt
+            self._add_input_tokens(self._estimate_tokens(prompt_str))
+            self._add_output_tokens(self._estimate_tokens(content))
+
         return content
