@@ -28,6 +28,7 @@ Usage:
 from .base import LLMClient
 from .exceptions import TokenLimitExceededError
 from .factory import create_llm_client
+from .gemini import GeminiLLMClient
 from .ollama import OllamaClient
 from .openai import OpenAIChatClient, OpenAIClient
 
@@ -40,6 +41,7 @@ __all__ = [
     "OpenAIClient",
     "OpenAIChatClient",
     "OllamaClient",
+    "GeminiLLMClient",
     # Factory
     "create_llm_client",
 ]

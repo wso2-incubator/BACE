@@ -1,0 +1,9 @@
+# Gemini-3 Flash Preview Configuration
+
+provider: "gemini"
+model: "gemini-3-flash-preview"
+reasoning_effort: "minimal"
+
+# Token limit configuration
+max_output_tokens: 10_000_000 # 3$ per 1M -> 30$ for 10M
+enable_token_limit: true
