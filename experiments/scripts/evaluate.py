@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import typer
 from loguru import logger
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
@@ -12,7 +13,6 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
-from rich.panel import Panel
 from rich.table import Table
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
@@ -84,6 +84,7 @@ def evaluate(
     python_lang = PythonLanguage()
     sandbox_config = SandboxConfig(
         timeout=30,
+        max_memory_mb=1024 * 2,
     )
     execution_system = ExecutionSystem(
         sandbox_config=sandbox_config,
@@ -108,7 +109,8 @@ def evaluate(
         task = progress.add_task("[cyan]Evaluating...", total=len(solutions))
 
         for sol in solutions:
-            if sol.get("status") is not None:
+            # Skip if already evaluated AND error logs are present
+            if sol.get("status") is not None and "public_error_logs" in sol:
                 progress.advance(task)
                 continue
 
@@ -260,6 +262,8 @@ def evaluate(
 
     pppf_total = 0
     public_pass_total = 0
+    prpuf_total = 0
+    prpuf_ids = []
 
     for sol in solutions:
         q_id = sol["question_id"]
@@ -268,29 +272,35 @@ def evaluate(
             diff = problem.difficulty
             if diff in stats:
                 stats[diff]["total"] += 1
-                
+
                 # Check status
                 status = sol.get("status")
                 if status == "pass":
                     stats[diff]["pass"] += 1
-                
+
                 # Check PPPF: Passed all public, but not all private
                 pub_pass, pub_total = 0, 0
                 priv_pass, priv_total = 0, 0
-                
+
                 pub_rate = sol.get("public_pass_rate", "0/0")
                 priv_rate = sol.get("private_pass_rate", "0/0")
-                
+
                 if "/" in pub_rate:
                     pub_pass, pub_total = map(int, pub_rate.split("/"))
                 if "/" in priv_rate:
                     priv_pass, priv_total = map(int, priv_rate.split("/"))
-                
+
                 if pub_total > 0 and pub_pass == pub_total:
                     public_pass_total += 1
                     if priv_total > 0 and priv_pass < priv_total:
                         stats[diff]["pppf"] += 1
                         pppf_total += 1
+
+                # Check Private Pass, Public Fail: Passed all private, but not all public
+                if priv_total > 0 and priv_pass == priv_total:
+                    if pub_total > 0 and pub_pass < pub_total:
+                        prpuf_total += 1
+                        prpuf_ids.append(q_id)
 
     summary_table = Table(title="Summary by Difficulty")
     summary_table.add_column("Difficulty", style="cyan")
@@ -307,10 +317,7 @@ def evaluate(
             pass_rate = f"{s['pass']}/{s['total']}"
             percentage = f"{(s['pass'] / s['total']) * 100:.2f}%"
             summary_table.add_row(
-                diff.value.capitalize(), 
-                pass_rate, 
-                percentage, 
-                str(s["pppf"])
+                diff.value.capitalize(), pass_rate, percentage, str(s["pppf"])
             )
             total_pass += s["pass"]
 
@@ -318,15 +325,23 @@ def evaluate(
 
     overall_percentage = (total_pass / total_count * 100) if total_count > 0 else 0
     pppf_rate = (pppf_total / public_pass_total * 100) if public_pass_total > 0 else 0
-    
+
     summary_content = [
         f"Overall Pass Rate: [bold green]{total_pass}/{total_count}[/bold green] ([bold cyan]{overall_percentage:.2f}%[/bold cyan])",
         "",
         "[bold red]Public Pass, Private Fail (PPPF) Analysis:[/bold red]",
         f"  Total PPPF Cases: [bold red]{pppf_total}[/bold red]",
         f"  PPPF Rate (of Public Pass): [bold yellow]{pppf_rate:.2f}%[/bold yellow] ({pppf_total}/{public_pass_total})",
+        "",
+        "[bold yellow]Private Pass, Public Fail Analysis:[/bold yellow]",
+        f"  Total Cases: [bold yellow]{prpuf_total}[/bold yellow]",
     ]
-    
+
+    if prpuf_ids:
+        summary_content.append(
+            f"  [bold red]WARNING:[/bold red] Rare cases found in: {', '.join(map(str, prpuf_ids))}"
+        )
+
     console.print(
         Panel(
             "\n".join(summary_content),
