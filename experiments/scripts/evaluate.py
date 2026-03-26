@@ -45,8 +45,8 @@ def evaluate(
     jsonl_file: Path = typer.Argument(
         ..., help="Path to the JSONL file with generated code snippets"
     ),
-    difficulty: str = typer.Option(
-        "hard", help="Difficulty of problems in the LCB dataset"
+    difficulty: Optional[str] = typer.Option(
+        None, help="Difficulty of problems in the LCB dataset"
     ),
     version: str = typer.Option("release_v6", help="LCB dataset version"),
     start_date: Optional[str] = typer.Option(
@@ -69,7 +69,7 @@ def evaluate(
     solutions = load_solutions(jsonl_file)
 
     console.print("[bold cyan]Loading LCB dataset for evaluation...[/bold cyan]")
-    diff_enum = Difficulty(difficulty.lower())
+    diff_enum = Difficulty(difficulty.lower()) if difficulty else None
     problems = load_code_generation_dataset(
         release_version=version,
         difficulty=diff_enum,
