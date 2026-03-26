@@ -253,10 +253,13 @@ def evaluate(
 
     # Summary by Difficulty
     stats = {
-        Difficulty.EASY: {"pass": 0, "total": 0},
-        Difficulty.MEDIUM: {"pass": 0, "total": 0},
-        Difficulty.HARD: {"pass": 0, "total": 0},
+        Difficulty.EASY: {"pass": 0, "total": 0, "pppf": 0},
+        Difficulty.MEDIUM: {"pass": 0, "total": 0, "pppf": 0},
+        Difficulty.HARD: {"pass": 0, "total": 0, "pppf": 0},
     }
+
+    pppf_total = 0
+    public_pass_total = 0
 
     for sol in solutions:
         q_id = sol["question_id"]
@@ -265,13 +268,35 @@ def evaluate(
             diff = problem.difficulty
             if diff in stats:
                 stats[diff]["total"] += 1
-                if sol.get("status") == "pass":
+                
+                # Check status
+                status = sol.get("status")
+                if status == "pass":
                     stats[diff]["pass"] += 1
+                
+                # Check PPPF: Passed all public, but not all private
+                pub_pass, pub_total = 0, 0
+                priv_pass, priv_total = 0, 0
+                
+                pub_rate = sol.get("public_pass_rate", "0/0")
+                priv_rate = sol.get("private_pass_rate", "0/0")
+                
+                if "/" in pub_rate:
+                    pub_pass, pub_total = map(int, pub_rate.split("/"))
+                if "/" in priv_rate:
+                    priv_pass, priv_total = map(int, priv_rate.split("/"))
+                
+                if pub_total > 0 and pub_pass == pub_total:
+                    public_pass_total += 1
+                    if priv_total > 0 and priv_pass < priv_total:
+                        stats[diff]["pppf"] += 1
+                        pppf_total += 1
 
     summary_table = Table(title="Summary by Difficulty")
     summary_table.add_column("Difficulty", style="cyan")
     summary_table.add_column("Pass Rate", style="bold yellow")
     summary_table.add_column("Percentage", style="bold green")
+    summary_table.add_column("PPPF Cases", style="bold red")
 
     total_pass = 0
     total_count = len(solutions)
@@ -281,15 +306,30 @@ def evaluate(
         if s["total"] > 0:
             pass_rate = f"{s['pass']}/{s['total']}"
             percentage = f"{(s['pass'] / s['total']) * 100:.2f}%"
-            summary_table.add_row(diff.value.capitalize(), pass_rate, percentage)
+            summary_table.add_row(
+                diff.value.capitalize(), 
+                pass_rate, 
+                percentage, 
+                str(s["pppf"])
+            )
             total_pass += s["pass"]
 
     console.print(summary_table)
 
     overall_percentage = (total_pass / total_count * 100) if total_count > 0 else 0
+    pppf_rate = (pppf_total / public_pass_total * 100) if public_pass_total > 0 else 0
+    
+    summary_content = [
+        f"Overall Pass Rate: [bold green]{total_pass}/{total_count}[/bold green] ([bold cyan]{overall_percentage:.2f}%[/bold cyan])",
+        "",
+        "[bold red]Public Pass, Private Fail (PPPF) Analysis:[/bold red]",
+        f"  Total PPPF Cases: [bold red]{pppf_total}[/bold red]",
+        f"  PPPF Rate (of Public Pass): [bold yellow]{pppf_rate:.2f}%[/bold yellow] ({pppf_total}/{public_pass_total})",
+    ]
+    
     console.print(
         Panel(
-            f"Overall Pass Rate: [bold green]{total_pass}/{total_count}[/bold green] ([bold cyan]{overall_percentage:.2f}%[/bold cyan])",
+            "\n".join(summary_content),
             title="Final Summary",
             border_style="bold green",
         )
