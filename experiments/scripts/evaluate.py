@@ -58,6 +58,12 @@ def evaluate(
     workers: int = typer.Option(
         4, help="Number of parallel workers for execution system"
     ),
+    reevaluate: bool = typer.Option(
+        False,
+        "--reevaluate",
+        "-r",
+        help="Force re-evaluation of all solutions, ignoring existing status",
+    ),
 ) -> None:
     """
     Evaluate code snippets from a JSONL file against the LCB dataset.
@@ -84,7 +90,7 @@ def evaluate(
     python_lang = PythonLanguage()
     sandbox_config = SandboxConfig(
         timeout=30,
-        max_memory_mb=1024 * 2,
+        max_memory_mb=1024 * 4,
     )
     execution_system = ExecutionSystem(
         sandbox_config=sandbox_config,
@@ -110,7 +116,11 @@ def evaluate(
 
         for sol in solutions:
             # Skip if already evaluated AND error logs are present
-            if sol.get("status") is not None and "public_error_logs" in sol:
+            if (
+                not reevaluate
+                and sol.get("status") is not None
+                and "public_error_logs" in sol
+            ):
                 progress.advance(task)
                 continue
 
