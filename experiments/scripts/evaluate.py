@@ -12,6 +12,8 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
 )
+from rich.panel import Panel
+from rich.table import Table
 
 from coevolution.core.individual import CodeIndividual, TestIndividual
 from coevolution.core.interfaces import OPERATION_INITIAL
@@ -106,6 +108,10 @@ def evaluate(
         task = progress.add_task("[cyan]Evaluating...", total=len(solutions))
 
         for sol in solutions:
+            if sol.get("status") is not None:
+                progress.advance(task)
+                continue
+
             q_id = sol["question_id"]
             snippet = sol["snippet"]
 
@@ -229,10 +235,64 @@ def evaluate(
         f"\n[bold green]Evaluation complete! Results updated in {jsonl_file}[/bold green]"
     )
 
-    # Summary
-    pass_count = sum(1 for s in solutions if s.get("status") == "pass")
+    # Results Table
+    results_table = Table(title="Evaluation Results")
+    results_table.add_column("Question ID", style="cyan")
+    results_table.add_column("Public Pass Rate", style="magenta")
+    results_table.add_column("Private Pass Rate", style="green")
+    results_table.add_column("Status", style="bold")
+
+    for sol in solutions:
+        results_table.add_row(
+            str(sol.get("question_id")),
+            sol.get("public_pass_rate", "N/A"),
+            sol.get("private_pass_rate", "N/A"),
+            sol.get("status", "N/A"),
+        )
+    console.print(results_table)
+
+    # Summary by Difficulty
+    stats = {
+        Difficulty.EASY: {"pass": 0, "total": 0},
+        Difficulty.MEDIUM: {"pass": 0, "total": 0},
+        Difficulty.HARD: {"pass": 0, "total": 0},
+    }
+
+    for sol in solutions:
+        q_id = sol["question_id"]
+        problem = problem_map.get(q_id)
+        if problem:
+            diff = problem.difficulty
+            if diff in stats:
+                stats[diff]["total"] += 1
+                if sol.get("status") == "pass":
+                    stats[diff]["pass"] += 1
+
+    summary_table = Table(title="Summary by Difficulty")
+    summary_table.add_column("Difficulty", style="cyan")
+    summary_table.add_column("Pass Rate", style="bold yellow")
+    summary_table.add_column("Percentage", style="bold green")
+
+    total_pass = 0
+    total_count = len(solutions)
+
+    for diff in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
+        s = stats[diff]
+        if s["total"] > 0:
+            pass_rate = f"{s['pass']}/{s['total']}"
+            percentage = f"{(s['pass'] / s['total']) * 100:.2f}%"
+            summary_table.add_row(diff.value.capitalize(), pass_rate, percentage)
+            total_pass += s["pass"]
+
+    console.print(summary_table)
+
+    overall_percentage = (total_pass / total_count * 100) if total_count > 0 else 0
     console.print(
-        f"Pass rate: {pass_count}/{len(solutions)} ({(pass_count / len(solutions)) * 100:.2f}%)"
+        Panel(
+            f"Overall Pass Rate: [bold green]{total_pass}/{total_count}[/bold green] ([bold cyan]{overall_percentage:.2f}%[/bold cyan])",
+            title="Final Summary",
+            border_style="bold green",
+        )
     )
 
 
