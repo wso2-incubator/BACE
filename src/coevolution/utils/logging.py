@@ -639,7 +639,7 @@ def log_evaluation_failures(
     """
     for code_id, test_results in execution_results.items():
         for test_id, result in test_results.items():
-            if result.status == "failed" and result.error_log:
+            if result.status in ["failed", "error"] and result.error_log:
                 logger.bind(is_evolution_event=True).info(
                     "EVALUATION_FAILED",
                     event_data={

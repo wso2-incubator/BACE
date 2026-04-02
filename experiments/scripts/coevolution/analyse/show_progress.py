@@ -926,14 +926,29 @@ def main(
                     )
 
                     if show_errors and not is_solved:
+                        # Collect failures, being case-insensitive for test_type and robust with IDs
                         champion_failures = [
                             e
                             for e in events
                             if e.get("event_type") == "EVALUATION_FAILED"
-                            and e.get("code_id") == champion_id
-                            and e.get("test_type") == "private"
-                            and e.get("generation") == last_private.get("generation")
+                            and str(e.get("code_id")) == str(champion_id)
+                            and str(e.get("test_type")).lower() == "private"
                         ]
+
+                        # Narrow down to only include the failures from the tests that failed in the final matrix
+                        failed_test_indices = [
+                            i for i, r in enumerate(results) if r == 0
+                        ]
+                        failed_test_ids = {
+                            str(test_ids[i]) for i in failed_test_indices
+                        }
+
+                        champion_failures = [
+                            f
+                            for f in champion_failures
+                            if str(f.get("test_id")) in failed_test_ids
+                        ]
+
                         if champion_failures:
                             console.print(
                                 f"\n[bold yellow]Champion Private Test Failures ({len(champion_failures)}):[/bold yellow]"
