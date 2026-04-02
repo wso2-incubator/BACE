@@ -52,7 +52,7 @@ def _worker_entry(
 
         sandbox = create_sandbox(config)
 
-        def run_snippet(snippet: str) -> Optional[str]:
+        def run_snippet(snippet: str) -> Optional[Any]:
             test_input_formatted = {"input_arg": input_data}
             script = composer.compose_evaluation_script(
                 snippet, json.dumps(test_input_formatted)
@@ -70,7 +70,15 @@ def _worker_entry(
                 exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
                 if exec_result.error:
                     return None
-                return exec_result.output.strip()
+                # compose_evaluation_script emits print(json.dumps(result)), so
+                # the raw stdout is already JSON-encoded. Decode it once here so
+                # that DifferentialResult.output_a/b holds the actual Python value,
+                # not a JSON string. get_test_method_from_io will re-encode it once.
+                raw = exec_result.output.strip()
+                try:
+                    return json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    return raw
 
         out_a = run_snippet(code_a_snippet)
         out_b = run_snippet(code_b_snippet)
@@ -181,7 +189,7 @@ class DifferentialFinder(IDifferentialFinder):
 
     def _run_single_sequential(
         self, code: str, input_data: dict[str, Any]
-    ) -> Optional[str]:
+    ) -> Optional[Any]:
         test_input_formatted = {"input_arg": input_data}
         script = self.composer.compose_evaluation_script(
             code, json.dumps(test_input_formatted)
@@ -197,7 +205,17 @@ class DifferentialFinder(IDifferentialFinder):
 
             cmd = self.runtime.get_execution_command(script_path)
             exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
-            return None if exec_result.error else exec_result.output.strip()
+            if exec_result.error:
+                return None
+            # compose_evaluation_script emits print(json.dumps(result)), so the
+            # raw stdout is already JSON-encoded. Decode it once here so that
+            # DifferentialResult.output_a/b holds the actual Python value, not a
+            # JSON string. get_test_method_from_io will re-encode it exactly once.
+            raw = exec_result.output.strip()
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return raw
 
     def _find_differential_parallel(
         self, code_a: str, code_b: str, inputs: list[dict[str, Any]], limit: int

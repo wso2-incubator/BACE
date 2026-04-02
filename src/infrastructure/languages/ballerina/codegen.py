@@ -101,8 +101,25 @@ def generate_test_case(
 
         function_name = func_match.group(2)
 
-        input_match = re.match(r"\w+\((.*)\)", input_str.strip())
-        args = input_match.group(1) if input_match else input_str
+        try:
+            import json
+            input_dict = json.loads(input_str)
+            inner_input = input_dict.get("input_arg", input_dict) if isinstance(input_dict, dict) else input_dict
+        except (json.JSONDecodeError, TypeError):
+            inner_input = input_str
+
+        if isinstance(inner_input, dict):
+            from .parser import get_function_signature
+            sig = get_function_signature(starter_code)
+            param_names = list(sig.keys())
+            
+            args_list = []
+            for name in param_names:
+                args_list.append(json.dumps(inner_input.get(name)))
+            args = ", ".join(args_list)
+        else:
+            input_match = re.match(r"\w+\((.*)\)", input_str.strip())
+            args = input_match.group(1) if input_match else input_str
 
         expected_value = output_str.strip()
 

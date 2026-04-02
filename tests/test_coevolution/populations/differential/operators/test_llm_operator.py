@@ -5,12 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from coevolution.core.interfaces.language import ILanguage
 from coevolution.populations.differential.operators.llm_operator import (
     DifferentialInputOutput,
     DifferentialLLMOperator,
 )
-from coevolution.strategies.llm_base import ILanguageModel
 
 
 @pytest.fixture
@@ -41,7 +39,7 @@ def mock_composer() -> MagicMock:
         lambda input_str,
         output_str,
         starter_code,
-        test_number: f"def test_case_{test_number}():\n    assert f({input_str}) == {output_str}"
+        test_number: f"def test_case_{test_number}():\n    assert f(json.loads('{input_str}')) == {output_str}"
     )
     return composer
 
