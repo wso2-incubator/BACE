@@ -191,8 +191,18 @@ def gen_stdin_test(
 ) -> str:
     """Generate a stdin test function from inputs."""
     # For stdin tests, the input into the method is always a string.
-    # We should NOT use _parse_val which might convert numeric strings to ints.
-    input_val = input_data
+    try:
+        import json
+        parsed_input = json.loads(input_data)
+        inner_input = parsed_input.get("input_arg", parsed_input) if isinstance(parsed_input, dict) else parsed_input
+        # Find the string value, usually it's `input_str` key in dict
+        if isinstance(inner_input, dict) and "input_str" in inner_input:
+            input_val = inner_input["input_str"]
+        else:
+            input_val = input_data
+    except (json.JSONDecodeError, TypeError):
+        input_val = input_data
+
     output_val = _parse_val(output_data)
 
     # Intelligence at generation time: align expected output to signature type
@@ -238,23 +248,41 @@ def gen_functional_test(
     return_type: Optional[str],
 ) -> str:
     """Generate a functional test case from inputs."""
-    input_lines = [line.strip() for line in input_data.split("\n") if line.strip()]
-
-    parsed_args = [_parse_val(line) for line in input_lines]
     parsed_output = _parse_val(output_data)
 
     # Intelligence at generation time: align expected output to signature type
     expected_aligned = _try_cast_expected(parsed_output, return_type)
-
-    args_repr = repr(parsed_args)
     output_repr = repr(expected_aligned)
+
+    try:
+        import json
+        parsed_input = json.loads(input_data)
+        inner_input = parsed_input.get("input_arg", parsed_input) if isinstance(parsed_input, dict) else parsed_input
+    except (json.JSONDecodeError, TypeError):
+        inner_input = input_data
+
+    if isinstance(inner_input, dict):
+        args_str = ", ".join(f"{k}={repr(v)}" for k, v in inner_input.items())
+        call_str = f"{method_name}({args_str})"
+        if not is_standalone:
+            call_str = f"solution.{call_str}"
+        setup_str = ""
+    else:
+        input_lines = [line.strip() for line in input_data.split("\n") if line.strip()]
+        parsed_args = [_parse_val(line) for line in input_lines]
+        args_repr = repr(parsed_args)
+        setup_str = f"    args = {args_repr}\n"
+        if is_standalone:
+            call_str = f"{method_name}(*args)"
+        else:
+            call_str = f"solution.{method_name}(*args)"
 
     if is_standalone:
         return (
             f"def test_case_{test_number}():\n"
-            f"    args = {args_repr}\n"
+            f"{setup_str}"
             f"    expected_output = {output_repr}\n"
-            f"    actual_output = {method_name}(*args)\n"
+            f"    actual_output = {call_str}\n"
             f"    try:\n"
             f"        assert actual_output == expected_output\n"
             f"    except AssertionError:\n"
@@ -264,9 +292,9 @@ def gen_functional_test(
     return (
         f"def test_case_{test_number}():\n"
         f"    solution = {class_name}()\n"
-        f"    args = {args_repr}\n"
+        f"{setup_str}"
         f"    expected_output = {output_repr}\n"
-        f"    actual_output = solution.{method_name}(*args)\n"
+        f"    actual_output = {call_str}\n"
         f"    try:\n"
         f"        assert actual_output == expected_output\n"
         f"    except AssertionError:\n"

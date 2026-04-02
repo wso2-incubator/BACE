@@ -7,7 +7,7 @@ population-centric location.
 import json
 import multiprocessing
 from dataclasses import dataclass, replace
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from loguru import logger
 
@@ -28,6 +28,14 @@ class ExecutionError:
 
     input_idx: int
     error_message: str
+
+
+@dataclass
+class _SnippetResult:
+    """Internal helper to represent the result of a single snippet execution."""
+
+    success: bool
+    output: Any = None
 
 
 WorkerResult = Union[
@@ -52,7 +60,7 @@ def _worker_entry(
 
         sandbox = create_sandbox(config)
 
-        def run_snippet(snippet: str) -> Optional[str]:
+        def run_snippet(snippet: str) -> _SnippetResult:
             test_input_formatted = {"input_arg": input_data}
             script = composer.compose_evaluation_script(
                 snippet, json.dumps(test_input_formatted)
@@ -69,14 +77,24 @@ def _worker_entry(
                 cmd = runtime.get_execution_command(script_path)
                 exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
                 if exec_result.error:
-                    return None
-                return exec_result.output.strip()
+                    return _SnippetResult(success=False)
+                # compose_evaluation_script emits print(json.dumps(result)), so
+                # the raw stdout is already JSON-encoded. Decode it once here so
+                # that DifferentialResult.output_a/b holds the actual Python value,
+                # not a JSON string. get_test_method_from_io will re-encode it once.
+                raw = exec_result.output.strip()
+                try:
+                    return _SnippetResult(success=True, output=json.loads(raw))
+                except (json.JSONDecodeError, TypeError):
+                    return _SnippetResult(success=True, output=raw)
 
-        out_a = run_snippet(code_a_snippet)
-        out_b = run_snippet(code_b_snippet)
+        res_a = run_snippet(code_a_snippet)
+        res_b = run_snippet(code_b_snippet)
 
-        if out_a is None or out_b is None:
+        if not res_a.success or not res_b.success:
             return idx, ExecutionError(idx, "Runtime execution failure in sandbox")
+
+        out_a, out_b = res_a.output, res_b.output
 
         if out_a != out_b:
             return idx, DifferentialResult(
@@ -172,16 +190,16 @@ class DifferentialFinder(IDifferentialFinder):
                 break
             res_a = self._run_single_sequential(code_a, ti)
             res_b = self._run_single_sequential(code_b, ti)
-            if res_a is None or res_b is None:
+            if not res_a.success or not res_b.success:
                 continue
-            if res_a != res_b:
+            if res_a.output != res_b.output:
                 logger.debug(f"Discrepancy found at input {idx}!")
-                found.append(DifferentialResult(ti, res_a, res_b))
+                found.append(DifferentialResult(ti, res_a.output, res_b.output))
         return found
 
     def _run_single_sequential(
         self, code: str, input_data: dict[str, Any]
-    ) -> Optional[str]:
+    ) -> _SnippetResult:
         test_input_formatted = {"input_arg": input_data}
         script = self.composer.compose_evaluation_script(
             code, json.dumps(test_input_formatted)
@@ -197,7 +215,17 @@ class DifferentialFinder(IDifferentialFinder):
 
             cmd = self.runtime.get_execution_command(script_path)
             exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
-            return None if exec_result.error else exec_result.output.strip()
+            if exec_result.error:
+                return _SnippetResult(success=False)
+            # compose_evaluation_script emits print(json.dumps(result)), so the
+            # raw stdout is already JSON-encoded. Decode it once here so that
+            # DifferentialResult.output_a/b holds the actual Python value, not a
+            # JSON string. get_test_method_from_io will re-encode it exactly once.
+            raw = exec_result.output.strip()
+            try:
+                return _SnippetResult(success=True, output=json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                return _SnippetResult(success=True, output=raw)
 
     def _find_differential_parallel(
         self, code_a: str, code_b: str, inputs: list[dict[str, Any]], limit: int

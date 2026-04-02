@@ -115,15 +115,10 @@ class DifferentialLLMOperator(BaseLLMService):
             logger.warning(f"Expected 1 IO pair, got {len(io_pairs)}; using first")
 
         io_pair = io_pairs[0]
-        # We store the input values as individual JSON strings, one per line.
-        # This is compatible with how functional tests are currently composed
-        # (split by \n and then each line parsed).
+        # Unify formats: pass JSON dictionary with 'input_arg' wrapper
+        # This resolves the input parsing error when kwargs/positional args mismatch.
         input_arg = io_pair["input_arg"]
-        # Build input lines in a deterministic order rather than relying on
-        # dict value iteration order, which may not match the function's
-        # parameter order.
-        input_lines = [json.dumps(input_arg[key]) for key in sorted(input_arg)]
-        input_str = "\n".join(input_lines)
+        input_str = json.dumps({"input_arg": input_arg})
         output_str = json.dumps(io_pair["output"])
         test_number = hash(f"{'_'.join(code_parent_ids)}_{io_index}") % 10000
 
