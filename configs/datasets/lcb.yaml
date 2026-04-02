@@ -23,6 +23,6 @@ trust_remote_code: true
 use_cache: true
 
 # Filtering options
-difficulty: "hard"  # Options: "easy", "medium", "hard", or null for all
+difficulty: null # Options: "easy", "medium", "hard", or null for all
 start_date: "2025-03-01"    # Format: "YYYY-MM-DD" or null for no filter
 end_date: "2025-05-31"      # Format: "YYYY-MM-DD" or null for no filter
