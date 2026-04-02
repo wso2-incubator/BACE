@@ -42,7 +42,7 @@ def mock_composer() -> MagicMock:
         test_number: (
             f"import json\n\n\n"
             f"def test_case_{test_number}():\n"
-            f"    assert f(json.loads('{input_str}')) == {output_str}"
+            f"    assert f(json.loads({input_str!r})) == {output_str}"
         )
     )
     return composer

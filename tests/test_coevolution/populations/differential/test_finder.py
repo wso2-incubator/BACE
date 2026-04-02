@@ -170,7 +170,8 @@ class TestOutputDecoding:
         assert result.output == raw, "Non-JSON stdout should be returned verbatim as a fallback."
 
     def test_execution_error_returns_none(self) -> None:
-        """If the sandbox reports an error, ``_run_single_sequential`` must return ``None``."""
+        """If the sandbox reports an error, ``_run_single_sequential`` must return a
+        ``_SnippetResult`` with ``success`` set to ``False`` and ``output`` set to ``None``."""
         local_sandbox: MagicMock = MagicMock()
         local_sandbox.execute_command.return_value = _make_exec_result(
             output="", error="Traceback (most recent call last): ..."
@@ -301,7 +302,7 @@ class TestFindDifferential:
         assert len(divergences) <= 3
 
     def test_input_skipped_on_execution_error(self) -> None:
-        """If ``_run_single_sequential`` returns ``None``, that input is silently skipped."""
+        """If ``_run_single_sequential`` reports a failure (success=False), that input is silently skipped."""
         inputs: list[dict[str, Any]] = [{"x": 1}, {"x": 2}]
 
         call_counter: list[int] = [0]
@@ -338,6 +339,6 @@ class TestFindDifferential:
         divergences: list[DifferentialResult] = finder.find_differential(
             "def a(): pass", "def b(): pass", "# gen"
         )
-        # input 0 is skipped (None); input 1 → out_a=1, out_b=2 → divergence
+        # input 0 is skipped (success=False); input 1 → out_a=1, out_b=2 → divergence
         assert len(divergences) == 1
         assert divergences[0].output_a != divergences[0].output_b
