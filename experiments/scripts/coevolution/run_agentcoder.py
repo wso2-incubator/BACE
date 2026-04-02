@@ -74,7 +74,7 @@ def load_problems(
 def main(
     # --- Experiment Identity ---
     run_id: Optional[str] = typer.Option(
-        None,
+        "agentcoder",
         "--run-id",
         "-r",
         help="Unique identifier for this run. If not provided, one will be auto-generated.",
