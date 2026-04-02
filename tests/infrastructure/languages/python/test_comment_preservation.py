@@ -62,5 +62,3 @@ def test_remove_main_block_syntax_error() -> None:
     invalid_code = "def foo(:"
     with pytest.raises(LanguageParsingError):
         remove_main_block(invalid_code)
-    with pytest.raises(LanguageParsingError):
-        remove_main_block(invalid_code)
