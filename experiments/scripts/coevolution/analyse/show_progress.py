@@ -925,6 +925,29 @@ def main(
                         )
                     )
 
+                    if show_errors and not is_solved:
+                        champion_failures = [
+                            e
+                            for e in events
+                            if e.get("event_type") == "EVALUATION_FAILED"
+                            and e.get("code_id") == champion_id
+                            and e.get("test_type") == "private"
+                            and e.get("generation") == last_private.get("generation")
+                        ]
+                        if champion_failures:
+                            console.print(
+                                f"\n[bold yellow]Champion Private Test Failures ({len(champion_failures)}):[/bold yellow]"
+                            )
+                            for f_row in champion_failures:
+                                t_id = fmt_id(str(f_row.get("test_id")))
+                                err = f_row.get("error_log", "Unknown Error")
+
+                                console.print(f"  [red]✖[/red] vs [bold]{t_id}[/bold]:")
+                                console.print(
+                                    Panel(err, border_style="dim red", padding=(0, 1))
+                                )
+
+
                 except (ValueError, IndexError):
                     console.print(
                         "[yellow]Warning: Champion not found in final private matrix.[/yellow]"
