@@ -72,7 +72,9 @@ def remove_main_block(code: str) -> str:
     except SyntaxError as e:
         raise LanguageParsingError(f"Failed to parse code: {e}") from e
 
-    new_body = []
+    lines = code.splitlines(keepends=True)
+    main_block_range: Optional[tuple[int, int]] = None
+
     for node in tree.body:
         if isinstance(node, ast.If) and isinstance(node.test, ast.Compare):
             is_standard = (
@@ -95,11 +97,18 @@ def remove_main_block(code: str) -> str:
             )
             if is_standard or is_reversed:
                 logger.debug("Removing if __name__ == '__main__' block")
-                continue
-        new_body.append(node)
+                start = node.lineno - 1
+                end = node.end_lineno if node.end_lineno is not None else node.lineno
+                main_block_range = (start, end)
+                break
 
-    tree.body = new_body
-    return ast.unparse(tree)
+    if main_block_range:
+        start, end = main_block_range
+        new_lines = lines[:start] + lines[end:]
+        return "".join(new_lines).strip()
+
+    return code.strip()
+
 
 
 def get_structural_metadata(code: str) -> Dict[str, Any]:
