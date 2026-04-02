@@ -316,6 +316,10 @@ def display_initialization(events: list[dict[str, Any]]) -> None:
     ]
     if gen0_matrices:
         render_observation_matrix(gen0_matrices[-1])
+    
+    # Show critical errors for Gen 0
+    gen0_failures = [e for e in events if e["event_type"] == "EVALUATION_FAILED" and e.get("generation") == 0]
+    render_critical_errors(gen0_failures)
 
 
 def display_belief_update(update: dict[str, Any], counter: int) -> None:
@@ -463,6 +467,57 @@ def display_population_overview(
     console.print()
 
 
+def render_critical_errors(failures: list[dict[str, Any]]) -> None:
+    """Detects and renders prominent warnings for sandbox timeouts/memory limits."""
+    if not failures:
+        return
+
+    critical_patterns = [
+        "timeout",
+        "timed out",
+        "execution timed out",
+        "command execution timed out",
+        "memory limit exceeded",
+    ]
+
+    critical_failures = []
+    for f in failures:
+        err = str(f.get("error_log", "")).lower()
+        if any(p in err for p in critical_patterns):
+            critical_failures.append(f)
+
+    if not critical_failures:
+        return
+
+    console.print()
+    for f in critical_failures:
+        c_id = fmt_id(str(f.get("code_id", "Unknown")))
+        t_id = fmt_id(str(f.get("test_id", "Unknown")))
+        err = f.get("error_log", "Unknown Error")
+        
+        # Determine if it's memory or timeout for a more specific icon
+        icon = "⏳" if "timeout" in err.lower() or "timed out" in err.lower() else "🧠"
+        
+        warning_text = Text.assemble(
+            (f"{icon} CRITICAL FAILURE: ", "bold red"),
+            (f"{c_id}", "bold cyan"),
+            (" vs ", "dim"),
+            (f"{t_id}\n\n", "bold magenta"),
+            (err, "red"),
+        )
+        
+        console.print(
+            Panel(
+                warning_text,
+                title="[blink bold red]CRITICAL EXECUTION ERROR[/blink bold red]",
+                border_style="bold red",
+                padding=(1, 2),
+                subtitle="[dim]Check sandbox resource limits if this persists[/dim]",
+            )
+        )
+    console.print()
+
+
 def render_cycle(
     events: list[dict[str, Any]],
     cycle_index: int,
@@ -491,6 +546,9 @@ def render_cycle(
 
     matrices = list(matrix_map.values())
     failures = [e for e in events if e["event_type"] == "EVALUATION_FAILED"]
+
+    # 0.5. Critical Errors (Always Visible)
+    render_critical_errors(failures)
 
     if matrices:
         for row in matrices:
