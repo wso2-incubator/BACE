@@ -97,7 +97,7 @@ def main(
         help="Filter problems up to this date (YYYY-MM-DD).",
     ),
     difficulty: Difficulty = typer.Option(
-        Difficulty.HARD,
+        None,
         "--difficulty",
         "-d",
         help="Filter problems by difficulty level.",
