@@ -276,16 +276,17 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     sandbox_diff_config = sandbox_config.get("differential", {})
     differential_sandbox_config = SandboxConfig(
         language=language,
-        timeout=sandbox_diff_config.get("timeout", 20),
-        max_memory_mb=sandbox_diff_config.get("max_memory_mb", 100),
+        timeout=sandbox_diff_config.get("timeout", 30),
+        max_memory_mb=sandbox_diff_config.get("max_memory_mb", 1024 * 2),
         max_output_size=sandbox_diff_config.get("max_output_size", 10_000_000),
+        test_method_timeout=sandbox_diff_config.get("test_method_timeout", 30),
     )
 
     sandbox_exec_config = sandbox_config.get("execution", {})
     exec_sandbox_config = SandboxConfig(
         language=language,
-        timeout=sandbox_exec_config.get("timeout", 180),
-        max_memory_mb=sandbox_exec_config.get("max_memory_mb", 100),
+        timeout=sandbox_exec_config.get("timeout", 30),
+        max_memory_mb=sandbox_exec_config.get("max_memory_mb", 1024 * 2),
         max_output_size=sandbox_exec_config.get("max_output_size", 10_000_000),
         test_method_timeout=sandbox_exec_config.get("test_method_timeout", 30),
     )
