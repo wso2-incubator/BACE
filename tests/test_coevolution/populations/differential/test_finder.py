@@ -26,7 +26,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from coevolution.core.interfaces.data import SandboxConfig
-from coevolution.populations.differential.finder import DifferentialFinder
+from coevolution.populations.differential.finder import (
+    DifferentialFinder,
+    _SnippetResult,
+)
 from coevolution.populations.differential.types import DifferentialResult
 
 
@@ -98,18 +101,19 @@ class TestOutputDecoding:
         local_sandbox.execute_command.return_value = _make_exec_result(stdout)
 
         finder = _make_finder(local_sandbox)
-        result: Any = finder._run_single_sequential(
+        result: _SnippetResult = finder._run_single_sequential(
             code="class Solution:\n    def sol(self, input_str): return '0\\n'",
             input_data={"input_str": ""},
         )
 
-        assert result == "0\n", (
-            f"Expected decoded Python string '0\\n', got {result!r}.\n"
+        assert result.success is True
+        assert result.output == "0\n", (
+            f"Expected decoded Python string '0\\n', got {result.output!r}.\n"
             "REGRESSION: _run_single_sequential returned raw JSON stdout.\n"
             "DifferentialFinder must json.loads() the stdout from compose_evaluation_script."
         )
         # Guard against the old broken doubly-encoded value
-        assert result != '"0\\n"', (
+        assert result.output != '"0\\n"', (
             "Output is '\"0\\\\n\"' — the raw JSON-encoded string is being stored.\n"
             "get_test_method_from_io will json.dumps it again, making expected_output "
             "doubly-encoded and unmatchable by any code individual."
@@ -122,16 +126,17 @@ class TestOutputDecoding:
         local_sandbox.execute_command.return_value = _make_exec_result(stdout)
 
         finder = _make_finder(local_sandbox)
-        result: Any = finder._run_single_sequential(
+        result: _SnippetResult = finder._run_single_sequential(
             code="class Solution:\n    def sol(self, x): return 3",
             input_data={"x": 0},
         )
 
-        assert result == 3, (
-            f"Expected int 3, got {result!r} (type {type(result).__name__}).\n"
+        assert result.success is True
+        assert result.output == 3, (
+            f"Expected int 3, got {result.output!r} (type {type(result.output).__name__}).\n"
             "Integer outputs from compose_evaluation_script must be json.loads-decoded."
         )
-        assert not isinstance(result, str), (
+        assert not isinstance(result.output, str), (
             "result is still a string; should be a Python int after json.loads."
         )
 
@@ -142,12 +147,13 @@ class TestOutputDecoding:
         local_sandbox.execute_command.return_value = _make_exec_result(stdout)
 
         finder = _make_finder(local_sandbox)
-        result: Any = finder._run_single_sequential(
+        result: _SnippetResult = finder._run_single_sequential(
             code="class Solution:\n    def sol(self): return [1,2,3]",
             input_data={},
         )
 
-        assert result == [1, 2, 3], f"Expected list [1, 2, 3], got {result!r}."
+        assert result.success is True
+        assert result.output == [1, 2, 3], f"Expected list [1, 2, 3], got {result.output!r}."
 
     def test_non_json_stdout_falls_back_gracefully(self) -> None:
         """Non-JSON stdout (e.g. a legacy bare ``print``) must be returned as-is."""
@@ -156,11 +162,12 @@ class TestOutputDecoding:
         local_sandbox.execute_command.return_value = _make_exec_result(raw)
 
         finder = _make_finder(local_sandbox)
-        result: Any = finder._run_single_sequential(
+        result: _SnippetResult = finder._run_single_sequential(
             code="def sol(): pass", input_data={}
         )
 
-        assert result == raw, "Non-JSON stdout should be returned verbatim as a fallback."
+        assert result.success is True
+        assert result.output == raw, "Non-JSON stdout should be returned verbatim as a fallback."
 
     def test_execution_error_returns_none(self) -> None:
         """If the sandbox reports an error, ``_run_single_sequential`` must return ``None``."""
@@ -170,11 +177,31 @@ class TestOutputDecoding:
         )
 
         finder = _make_finder(local_sandbox)
-        result: Any = finder._run_single_sequential(
+        result: _SnippetResult = finder._run_single_sequential(
             code="def sol(): pass", input_data={}
         )
 
-        assert result is None
+        assert result.success is False
+        assert result.output is None
+
+    def test_legitimate_none_output_is_not_treated_as_error(self) -> None:
+        """A solution returning JSON 'null' results in Python None.
+        This must be treated as a SUCCESSFUL execution with a None value,
+        not as a sandbox error.
+        """
+        # json.dumps(None) is 'null'
+        stdout: str = json.dumps(None)  # → 'null'
+        local_sandbox: MagicMock = MagicMock()
+        local_sandbox.execute_command.return_value = _make_exec_result(stdout)
+
+        finder = _make_finder(local_sandbox)
+        result: _SnippetResult = finder._run_single_sequential(
+            code="def sol(): return None", input_data={}
+        )
+
+        # CRITICAL: success must be True, even though output is None
+        assert result.success is True
+        assert result.output is None, f"Expected output None, got {result.output!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -279,14 +306,14 @@ class TestFindDifferential:
 
         call_counter: list[int] = [0]
 
-        def patched_run(code: str, input_data: dict[str, Any]) -> Any:
+        def patched_run(code: str, input_data: dict[str, Any]) -> _SnippetResult:
             i = call_counter[0]
             call_counter[0] += 1
             # First call (code_a for input 0): simulate a sandbox error
             if i == 0:
-                return None
+                return _SnippetResult(success=False)
             # Subsequent calls return incrementing decoded integers
-            return i
+            return _SnippetResult(success=True, output=i)
 
         local_sandbox: MagicMock = MagicMock()
         composer: MagicMock = MagicMock()

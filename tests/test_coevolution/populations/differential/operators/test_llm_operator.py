@@ -39,7 +39,11 @@ def mock_composer() -> MagicMock:
         lambda input_str,
         output_str,
         starter_code,
-        test_number: f"def test_case_{test_number}():\n    assert f(json.loads('{input_str}')) == {output_str}"
+        test_number: (
+            f"import json\n\n\n"
+            f"def test_case_{test_number}():\n"
+            f"    assert f(json.loads('{input_str}')) == {output_str}"
+        )
     )
     return composer
 
