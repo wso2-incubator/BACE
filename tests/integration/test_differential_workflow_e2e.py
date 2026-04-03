@@ -287,7 +287,7 @@ class Solution:
         assert "test_case_" in test_methods[1]
         assert "test_case_" in test_methods[2]
 
-        # Verify each contains the correct input values in the ast inputs
-        assert "args = [1, 10]" in test_methods[0]
-        assert "args = [10, 20]" in test_methods[1]
-        assert "args = [20, 30]" in test_methods[2]
+        # Verify each contains the correct input values as keyword arguments
+        assert "l=1, r=10" in test_methods[0]
+        assert "l=10, r=20" in test_methods[1]
+        assert "l=20, r=30" in test_methods[2]

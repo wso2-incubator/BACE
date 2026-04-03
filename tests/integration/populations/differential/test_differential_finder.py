@@ -229,8 +229,8 @@ if __name__ == "__main__":
     # Check Logical Divergence ("Racecar")
     res_logic = results[0]
     assert res_logic.input_data == {"s": "Racecar"}
-    assert res_logic.output_a == "true"
-    assert res_logic.output_b == "false"
+    assert res_logic.output_a is True
+    assert res_logic.output_b is False
 
     # Note: The empty string case ("") causes code_b to crash, so it's skipped
     # by the finder and not reported as a divergence

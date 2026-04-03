@@ -78,10 +78,10 @@ if __name__ == "__main__":
             "r": 8,
         } in input_data_found
 
-        # Verify outputs are strings
+        # Verify outputs are the results of the method logic
         for div in results:
-            assert isinstance(div.output_a, str)
-            assert isinstance(div.output_b, str)
+            assert isinstance(div.output_a, int)
+            assert isinstance(div.output_b, int)
 
     def test_list_parameter_sorting_logic(self) -> None:
         """
@@ -138,10 +138,10 @@ if __name__ == "__main__":
         assert {"nums": [5, 2, 8, 1]} in input_data_list
         assert {"nums": [10, 5, 1, 9, 2]} in input_data_list
 
-        # Verify outputs are strings and show sorting differences
+        # Verify outputs are lists
         for res in results:
-            assert isinstance(res.output_a, str)
-            assert isinstance(res.output_b, str)
+            assert isinstance(res.output_a, list)
+            assert isinstance(res.output_b, list)
             # Output A should be ascending, Output B should be descending
             assert res.output_a != res.output_b
 
@@ -261,10 +261,10 @@ if __name__ == "__main__":
             "k": 2,
         } in input_data_list
 
-        # Verify outputs are strings and show differences
+        # Verify outputs are of correct types (list[int]) and show differences
         for res in results:
-            assert isinstance(res.output_a, str)
-            assert isinstance(res.output_b, str)
+            assert isinstance(res.output_a, list)
+            assert isinstance(res.output_b, list)
             assert res.output_a != res.output_b
 
     def test_nested_list_parameter(self) -> None:
@@ -326,8 +326,8 @@ if __name__ == "__main__":
         # Check first divergence
         div = results[0]
         assert div.input_data == {"matrix": [[1, 2], [3, 4], [5, 6]]}
-        assert div.output_a == "[1, 2, 3, 4, 5, 6]"
-        assert div.output_b == "[1, 3, 5]"
+        assert div.output_a == [1, 2, 3, 4, 5, 6]
+        assert div.output_b == [1, 3, 5]
 
     def test_no_divergence_identical_implementations(self) -> None:
         """
@@ -425,8 +425,8 @@ if __name__ == "__main__":
         assert {"data": {"a": 1, "b": -2, "c": 3}} in input_data_list
         assert {"data": {"x": -5, "y": -10}} in input_data_list
 
-        # Verify outputs are strings and show the difference
+        # Verify outputs are of correct types (int) and show differences
         for res in results:
-            assert isinstance(res.output_a, str)
-            assert isinstance(res.output_b, str)
+            assert isinstance(res.output_a, int)
+            assert isinstance(res.output_b, int)
             assert res.output_a != res.output_b
