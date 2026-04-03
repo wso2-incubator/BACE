@@ -115,7 +115,9 @@ class PrintingLLMClient(LLMClient):
 
     def __init__(self, inner: LLMClient) -> None:
         self._inner = inner
-        self.workers = inner.workers
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
 
     def generate(self, prompt: object, **kwargs: object) -> str:
         response = self._inner.generate(prompt, **kwargs)
