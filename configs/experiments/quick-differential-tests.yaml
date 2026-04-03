@@ -19,7 +19,6 @@ code_profile:
   edit_rate: 0.6
   k_failing_tests: 5
   init_pop_batch_size: 1
-  llm_workers: 3
   diversity_enabled: false
   prob_assigner_strategy: "min"
 

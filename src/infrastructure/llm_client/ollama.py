@@ -16,9 +16,10 @@ class OllamaClient(LLMClient):
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = False,
+        workers: int = 2,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit)
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
         import ollama
 
         self.ollama = ollama

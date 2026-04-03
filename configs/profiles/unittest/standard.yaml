@@ -19,7 +19,6 @@ gamma: 0.25 # P(pass | both incorrect)
 learning_rate: 0.1
 
 # Performance
-llm_workers: 10
 diversity_enabled: true
 
 # Probability assigner strategy: one of ["min", "mean", "max", "init"]

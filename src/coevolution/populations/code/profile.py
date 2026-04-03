@@ -50,7 +50,6 @@ def create_default_code_profile(
     crossover_rate: float = 0.2,
     generic_edit_rate: float = 0.6,
     init_pop_batch_size: int = 2,
-    llm_workers: int = 4,
     diversity_enabled: bool = True,
     prob_assigner_strategy: str = "min",
     k_failing_tests: int = 10,
@@ -111,7 +110,7 @@ def create_default_code_profile(
             RegisteredOperator(weight=crossover_rate, operator=crossover_op),
             RegisteredOperator(weight=generic_edit_rate, operator=generic_edit_op),
         ],
-        llm_workers=llm_workers,
+        llm_workers=llm_client.workers,
     )
 
     initializer: BaseCodeInitializer
@@ -121,7 +120,7 @@ def create_default_code_profile(
             parser=language_adapter.parser,
             language_name=language_adapter.language,
             pop_config=population_config,
-            llm_workers=llm_workers,
+            llm_workers=llm_client.workers,
         )
     else:
         initializer = StandardCodeInitializer(
@@ -130,7 +129,7 @@ def create_default_code_profile(
             language_name=language_adapter.language,
             pop_config=population_config,
             init_batch_size=init_pop_batch_size,
-            llm_workers=llm_workers,
+            llm_workers=llm_client.workers,
         )
 
     elite_selector: IEliteSelectionStrategy[CodeIndividual] = (

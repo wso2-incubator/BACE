@@ -33,6 +33,5 @@ rephraser:
   n: 0
 
 code_profile_overrides:
-  llm_workers: 10
   init_pop_batch_size: 1
   k_failing_tests: 1

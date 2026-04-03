@@ -19,7 +19,6 @@ code_profile:
   edit_rate: 0.6
   k_failing_tests: 5
   init_pop_batch_size: 1
-  llm_workers: 3
   diversity_enabled: false
   prob_assigner_strategy: "min"
 
@@ -36,7 +35,6 @@ unittest_profile:
   beta: 0.2
   gamma: 0.1
   learning_rate: 0.05
-  llm_workers: 2
   diversity_enabled: false
 
 differential_profile: "profiles/differential/standard.yaml"

@@ -15,6 +15,7 @@ def create_llm_client(
     max_output_tokens: Optional[int] = None,
     enable_token_limit: Optional[bool] = None,
     reasoning_effort: Optional[str] = None,
+    workers: Optional[int] = None,
     **kwargs: Any,
 ) -> LLMClient:
     """Create an LLM client with the specified provider and configuration.
@@ -45,8 +46,11 @@ def create_llm_client(
     client_kwargs = {
         k: v
         for k, v in kwargs.items()
-        if k not in ["max_output_tokens", "enable_token_limit", "reasoning_effort"]
+        if k not in ["max_output_tokens", "enable_token_limit", "reasoning_effort", "workers"]
     }
+
+    if workers is not None:
+        client_kwargs["workers"] = workers
 
     client: LLMClient
     if provider == "openai":

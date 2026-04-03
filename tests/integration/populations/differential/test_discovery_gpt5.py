@@ -83,7 +83,7 @@ def test_discovery_operator_gpt5() -> Optional[int]:
         divergence_limit=3,
         max_pairs_per_group=1,
         num_passing_tests_to_sample=0,
-        llm_workers=1
+        llm_workers=llm.workers
     )
 
     # 4. Setup Problem & Context

@@ -32,7 +32,6 @@ def create_agent_coder_code_profile(
     language_adapter: ILanguage,
     # ... (rest of parameters)
     initial_prior: float = 0.2,
-    llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
 ) -> CodeProfile:
     """Create an AgentCoder (iterative repair) code profile."""
@@ -63,7 +62,7 @@ def create_agent_coder_code_profile(
 
     breeder: Breeder[CodeIndividual] = Breeder(
         registered_operators=[RegisteredOperator(weight=1.0, operator=edit_op)],
-        llm_workers=llm_workers,
+        llm_workers=llm_client.workers,
     )
 
     initializer = AgentCoderInitializer(
