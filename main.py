@@ -121,6 +121,13 @@ def run(
         "--dry-run",
         help="Load and validate config without running experiment",
     ),
+    # === Resume Functionality ===
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        "-R",
+        help="Resume an incomplete run by skipping already processed problems.",
+    ),
 ) -> None:
     """
     Run a coevolution experiment using YAML configuration.
@@ -202,6 +209,7 @@ def run(
         file_level=log_config.get("file_level", "TRACE"),
         log_file_base_name=log_config.get("log_file_base_name", "coevolution_run"),
         run_id=run_id,
+        resume=resume,
     )
 
     # Save run config for dashboard accessibility
@@ -219,7 +227,7 @@ def run(
     # 7. RUN EXPERIMENT
     # =================================================================
     try:
-        _run_experiment(experiment_config, run_id)
+        _run_experiment(experiment_config, run_id, resume=resume)
 
         logging_utils.log_section_header("INFO", "EXPERIMENT COMPLETED SUCCESSFULLY")
 
@@ -228,7 +236,7 @@ def run(
         raise typer.Exit(code=1)
 
 
-def _run_experiment(config: dict[str, Any], run_id: str) -> None:
+def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -> None:
     """
     Execute the coevolution experiment using the provided configuration.
 
@@ -446,6 +454,32 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
     for i, problem in enumerate(selected_problems):
         global_idx = (start_index if not problem_ids else 0) + i
 
+        # Check for completion if resume is enabled
+        if resume:
+            if logging_utils.is_problem_completed(run_id, problem.question_id):
+                logger.info(
+                    f"[{i+1}/{len(selected_problems)}] Skipping already completed problem: {problem.question_id}"
+                )
+                continue
+            else:
+                # If file exists but not complete, we override it for a fresh start
+                # (as requested: "we SHOULD override it")
+                from coevolution.utils.paths import sanitize_id
+
+                sanitized_run_id = sanitize_id(run_id)
+                sanitized_pid = sanitize_id(problem.question_id)
+                history_path = (
+                    Path("logs")
+                    / sanitized_run_id
+                    / sanitized_pid
+                    / "evolutionary_history.jsonl"
+                )
+                if history_path.exists():
+                    logger.warning(
+                        f"[{i+1}/{len(selected_problems)}] Problem {problem.question_id} was interrupted. Overriding partial history log."
+                    )
+                    history_path.unlink()
+
         # Re-initialize logging for this specific problem context.
         # This updates the global environment so child workers know which directory to log to.
         run_id = logging_utils.setup_logging(
@@ -453,6 +487,7 @@ def _run_experiment(config: dict[str, Any], run_id: str) -> None:
             file_level=log_config.get("file_level", "DEBUG"),
             run_id=run_id,
             problem_id=problem.question_id,
+            resume=resume,
         )
 
         with logger.contextualize(problem_id=problem.question_id, run_id=run_id):

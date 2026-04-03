@@ -19,6 +19,7 @@ import multiprocessing
 import os
 import sys
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -39,6 +40,7 @@ def setup_logging(
     log_file_base_name: str = "coevolution_run",
     run_id: str | None = None,
     problem_id: str = "SETUP",
+    resume: bool = False,
 ) -> str:
     """
     Architecturally robust logging setup that prevents multiprocessing corruption.
@@ -48,6 +50,8 @@ def setup_logging(
         file_level: Log level for file output (default: "DEBUG")
         log_file_base_name: Base name for log files (default: "coevolution_run")
         run_id: Unique identifier for this run, included in log file names (default: generates UUID)
+        problem_id: ID of the problem being processed (default: SETUP)
+        resume: If True, allows reusing an existing run_id directory without renaming (default: False)
     """
     logger.remove()
 
@@ -66,7 +70,7 @@ def setup_logging(
         problem_id = os.getenv("COEV_PROBLEM_ID", "SETUP")
 
     # Detect if we should check for collisions (only in MainProcess and for NEW runs)
-    if is_main_process and run_id != os.getenv("COEV_RUN_ID"):
+    if is_main_process and run_id != os.getenv("COEV_RUN_ID") and not resume:
         # If run_id directory exists, append timestamp until unique
         base_run_id = run_id
         while os.path.exists(f"logs/{run_id}"):
@@ -201,6 +205,47 @@ def setup_logging(
         raise ValueError("Run ID could not be determined")
 
     return run_id
+
+
+def is_problem_completed(run_id: str, problem_id: str) -> bool:
+    """
+    Check if a problem has successfully completed evolution.
+    A problem is considered completed if the 'survived' event exists in the history log.
+
+    Args:
+        run_id: The ID of the run
+        problem_id: The ID of the problem
+
+    Returns:
+        bool: True if 'survived' event is found in the last 1MB of history log
+    """
+    from coevolution.utils.paths import sanitize_id
+
+    sanitized_run_id = sanitize_id(run_id)
+    sanitized_pid = sanitize_id(problem_id)
+    history_path = Path("logs") / sanitized_run_id / sanitized_pid / "evolutionary_history.jsonl"
+
+    if not history_path.exists():
+        return False
+
+    # Check the last 1MB of the file for the "survived" event
+    # Survival events are logged at the very end of finalization.
+    try:
+        with open(history_path, "rb") as f:
+            f.seek(0, 2)
+            file_size = f.tell()
+            # If file is empty or very small, it's definitely not completed
+            if file_size < 10:
+                return False
+
+            read_size = min(file_size, 1024 * 1024)  # 1MB
+            f.seek(max(0, file_size - read_size))
+            chunk = f.read(read_size).decode("utf-8", errors="ignore")
+            # We look for the "survived" event tag
+            return '"event": "survived"' in chunk
+    except Exception:
+        # If we can't read it, assume not complete
+        return False
 
 
 def log_section_header(level: str, message: str) -> None:
