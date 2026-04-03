@@ -20,9 +20,10 @@ class OpenAIChatClient(LLMClient):
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
+        workers: int = 32,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit)
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
         from openai import OpenAI
 
         self.client = OpenAI(**kwargs)
@@ -67,9 +68,10 @@ class OpenAIClient(LLMClient):
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
         reasoning_effort: str | None = "minimal",
+        workers: int = 32,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit)
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
         from openai import OpenAI
 
         self.reasoning_effort = reasoning_effort

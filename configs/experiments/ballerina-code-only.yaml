@@ -36,5 +36,4 @@ rephraser:
 
 
 code_profile_overrides:
-  llm_workers: 1
   init_pop_batch_size: 1

@@ -20,9 +20,10 @@ class TransformersClient(LLMClient):
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = False,
+        workers: int = 1,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit)
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
         from transformers import pipeline
 
         # Type as Callable[..., Any] to keep mypy satisfied for the dynamic

@@ -43,7 +43,6 @@ def create_unittest_test_profile(
     beta: float = 0.3,
     gamma: float = 0.3,
     learning_rate: float = 0.05,
-    llm_workers: int = 1,
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
 ) -> TestProfile:
@@ -97,7 +96,7 @@ def create_unittest_test_profile(
             RegisteredOperator(weight=crossover_rate, operator=crossover_op),
             RegisteredOperator(weight=edit_rate, operator=edit_op),
         ],
-        llm_workers=llm_workers,
+        llm_workers=llm_client.workers,
     )
 
     initializer = UnittestInitializer(
@@ -105,7 +104,7 @@ def create_unittest_test_profile(
         parser=language_adapter.parser,
         language_name=language_adapter.language,
         pop_config=population_config,
-        llm_workers=llm_workers,
+        llm_workers=llm_client.workers,
     )
 
     elite_selector: TestDiversityEliteSelector[TestIndividual] = (

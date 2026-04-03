@@ -22,6 +22,7 @@ class GeminiLLMClient(LLMClient):
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
         reasoning_effort: str | None = "minimal",
+        workers: int = 32,
         **kwargs: Any,
     ) -> None:
         """Initialize Gemini client.
@@ -33,9 +34,10 @@ class GeminiLLMClient(LLMClient):
             reasoning_effort: The reasoning effort level (thinking level).
                              Common values: 'minimal', 'low', 'medium', 'high'.
                              Mapped to Gemini's thinking_level.
+            workers: Max workers allowed.
             **kwargs: Additional arguments passed to the genai.Client.
         """
-        super().__init__(model, max_output_tokens, enable_token_limit)
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
 
         # Use api_key from kwargs if provided, otherwise from environment
         api_key = kwargs.pop("api_key", os.environ.get("GEMINI_API_KEY"))

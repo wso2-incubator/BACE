@@ -7,3 +7,4 @@ reasoning_effort: null  # Use model default
 
 # Token limit configuration - disabled
 max_output_tokens: null
+workers: 2

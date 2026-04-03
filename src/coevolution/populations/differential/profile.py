@@ -39,7 +39,6 @@ def create_differential_test_profile(
     beta: float = 0.3,
     gamma: float = 0.3,
     learning_rate: float = 0.05,
-    llm_workers: int = 4,
     cpu_workers: int = 8,
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
@@ -91,7 +90,7 @@ def create_differential_test_profile(
         func_eq_selector=FunctionallyEqSelector(),
         max_pairs_per_group=max_pairs_per_group,
         num_passing_tests_to_sample=num_passing_tests_to_sample,
-        llm_workers=llm_workers,
+        llm_workers=llm_client.workers,
     )
 
     breeder: Breeder[TestIndividual] = Breeder(

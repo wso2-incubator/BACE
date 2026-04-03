@@ -18,6 +18,7 @@ class LLMClient(ABC):
         model: str,
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
+        workers: int = 1,
     ) -> None:
         """Initialize LLM client with token tracking.
 
@@ -27,8 +28,10 @@ class LLMClient(ABC):
                              Defaults to 1 million if None.
             enable_token_limit: Whether to enforce the token limit.
                               If False, tokens are still counted but no limit is enforced.
+            workers: Maximum number of concurrent requests this client can handle.
         """
         self.model = model
+        self.workers = workers
         self._total_input_tokens = 0
         self._total_output_tokens = 0
         self._max_output_tokens = max_output_tokens or self.DEFAULT_TOKEN_LIMIT

@@ -17,7 +17,6 @@ k_failing_tests: 10  # Max number of failing tests to use for edit
 
 # Performance settings
 init_pop_batch_size: 2
-llm_workers: 10
 
 # Selection strategy
 diversity_enabled: true
