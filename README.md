@@ -55,7 +55,28 @@ See [configs/README.md](configs/README.md) for details and examples on composing
 ## Running and Debugging
 
 - Use `--dry-run` to validate configuration and view the resolved config without executing experiments.
-- The runner saves a resolved config and run metadata to `logs/configs/` and `logs/metadata/` respectively for reproducibility.
+- The runner saves a resolved config and run metadata to `logs/run_config.json` within each run directory for reproducibility.
+
+## Resuming Experiments
+
+If an experiment is interrupted (e.g., due to a crash or manually stopping it), you can resume it using the same `run_id`:
+
+```bash
+uv run python main.py run --config configs/experiments/default.yaml --run-id <existing_run_id>
+```
+
+By default, the `--resume` flag is specialized to `True`. The system will:
+
+1. **Reuse the existing log directory** without renaming it.
+2. **Scan existing problem logs** for a completion marker (`"event": "survived"`).
+3. **Skip already completed problems** and jump directly to the next one in the sequence.
+4. **Override partial logs** for problems that were interrupted mid-evolution to ensure a clean restart for that specific problem.
+
+To disable this behavior and force a fresh run (renaming the directory if a collision occurs), use `--no-resume`:
+
+```bash
+uv run python main.py run --config configs/experiments/default.yaml --run-id <existing_run_id> --no-resume
+```
 
 ## Where to look next
 
