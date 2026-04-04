@@ -65,7 +65,7 @@ If an experiment is interrupted (e.g., due to a crash or manually stopping it), 
 uv run python main.py run --config configs/experiments/default.yaml --run-id <existing_run_id>
 ```
 
-By default, the `--resume` flag is specialized to `True`. The system will:
+By default, the `--resume` flag is set to `True`. The system will:
 
 1. **Reuse the existing log directory** without renaming it.
 2. **Scan existing problem logs** for a completion marker (`"event": "survived"`).
