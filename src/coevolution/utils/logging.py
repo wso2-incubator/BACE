@@ -18,15 +18,19 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import pandas as pd
 from loguru import logger
 
+from coevolution.utils.paths import sanitize_id
+
 if TYPE_CHECKING:
-    import numpy as np
     from loguru import Record
 
     from coevolution.core.interfaces import Problem
@@ -66,6 +70,11 @@ def setup_logging(
     # Generate/Resolve run_id (fallback to env for multiprocess workers)
     if run_id is None:
         run_id = os.getenv("COEV_RUN_ID", uuid.uuid4().hex[:8])
+
+    # Ensure run_id is path-safe before any existence checks or log setup
+
+    run_id = sanitize_id(run_id)
+
     if problem_id == "SETUP":
         problem_id = os.getenv("COEV_PROBLEM_ID", "SETUP")
 
@@ -74,9 +83,6 @@ def setup_logging(
         # If run_id directory exists, append timestamp until unique
         base_run_id = run_id
         while os.path.exists(f"logs/{run_id}"):
-            import time
-            from datetime import datetime
-
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # If we are hitting collisions in the same second, add more precision
             run_id = f"{base_run_id}_{timestamp}"
@@ -144,8 +150,6 @@ def setup_logging(
         return not bool(record["extra"].get("is_evolution_event", False))
 
     if is_main_process:
-        from coevolution.utils.paths import sanitize_id
-
         sanitized_run_id = sanitize_id(run_id)
         sanitized_pid = sanitize_id(problem_id)
 
@@ -223,7 +227,9 @@ def is_problem_completed(run_id: str, problem_id: str) -> bool:
 
     sanitized_run_id = sanitize_id(run_id)
     sanitized_pid = sanitize_id(problem_id)
-    history_path = Path("logs") / sanitized_run_id / sanitized_pid / "evolutionary_history.jsonl"
+    history_path = (
+        Path("logs") / sanitized_run_id / sanitized_pid / "evolutionary_history.jsonl"
+    )
 
     if not history_path.exists():
         return False
@@ -363,7 +369,7 @@ def log_prior_statistics(population_type: str, probs: "np.ndarray") -> None:
         logger.debug(f"Prior {population_type} beliefs: [Empty Population]")
         return
 
-    import numpy as np
+    # import removed
 
     mean_prob = np.mean(probs)
     logger.debug(
@@ -389,7 +395,6 @@ def log_posterior_statistics(
         logger.debug(f"Posterior {population_type} beliefs: [Empty Population]")
         return
 
-    import numpy as np
 
     prior_mean = np.mean(prior_probs)
     posterior_mean = np.mean(posterior_probs)
@@ -423,7 +428,6 @@ def log_belief_changes(
         )
         return
 
-    import numpy as np
 
     deltas = posterior_probs - prior_probs
     logger.trace(
@@ -445,7 +449,6 @@ def _compute_pass_rates(matrix: "np.ndarray") -> "np.ndarray":
         1D numpy array of pass rates for each row (fraction of columns that are 1)
     """
 
-    import numpy as np
 
     # add guard clause for empty matrix
     if matrix.size == 0:
@@ -481,7 +484,6 @@ def _compute_test_discriminations(observation_matrix: "np.ndarray") -> "np.ndarr
     Returns:
         1D numpy array of discrimination values for each test (entropy of pass rate)
     """
-    import numpy as np
 
     num_codes, num_tests = observation_matrix.shape
 
@@ -511,7 +513,6 @@ def log_code_pass_rates(observation_matrix: "np.ndarray") -> None:
     Args:
         observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
     """
-    import numpy as np
 
     code_pass_rates = _compute_pass_rates(observation_matrix)
 
@@ -542,7 +543,6 @@ def log_test_pass_rates(observation_matrix: "np.ndarray") -> None:
     Args:
         observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
     """
-    import numpy as np
 
     # Transpose to compute pass rates for tests (columns become rows)
     test_pass_rates = _compute_pass_rates(observation_matrix.T)
@@ -574,7 +574,6 @@ def log_test_discriminations(observation_matrix: "np.ndarray") -> None:
     Args:
         observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
     """
-    import numpy as np
 
     test_discriminations = _compute_test_discriminations(observation_matrix)
 
@@ -612,7 +611,6 @@ def _log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None
     Args:
         observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
     """
-    import numpy as np
 
     num_codes, num_tests = observation_matrix.shape
     total_cells = num_codes * num_tests
