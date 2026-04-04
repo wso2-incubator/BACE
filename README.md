@@ -55,7 +55,7 @@ See [configs/README.md](configs/README.md) for details and examples on composing
 ## Running and Debugging
 
 - Use `--dry-run` to validate configuration and view the resolved config without executing experiments.
-- The runner saves a resolved config and run metadata to `logs/run_config.json` within each run directory for reproducibility.
+- The runner saves the resolved config to `logs/run_config.json` within each run directory for reproducibility.
 
 ## Resuming Experiments
 
