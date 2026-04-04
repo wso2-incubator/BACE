@@ -369,8 +369,6 @@ def log_prior_statistics(population_type: str, probs: "np.ndarray") -> None:
         logger.debug(f"Prior {population_type} beliefs: [Empty Population]")
         return
 
-    # import removed
-
     mean_prob = np.mean(probs)
     logger.debug(
         f"Prior {population_type} beliefs: mean={mean_prob:.4f}, "
