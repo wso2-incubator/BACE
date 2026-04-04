@@ -221,10 +221,8 @@ def is_problem_completed(run_id: str, problem_id: str) -> bool:
         problem_id: The ID of the problem
 
     Returns:
-        bool: True if 'survived' event is found in the last 1MB of history log
+        bool: True if 'survived' event is found and verified in the history log
     """
-    from coevolution.utils.paths import sanitize_id
-
     sanitized_run_id = sanitize_id(run_id)
     sanitized_pid = sanitize_id(problem_id)
     history_path = (
@@ -234,8 +232,8 @@ def is_problem_completed(run_id: str, problem_id: str) -> bool:
     if not history_path.exists():
         return False
 
-    # Check the last 1MB of the file for the "survived" event
-    # Survival events are logged at the very end of finalization.
+    # Check the last 64KB of the file for the structured "survived" event
+    # Survival events are logged during finalization at the very end of the run.
     try:
         with open(history_path, "rb") as f:
             f.seek(0, 2)
@@ -244,11 +242,29 @@ def is_problem_completed(run_id: str, problem_id: str) -> bool:
             if file_size < 10:
                 return False
 
-            read_size = min(file_size, 1024 * 1024)  # 1MB
+            # A 64KB buffer is plenty to capture the final survival records
+            read_size = min(file_size, 64 * 1024)
             f.seek(max(0, file_size - read_size))
             chunk = f.read(read_size).decode("utf-8", errors="ignore")
-            # We look for the "survived" event tag
-            return '"event": "survived"' in chunk
+
+            # Parse lines in reverse to find the last logged events
+            lines = chunk.strip().split("\n")
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    # Extract event type from the Loguru record structure
+                    record = data.get("record", {})
+                    extra = record.get("extra", {})
+                    event_data = extra.get("event_data", {})
+                    if event_data.get("event") == "survived":
+                        return True
+                except (json.JSONDecodeError, KeyError):
+                    # Skip malformed lines (like the first partial line of our chunk)
+                    continue
+
+            return False
     except Exception:
         # If we can't read it, assume not complete
         return False
