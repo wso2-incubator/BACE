@@ -455,30 +455,31 @@ def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -
         global_idx = (start_index if not problem_ids else 0) + i
 
         # Check for completion if resume is enabled
-        if resume:
-            if logging_utils.is_problem_completed(run_id, problem.question_id):
-                logger.bind(problem_id=problem.question_id).info(
-                    f"[{i+1}/{len(selected_problems)}] Skipping already completed problem: {problem.question_id}"
-                )
-                continue
-            else:
-                # If file exists but not complete, we override it for a fresh start
-                # (as requested: "we SHOULD override it")
-                from coevolution.utils.paths import sanitize_id
-
-                sanitized_run_id = sanitize_id(run_id)
-                sanitized_pid = sanitize_id(problem.question_id)
-                history_path = (
-                    Path("logs")
-                    / sanitized_run_id
-                    / sanitized_pid
-                    / "evolutionary_history.jsonl"
-                )
-                if history_path.exists():
-                    logger.bind(problem_id=problem.question_id).warning(
-                        f"[{i+1}/{len(selected_problems)}] Problem {problem.question_id} was interrupted. Overriding partial history log."
+        with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
+            if resume:
+                if logging_utils.is_problem_completed(run_id, problem.question_id):
+                    logger.info(
+                        f"[{i+1}/{len(selected_problems)}] Skipping already completed problem: {problem.question_id}"
                     )
-                    history_path.unlink()
+                    continue
+                else:
+                    # If file exists but not complete, we override it for a fresh start
+                    # (as requested: "we SHOULD override it")
+                    from coevolution.utils.paths import sanitize_id
+
+                    sanitized_run_id = sanitize_id(run_id)
+                    sanitized_pid = sanitize_id(problem.question_id)
+                    history_path = (
+                        Path("logs")
+                        / sanitized_run_id
+                        / sanitized_pid
+                        / "evolutionary_history.jsonl"
+                    )
+                    if history_path.exists():
+                        logger.warning(
+                            f"[{i+1}/{len(selected_problems)}] Problem {problem.question_id} was interrupted. Overriding partial history log."
+                        )
+                        history_path.unlink()
 
         # Re-initialize logging for this specific problem context.
         # This updates the global environment so child workers know which directory to log to.
