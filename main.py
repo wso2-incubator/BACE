@@ -457,7 +457,7 @@ def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -
         # Check for completion if resume is enabled
         if resume:
             if logging_utils.is_problem_completed(run_id, problem.question_id):
-                logger.info(
+                logger.bind(problem_id=problem.question_id).info(
                     f"[{i+1}/{len(selected_problems)}] Skipping already completed problem: {problem.question_id}"
                 )
                 continue
@@ -475,7 +475,7 @@ def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -
                     / "evolutionary_history.jsonl"
                 )
                 if history_path.exists():
-                    logger.warning(
+                    logger.bind(problem_id=problem.question_id).warning(
                         f"[{i+1}/{len(selected_problems)}] Problem {problem.question_id} was interrupted. Overriding partial history log."
                     )
                     history_path.unlink()
