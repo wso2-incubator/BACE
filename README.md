@@ -59,13 +59,13 @@ See [configs/README.md](configs/README.md) for details and examples on composing
 
 ## Resuming Experiments
 
-If an experiment is interrupted (e.g., due to a crash or manually stopping it), you can resume it using the same `run_id`:
+If an experiment is interrupted (e.g., due to a crash or manually stopping it), you can resume it using the same `run_id` and the `--resume` flag:
 
 ```bash
-uv run python main.py run --config configs/experiments/default.yaml --run-id <existing_run_id>
+uv run python main.py run --config configs/experiments/default.yaml --run-id <existing_run_id> --resume
 ```
 
-By default, the `--resume` flag is set to `True`. The system will:
+By default, the `--resume` flag is set to `False`. When enabled, the system will:
 
 1. **Reuse the existing log directory** without renaming it.
 2. **Scan existing problem logs** for a completion marker (`"event": "survived"`).

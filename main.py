@@ -123,7 +123,7 @@ def run(
     ),
     # === Resume Functionality ===
     resume: bool = typer.Option(
-        True,
+        False,
         "--resume/--no-resume",
         "-R",
         help="Resume an incomplete run by skipping already processed problems.",
