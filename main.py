@@ -463,8 +463,9 @@ def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -
                     )
                     continue
                 else:
-                    # If file exists but not complete, we override it for a fresh start
-                    # (as requested: "we SHOULD override it")
+                    # Remove any partial history for interrupted problems so the retry
+                    # starts with a clean log instead of mixing old incomplete state
+                    # with the new run.
                     from coevolution.utils.paths import sanitize_id
 
                     sanitized_run_id = sanitize_id(run_id)
