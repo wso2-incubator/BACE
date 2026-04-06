@@ -222,12 +222,10 @@ def main(
     logger.info("Configuring Coevolution Strategy...")
 
     # 1. Profiles (The "Blueprints" for populations)
-    # Updated to pass language_adapter and llm_workers
     agent_coder_code_profile = create_agent_coder_code_profile(
         llm_client=llm_client,
         language_adapter=language_adapter,
         initial_prior=0.2,
-        llm_workers=cpu_count,
     )
 
     unittest_profile = create_unittest_test_profile(
@@ -245,7 +243,6 @@ def main(
         beta=0.2,
         gamma=0.1,
         learning_rate=0.05,
-        llm_workers=cpu_count,
         diversity_enabled=True,
     )
 
