@@ -10,11 +10,13 @@ Optimized Pattern:
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
 from loguru import logger
 
+import coevolution.utils.config as config_utils
 import coevolution.utils.logging as logging_utils
 from coevolution.dataset.lcb import (
     Difficulty,
@@ -123,14 +125,9 @@ def main(
         help="Index of the last problem to process (exclusive). If omitted, processes until the end.",
     ),
     llm: str = typer.Option(
-        "gpt-5-mini",
+        "configs/llm/gpt-5-mini.yaml",
         "--llm",
-        help="LLM model to use for code generation and test generation.",
-    ),
-    llm_provider: str = typer.Option(
-        "openai",
-        "--llm-provider",
-        help="LLM service provider.",
+        help="Path to LLM configuration file (e.g., configs/llm/*.yaml).",
     ),
 ) -> None:
     """Run a coevolution experiment on LiveCodeBench problems.
@@ -175,9 +172,14 @@ def main(
     logger.info("Initializing Global Infrastructure...")
 
     # 1. LLM Client
-    llm_model = llm
+    llm_config = config_utils._load_yaml_file(Path(llm))
     llm_client = create_llm_client(
-        provider=llm_provider, model=llm_model, reasoning_effort="minimal"
+        provider=llm_config.get("provider", "openai"),
+        model=llm_config.get("model", "gpt-5-mini"),
+        reasoning_effort=llm_config.get("reasoning_effort", "minimal"),
+        max_output_tokens=llm_config.get("max_output_tokens", None),
+        enable_token_limit=llm_config.get("enable_token_limit", None),
+        workers=llm_config.get("workers", None),
     )
     logger.info(f"Using model: {llm_client.model}")
 
