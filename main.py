@@ -260,13 +260,9 @@ def _run_experiment(config: dict[str, Any], run_id: str, resume: bool = False) -
     logger.info("Initializing Global Infrastructure from config...")
 
     # 1. LLM Client
-    llm_client = create_llm_client(
-        provider=llm_config.get("provider", "openai"),
-        model=llm_config.get("model", "gpt-5-mini"),
-        reasoning_effort=llm_config.get("reasoning_effort", "minimal"),
-        max_output_tokens=llm_config.get("max_output_tokens", None),
-        enable_token_limit=llm_config.get("enable_token_limit", None),
-    )
+    llm_client = create_llm_client(**llm_config)
+
+
     logger.info(f"Using model: {llm_client.model}")
 
     # 2. Sandbox Configurations

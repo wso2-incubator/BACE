@@ -1,0 +1,16 @@
+# Google Cloud Vertex AI: GPT-OSS-120B (OpenAI-compatible endpoint)
+# AI model hosted on Google Cloud's Model-as-a-Service infrastructure.
+
+provider: "openai-chat"
+model: "openai/gpt-oss-120b-maas"
+
+# Configuration relies on environment variables:
+# PROJECT_ID, REGION, and ENDPOINT
+base_url: "https://${ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${REGION}/endpoints/openapi"
+
+# Custom flag to enable automatic Google Access Token fetching
+use_vertex_auth: true
+
+# Experiment Parameters
+max_output_tokens: 100_000_000
+workers: 32

@@ -26,8 +26,34 @@ class OpenAIChatClient(LLMClient):
         super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
         from openai import OpenAI
 
+        # Handle Vertex AI Authentication if requested
+        use_vertex_auth = kwargs.pop("use_vertex_auth", False)
+        if use_vertex_auth:
+            logger.info("Vertex AI authentication requested for OpenAIChatClient")
+            if not kwargs.get("api_key"):
+                kwargs["api_key"] = self._get_vertex_access_token()
+
         self.client = OpenAI(**kwargs)
         logger.debug(f"Initialized OpenAIChatClient with model: {model}")
+
+    def _get_vertex_access_token(self) -> str:
+        """Fetch a Google Cloud access token for Vertex AI."""
+        try:
+            import google.auth
+            from google.auth.transport.requests import Request
+
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            credentials.refresh(Request())
+            token = credentials.token
+            if not token:
+                raise ValueError("Failed to retrieve access token from Google Auth.")
+            return str(token)
+        except Exception as e:
+            logger.error(f"Failed to fetch Vertex AI access token: {e}")
+            raise RuntimeError(f"Vertex AI authentication failed: {e}") from e
+
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         logger.debug(f"OpenAIChatClient generating with model: {self.model}")
