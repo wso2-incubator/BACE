@@ -129,6 +129,13 @@ def main(
         "--llm",
         help="Path to LLM configuration file (e.g., configs/llm/*.yaml).",
     ),
+    # === Resume Functionality ===
+    resume: bool = typer.Option(
+        False,
+        "--resume/--no-resume",
+        "-R",
+        help="Resume an incomplete run by skipping already processed problems.",
+    ),
 ) -> None:
     """Run a coevolution experiment on LiveCodeBench problems.
 
@@ -158,6 +165,7 @@ def main(
         file_level="DEBUG",
         run_id=run_id,
         log_file_base_name="agentcoder",
+        resume=resume,
     )
 
     logging_utils.log_section_header("INFO", "STARTING COEVOLUTION EXPERIMENT")
@@ -337,6 +345,34 @@ def main(
         # Calculate global index for logging clarity
         global_idx = (start_index if not problem_ids else 0) + i
 
+        # Check for completion if resume is enabled
+        with logger.contextualize(problem_id=problem.question_id, run_id=run_id):
+            if resume:
+                if logging_utils.is_problem_completed(run_id, problem.question_id):
+                    logger.info(
+                        f"[{i+1}/{len(selected_problems)}] Skipping already completed problem: {problem.question_id}"
+                    )
+                    continue
+                else:
+                    # Remove any partial history for interrupted problems so the retry
+                    # starts with a clean log instead of mixing old incomplete state
+                    # with the new run.
+                    from coevolution.utils.paths import sanitize_id
+
+                    sanitized_run_id = sanitize_id(run_id)
+                    sanitized_pid = sanitize_id(problem.question_id)
+                    history_path = (
+                        Path("logs")
+                        / sanitized_run_id
+                        / sanitized_pid
+                        / "evolutionary_history.jsonl"
+                    )
+                    if history_path.exists():
+                        logger.warning(
+                            f"[{i+1}/{len(selected_problems)}] Problem {problem.question_id} was interrupted. Overriding partial history log."
+                        )
+                        history_path.unlink()
+
         # Re-initialize logging for this specific problem context.
         # This updates the global environment so child workers know which directory to log to.
         run_id = logging_utils.setup_logging(
@@ -344,6 +380,7 @@ def main(
             file_level="DEBUG",
             run_id=run_id,
             problem_id=problem.question_id,
+            resume=resume,
         )
 
         # We use Context Managers to tag logs with the current problem
