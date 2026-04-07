@@ -5,8 +5,9 @@ provider: "openai-chat"
 model: "openai/gpt-oss-120b-maas"
 
 # Configuration relies on environment variables:
-# PROJECT_ID, REGION, and ENDPOINT
-base_url: "https://${ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${REGION}/endpoints/openapi"
+# GOOGLE_PROJECT_ID, GOOGLE_REGION, and GOOGLE_ENDPOINT
+base_url: "https://${GOOGLE_ENDPOINT}/v1/projects/${GOOGLE_PROJECT_ID}/locations/${GOOGLE_REGION}/endpoints/openapi"
+
 
 # Custom flag to enable automatic Google Access Token fetching
 use_vertex_auth: true
