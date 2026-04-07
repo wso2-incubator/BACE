@@ -7,7 +7,7 @@ reasoning_effort: "minimal"
 
 # Token limit configuration - disabled
 max_output_tokens: null
-workers: 2
+workers: 4
 
 # Optional: API configuration (uses environment variables by default)
 # api_key: "${OLLAMA_API_KEY}"
