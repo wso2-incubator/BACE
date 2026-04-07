@@ -9,7 +9,6 @@ beta: 0.3
 gamma: 0.25
 learning_rate: 0.1
 
-cpu_workers: 8
 num_inputs: 60
 
 adversarial_refiner_rate: 1.0

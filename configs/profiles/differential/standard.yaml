@@ -17,7 +17,6 @@ gamma: 0.25  # P(pass | both incorrect)
 learning_rate: 0.1
 
 # Performance - independent scaling
-cpu_workers: 4   # Parallel sandbox execution (from env COEVOLUTION_WORKERS)
 
 # Differential breeding strategy parameters
 max_pairs_per_group: 5  # Max pairs to try per functional group (prevents excessive attempts on equivalent code)

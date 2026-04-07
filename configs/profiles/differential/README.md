@@ -49,8 +49,8 @@ The differential profile uses **Differential Evolution Testing (DET)** to discov
 - **`llm_workers`** (default: `10`)  
   Number of parallel threads for LLM-based script generation (I/O bound operations).
 
-- **`cpu_workers`** (default: `4`)  
-  Number of parallel processes for sandbox execution (CPU bound operations). Can be overridden by `COEVOLUTION_WORKERS` environment variable.
+- **`cpu_workers`** (managed globally)  
+  Number of parallel processes for sandbox execution (CPU bound operations). Handled at the infrastructure level via the `COEVOLUTION_WORKERS` environment variable or `sandbox.workers` config in `main.py`.
 
 ### Breeding Strategy Parameters
 
@@ -82,7 +82,6 @@ gamma: 0.3
 learning_rate: 0.025
 
 llm_workers: 10
-cpu_workers: 4
 
 max_pairs_per_group: 5
 ```
