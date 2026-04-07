@@ -497,7 +497,7 @@ class Orchestrator:
             config=self.public_test_profile.bayesian_config,
         )
         logger.bind(is_evolution_event=True).info(
-            "BELIEF_UPDATE",
+            f"BELIEF_UPDATE: Updated 'code' based on 'public' ({len(code_ids)} individuals)",
             event_data={
                 "generation": context.code_population.generation,
                 "population": "code",
@@ -548,7 +548,7 @@ class Orchestrator:
                 config=test_profile.bayesian_config,
             )
             logger.bind(is_evolution_event=True).info(
-                "BELIEF_UPDATE",
+                f"BELIEF_UPDATE: Updated '{test_type}' test based on 'code' ({len(test_ids)} individuals)",
                 event_data={
                     "generation": test_pop.generation,
                     "population": "test",
@@ -575,7 +575,7 @@ class Orchestrator:
                 config=test_profile.bayesian_config,
             )
             logger.bind(is_evolution_event=True).info(
-                "BELIEF_UPDATE",
+                f"BELIEF_UPDATE: Updated 'code' based on '{test_type}' ({len(code_ids)} individuals)",
                 event_data={
                     "generation": code_pop.generation,
                     "population": "code",

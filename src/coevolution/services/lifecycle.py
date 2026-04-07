@@ -23,14 +23,18 @@ class LifecycleEmitter:
     """
 
     @staticmethod
-    def _emit(generation: int, event: LifecycleEvent, **payload: Any) -> None:
+    def _emit(
+        generation: int, event: LifecycleEvent, message: str, **payload: Any
+    ) -> None:
         """
         Internal bound log emitter.
         """
         payload["generation"] = generation
         payload["event"] = event.value
         # Emits pure JSON objects to the specific sink hook
-        logger.bind(is_evolution_event=True).info("LIFECYCLE_EVENT", event_data=payload)
+        logger.bind(is_evolution_event=True).info(
+            f"LIFECYCLE_EVENT: {message}", event_data=payload
+        )
 
     @staticmethod
     def log_creation(
@@ -48,9 +52,14 @@ class LifecycleEmitter:
         """
         parents_dict = parents if parents is not None else {"code": [], "test": []}
 
+        msg = f"CREATED {individual_id} (op: {operation})"
+        if test_type:
+            msg += f" for {test_type}"
+
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.CREATED,
+            message=msg,
             individual_id=individual_id,
             snippet=snippet,
             creation_op=operation,
@@ -81,6 +90,7 @@ class LifecycleEmitter:
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.BECAME_PARENT,
+            message=f"BECAME_PARENT {parent_id} produced {offspring_id}",
             individual_id=parent_id,
             offspring_id=offspring_id,
             operation=operation,
@@ -92,6 +102,7 @@ class LifecycleEmitter:
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.SURVIVED,
+            message=f"SURVIVED {individual_id}",
             individual_id=individual_id,
         )
 
@@ -101,6 +112,7 @@ class LifecycleEmitter:
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.DIED,
+            message=f"DIED {individual_id}",
             individual_id=individual_id,
         )
 
@@ -112,6 +124,7 @@ class LifecycleEmitter:
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.SELECTED_AS_ELITE,
+            message=f"SELECTED_AS_ELITE {individual_id}",
             individual_id=individual_id,
             test_type=test_type,
         )
@@ -127,12 +140,14 @@ class LifecycleEmitter:
         """
         Log Bayesian belief updates.
         """
+        change = new_probability - old_probability
         LifecycleEmitter._emit(
             generation=generation,
             event=LifecycleEvent.PROBABILITY_UPDATED,
+            message=f"PROBABILITY_UPDATED {individual_id} Δ={change:+.4f}",
             individual_id=individual_id,
             old_probability=old_probability,
             new_probability=new_probability,
-            probability_change=new_probability - old_probability,
+            probability_change=change,
             test_type=test_type,
         )

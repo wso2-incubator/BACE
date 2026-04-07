@@ -309,7 +309,7 @@ class BasePopulation[T_Individual: BaseIndividual](ABC):
         added_ids = new_ids - set(old_ids_map.keys())  # In new_ids but not in old_ids
         kept_ids = set(old_ids_map.keys()) & new_ids  # In both (set intersection)
 
-        logger.debug(
+        logger.info(
             f"Gen {self._generation} -> {self._generation + 1}: "
             f"Kept {len(kept_ids)} elites, "
             f"Added {len(added_ids)} new offspring, "

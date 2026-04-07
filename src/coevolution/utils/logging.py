@@ -698,7 +698,7 @@ def log_evaluation_failures(
         for test_id, result in test_results.items():
             if result.status in ["failed", "error"] and result.error_log:
                 logger.bind(is_evolution_event=True).info(
-                    "EVALUATION_FAILED",
+                    f"EVALUATION_FAILED: {code_id} failed {test_type} test {test_id}",
                     event_data={
                         "generation": generation,
                         "test_type": test_type,

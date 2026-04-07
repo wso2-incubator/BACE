@@ -103,15 +103,18 @@ class Breeder[T: BaseIndividual]:
                         "Check operator implementations."
                     )
                     break
+                op = None
                 try:
-                    results = self._sample_operator().execute(context)
+                    op = self._sample_operator()
+                    results = op.execute(context)
                     if results:
                         offspring.extend(results)
                         consecutive_failures = 0
                     else:
                         consecutive_failures += 1
                 except Exception as e:
-                    logger.warning(f"Operator failed: {e}")
+                    op_name = op.operation_name() if op else "Unknown"
+                    logger.warning(f"Operator '{op_name}' failed: {e}")
                     consecutive_failures += 1
             return offspring[:num_offsprings]
 
@@ -133,24 +136,25 @@ class Breeder[T: BaseIndividual]:
                 needed = num_offsprings - len(offspring)
                 batch_size = min(needed, self.llm_workers * 2)
 
-                futures = [
-                    executor.submit(self._sample_operator().execute, context)
-                    for _ in range(batch_size)
-                ]
+                futures_to_op = {}
+                for _ in range(batch_size):
+                    op = self._sample_operator()
+                    futures_to_op[executor.submit(op.execute, context)] = op
 
                 batch_produced = False
-                for future in as_completed(futures):
+                for future in as_completed(futures_to_op):
+                    op = futures_to_op[future]
                     try:
                         results = future.result()
                         if results:
                             offspring.extend(results)
                             batch_produced = True
                             if len(offspring) >= num_offsprings:
-                                for f in futures:
+                                for f in futures_to_op:
                                     f.cancel()
                                 break
                     except Exception as e:
-                        logger.warning(f"Operator failed: {e}")
+                        logger.warning(f"Operator '{op.operation_name()}' failed: {e}")
 
                 if batch_produced:
                     consecutive_failures = 0

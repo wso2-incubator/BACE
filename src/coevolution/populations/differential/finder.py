@@ -141,7 +141,9 @@ class DifferentialFinder(IDifferentialFinder):
 
     def _generate_test_inputs(self, generator_script: str) -> list[dict[str, Any]]:
         if not self.python.parser.is_syntax_valid(generator_script):
-            logger.warning("Input generator script produced invalid Python code.")
+            logger.warning(
+                f"Input generator script produced invalid Python code. Content snippet: {generator_script[:200]}..."
+            )
             return []
 
         import os
@@ -159,7 +161,8 @@ class DifferentialFinder(IDifferentialFinder):
         test_inputs = self.python.parser.parse_test_inputs(output)
         if not test_inputs:
             logger.warning(
-                "No test inputs generated or failed to parse generator output."
+                "No test inputs generated or failed to parse generator output. "
+                f"Raw output: {output[:200]}..."
             )
         return test_inputs
 
