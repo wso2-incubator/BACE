@@ -39,14 +39,23 @@ def create_differential_test_profile(
     beta: float = 0.3,
     gamma: float = 0.3,
     learning_rate: float = 0.05,
-    cpu_workers: int = 8,
+    cpu_workers: int = 4,
     prob_assigner_strategy: str = "min",
     diversity_enabled: bool = True,
     max_pairs_per_group: int = 5,
     num_passing_tests_to_sample: int = 5,
 ) -> TestProfile:
     """Create a differential test population profile."""
-    # ... (function body)
+    # Split cpu_workers budget across two parallelism levels so total OS
+    # processes never exceed the user-configured COEVOLUTION_WORKERS value:
+    #   Level-1  pair_workers:     how many pairs run find_differential() concurrently
+    #   Level-2  workers_per_pair: processes in each pair's inner multiprocessing.Pool
+    # With cpu_workers=16  → pair_workers=4,  workers_per_pair=4,  total=16
+    # With cpu_workers=8   → pair_workers=2,  workers_per_pair=4,  total=8
+    # With cpu_workers=4   → pair_workers=1,  workers_per_pair=4,  total=4
+    pair_workers = max(1, cpu_workers // 4)
+    workers_per_pair = max(1, cpu_workers // pair_workers)
+
     population_config = PopulationConfig(
         initial_prior=initial_prior,
         initial_population_size=initial_population_size,
@@ -75,8 +84,8 @@ def create_differential_test_profile(
         composer=language_adapter.composer,
         runtime=language_adapter.runtime,
         sandbox_config=sandbox_config,
-        enable_multiprocessing=cpu_workers > 1,
-        cpu_workers=cpu_workers,
+        enable_multiprocessing=workers_per_pair > 1,
+        cpu_workers=workers_per_pair,
     )
 
     discovery_op = DifferentialDiscoveryOperator(
@@ -91,6 +100,7 @@ def create_differential_test_profile(
         max_pairs_per_group=max_pairs_per_group,
         num_passing_tests_to_sample=num_passing_tests_to_sample,
         llm_workers=llm_client.workers,
+        pair_workers=pair_workers,
     )
 
     breeder: Breeder[TestIndividual] = Breeder(
