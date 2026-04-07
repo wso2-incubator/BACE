@@ -68,6 +68,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
         max_pairs_per_group: int = 5,
         num_passing_tests_to_sample: int = 5,
         llm_workers: int = 4,
+        pair_workers: int = 1,
     ) -> None:
         super().__init__(llm, parser, language_name, parent_selector, prob_assigner)
         self.llm_service = llm_service
@@ -77,6 +78,7 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
         self.max_pairs_per_group = max_pairs_per_group
         self.num_passing_tests_to_sample = num_passing_tests_to_sample
         self.llm_workers = llm_workers
+        self.pair_workers = pair_workers
         self._explored_pairs_cache: set[tuple[str, str]] = set()
 
     def operation_name(self) -> str:
@@ -96,7 +98,10 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
             return []
 
         selected = candidates[: self.max_pairs_per_group]
-        logger.info(f"Phase 1: selected {len(selected)} pairs for this execution cycle")
+        logger.info(
+            f"Phase 1: selected {len(selected)} pairs for this execution cycle "
+            f"(pair_workers={self.pair_workers})"
+        )
 
         # Phase 2: generate scripts via LLM
         discovery_ctxs = self._batch_generate_scripts(context, selected)
@@ -206,56 +211,82 @@ class DifferentialDiscoveryOperator(BaseLLMOperator[TestIndividual]):
     # Phase 3: Divergence finding
     # ------------------------------------------------------------------
 
+    def _find_divergences_for_pair(
+        self,
+        context: CoevolutionContext,
+        ctx: _DiscoveryContext,
+    ) -> list[TestIndividual]:
+        """Run find_differential for a single pair and return TestIndividuals.
+
+        Designed to be submitted to a ThreadPoolExecutor so that multiple
+        pairs execute concurrently (Level-1 parallelism). Each call may
+        internally spawn a multiprocessing.Pool with `workers_per_pair`
+        processes (Level-2 parallelism).
+        """
+        task = ctx.task
+        all_divergences = self.differential_finder.find_differential(
+            task.code_a.snippet,
+            task.code_b.snippet,
+            ctx.generator_script,
+            limit=self.divergence_limit,
+        )
+        divergences = [d for d in all_divergences if d.output_a != d.output_b]
+
+        if not divergences:
+            logger.debug(
+                f"No divergences for pair ({task.code_a.id}, {task.code_b.id})"
+            )
+            return []
+
+        parent_probs = [
+            ind.probability
+            for tests in task.group.passing_test_individuals.values()
+            for ind in tests
+            if hasattr(ind, "creation_op")
+            and ind.creation_op == OPERATION_DISCOVERY
+        ]
+        prob = (
+            self.prob_assigner.assign_probability(
+                OPERATION_DISCOVERY, parent_probs
+            )
+            if parent_probs
+            else self.prob_assigner.initial_prior
+        )
+
+        new_tests = self._create_divergence_tests(context, task, divergences, prob)
+        logger.debug(
+            f"Pair ({task.code_a.id}, {task.code_b.id}): "
+            f"{len(divergences)} divergences → {len(new_tests)} tests"
+        )
+        return new_tests
+
     def _batch_find_divergences(
         self,
         context: CoevolutionContext,
         discovery_ctxs: list[_DiscoveryContext],
     ) -> list[TestIndividual]:
+        """Run divergence finding for all pairs concurrently (Level-1 parallelism).
+
+        Each pair's find_differential() call runs in its own thread, so a
+        slow or hanging pair does not block others. The inner multiprocessing.Pool
+        inside find_differential() provides Level-2 (input-level) parallelism.
+        """
         offspring: list[TestIndividual] = []
-        for ctx in discovery_ctxs:
-            task = ctx.task
-            try:
-                all_divergences = self.differential_finder.find_differential(
-                    task.code_a.snippet,
-                    task.code_b.snippet,
-                    ctx.generator_script,
-                    limit=self.divergence_limit,
-                )
-                divergences = [d for d in all_divergences if d.output_a != d.output_b]
-
-                if not divergences:
-                    logger.debug(
-                        f"No divergences for pair ({task.code_a.id}, {task.code_b.id})"
+        with ThreadPoolExecutor(max_workers=self.pair_workers) as executor:
+            future_to_ctx = {
+                executor.submit(self._find_divergences_for_pair, context, ctx): ctx
+                for ctx in discovery_ctxs
+            }
+            for future in as_completed(future_to_ctx):
+                ctx = future_to_ctx[future]
+                try:
+                    new_tests = future.result()
+                    offspring.extend(new_tests)
+                except Exception as e:
+                    logger.error(
+                        f"Divergence finding failed for pair "
+                        f"({ctx.task.code_a.id}, {ctx.task.code_b.id}): {e}"
                     )
-                    continue
-
-                parent_probs = [
-                    ind.probability
-                    for tests in task.group.passing_test_individuals.values()
-                    for ind in tests
-                    if hasattr(ind, "creation_op")
-                    and ind.creation_op == OPERATION_DISCOVERY
-                ]
-                prob = (
-                    self.prob_assigner.assign_probability(
-                        OPERATION_DISCOVERY, parent_probs
-                    )
-                    if parent_probs
-                    else self.prob_assigner.initial_prior
-                )
-
-                new_tests = self._create_divergence_tests(
-                    context, task, divergences, prob
-                )
-                offspring.extend(new_tests)
-                logger.debug(
-                    f"Pair ({task.code_a.id}, {task.code_b.id}): "
-                    f"{len(divergences)} divergences → {len(new_tests)} tests"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Divergence finding failed for {task.code_a.id} vs {task.code_b.id}: {e}"
-                )
         return offspring
 
     # ------------------------------------------------------------------
