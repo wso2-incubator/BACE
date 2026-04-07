@@ -7,7 +7,7 @@ population-centric location.
 import json
 import multiprocessing
 from dataclasses import dataclass, replace
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from loguru import logger
 
@@ -60,7 +60,7 @@ def _worker_entry(
 
         sandbox = create_sandbox(config)
 
-        def run_snippet(snippet: str) -> _SnippetResult:
+        def run_snippet(snippet: str, label: str) -> _SnippetResult:
             test_input_formatted = {"input_arg": input_data}
             script = composer.compose_evaluation_script(
                 snippet, json.dumps(test_input_formatted)
@@ -76,6 +76,10 @@ def _worker_entry(
 
                 cmd = runtime.get_execution_command(script_path)
                 exec_result = sandbox.execute_command(cmd, cwd=tmpdir)
+                if exec_result.timeout:
+                    logger.warning(
+                        f"{label} timeout (>{config.timeout}s) for input {idx}"
+                    )
                 if exec_result.error:
                     return _SnippetResult(success=False)
                 # compose_evaluation_script emits print(json.dumps(result)), so
@@ -88,8 +92,8 @@ def _worker_entry(
                 except (json.JSONDecodeError, TypeError):
                     return _SnippetResult(success=True, output=raw)
 
-        res_a = run_snippet(code_a_snippet)
-        res_b = run_snippet(code_b_snippet)
+        res_a = run_snippet(code_a_snippet, "Snippet A")
+        res_b = run_snippet(code_b_snippet, "Snippet B")
 
         if not res_a.success or not res_b.success:
             return idx, ExecutionError(idx, "Runtime execution failure in sandbox")
@@ -188,8 +192,8 @@ class DifferentialFinder(IDifferentialFinder):
         for idx, ti in enumerate(inputs):
             if len(found) >= limit:
                 break
-            res_a = self._run_single_sequential(code_a, ti)
-            res_b = self._run_single_sequential(code_b, ti)
+            res_a = self._run_single_sequential(code_a, ti, idx, "Snippet A")
+            res_b = self._run_single_sequential(code_b, ti, idx, "Snippet B")
             if not res_a.success or not res_b.success:
                 continue
             if res_a.output != res_b.output:
@@ -198,7 +202,11 @@ class DifferentialFinder(IDifferentialFinder):
         return found
 
     def _run_single_sequential(
-        self, code: str, input_data: dict[str, Any]
+        self,
+        code: str,
+        input_data: dict[str, Any],
+        idx: Optional[int] = None,
+        label: str = "Snippet",
     ) -> _SnippetResult:
         test_input_formatted = {"input_arg": input_data}
         script = self.composer.compose_evaluation_script(
@@ -215,6 +223,11 @@ class DifferentialFinder(IDifferentialFinder):
 
             cmd = self.runtime.get_execution_command(script_path)
             exec_result = self._local_sandbox.execute_command(cmd, cwd=tmpdir)
+            if exec_result.timeout:
+                msg = f"{label} timeout (>{self.sandbox_config.timeout}s)"
+                if idx is not None:
+                    msg += f" for input {idx}"
+                logger.warning(msg)
             if exec_result.error:
                 return _SnippetResult(success=False)
             # compose_evaluation_script emits print(json.dumps(result)), so the
