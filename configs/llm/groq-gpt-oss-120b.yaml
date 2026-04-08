@@ -1,0 +1,10 @@
+provider: "openai"
+model: "openai/gpt-oss-120b"
+api_key: "${GROQ_API_KEY}"
+base_url: "https://api.groq.com/openai/v1"
+
+# Experiment Parameters
+max_output_tokens: 100_000_000
+workers: 32
+
+
