@@ -173,8 +173,11 @@ class StructuredJSONLParser:
                     extra = record.get("extra", {})
                     event_data = extra.get("event_data", {})
                     message = record.get("message", "")
+                    # Standardize event type by taking only the prefix before a colon or space
+                    # This handles both old "EVENT" and new "EVENT: details" formats.
+                    event_id = message.split(":")[0].split(" ")[0].strip().upper()
 
-                    if message == "LIFECYCLE_EVENT":
+                    if event_id == "LIFECYCLE_EVENT":
                         event_type = event_data.get("event", "UNKNOWN").upper()
                         # Map to legacy-compatible fields
                         row = {**event_data, "id": event_data.get("individual_id")}
@@ -195,7 +198,7 @@ class StructuredJSONLParser:
 
                         ind_data.append(row)
 
-                    elif message == "BELIEF_UPDATE":
+                    elif event_id == "BELIEF_UPDATE":
                         # BELIEF_UPDATE contains lists of ids and posterior values
                         ids = event_data.get("ids", [])
                         posteriors = event_data.get("posterior", [])
@@ -212,10 +215,10 @@ class StructuredJSONLParser:
                                 }
                                 ind_data.append(row)
 
-                    elif message == "GENERATION_SUMMARY":
+                    elif event_id == "GENERATION_SUMMARY":
                         gen_data.append(event_data)
 
-                    elif message == "OBSERVATION_MATRIX":
+                    elif event_id == "OBSERVATION_MATRIX":
                         matrix_type = event_data.get("test_type", "unknown").lower()
                         matrix_dict = event_data.get("matrix", {})
                         code_ids = event_data.get("code_ids", [])
@@ -227,6 +230,19 @@ class StructuredJSONLParser:
                                 df.index = code_ids
                             df.index.name = "Code"
                             matrix_store[matrix_type].append(df)
+
+                    elif event_id == "EVALUATION_FAILED":
+                        # Ensure evaluation failures are captured in the individual data if needed
+                        # Many tools skip this, but we include it for completeness
+                        row = {
+                            "id": event_data.get("code_id"),
+                            "test_id": event_data.get("test_id"),
+                            "test_type": event_data.get("test_type"),
+                            "generation": event_data.get("generation"),
+                            "status": "evaluation_failed",
+                            "error": event_data.get("error_log"),
+                        }
+                        ind_data.append(row)
 
                 except Exception:
                     continue

@@ -69,7 +69,10 @@ def load_events(run_id: str, problem_id: str) -> list[dict[str, Any]]:
                 record = data.get("record", {})
                 extra = record.get("extra", {})
                 event_data = extra.get("event_data", {})
-                event_type = record.get("message", "UNKNOWN")
+                raw_msg = record.get("message", "UNKNOWN")
+                # Standardize event type by taking only the prefix before a colon or space
+                event_type = str(raw_msg).split(":")[0].split(" ")[0].strip().upper()
+
                 if event_type == "LIFECYCLE_EVENT":
                     event_type = event_data.get("event", "UNKNOWN").upper()
 
