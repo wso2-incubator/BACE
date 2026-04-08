@@ -27,7 +27,7 @@ def test_vertex_llm_live_generation() -> None:
             f"Missing required environment variables for live test: {missing_vars}"
         )
 
-    config_path = Path("configs/llm/gpt-oss-120b.yaml")
+    config_path = Path("configs/llm/vertex-gpt-oss-120b.yaml")
     assert config_path.exists(), f"Config file not found: {config_path}"
 
     logger.info(f"Loading config from {config_path}")
