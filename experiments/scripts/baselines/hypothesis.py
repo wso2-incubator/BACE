@@ -29,6 +29,7 @@ from rich.table import Table
 from coevolution.dataset.lcb import Difficulty, load_code_generation_dataset
 from infrastructure.languages.python.adapter import PythonLanguage
 from infrastructure.llm_client.factory import create_llm_client
+from coevolution.utils.config import _load_yaml_file
 
 app = typer.Typer()
 console = Console()
@@ -270,8 +271,7 @@ def run(
         )
     )
 
-    with open(llm, "r") as f:
-        llm_cfg = yaml.safe_load(f)
+    llm_cfg = _load_yaml_file(llm)
     client = create_llm_client(**llm_cfg)
     lang = PythonLanguage()
 

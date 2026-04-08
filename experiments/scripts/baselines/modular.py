@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import tenacity
 import typer
-import yaml
 from loguru import logger
 from rich.console import Console, Group
 from rich.logging import RichHandler
@@ -26,6 +25,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from coevolution.dataset.lcb import Difficulty, load_code_generation_dataset
+from coevolution.utils.config import _load_yaml_file
 from infrastructure.languages.python.adapter import PythonLanguage
 from infrastructure.llm_client.factory import create_llm_client
 
@@ -359,8 +359,7 @@ def run(
     )
 
     # Load LLM Config
-    with open(llm, "r") as f:
-        llm_cfg = yaml.safe_load(f)
+    llm_cfg = _load_yaml_file(llm)
 
     llm_client = create_llm_client(**llm_cfg)
     python_lang = PythonLanguage()

@@ -28,6 +28,7 @@ from rich.table import Table
 from coevolution.dataset.lcb import Difficulty, load_code_generation_dataset
 from infrastructure.languages.python.adapter import PythonLanguage
 from infrastructure.llm_client.factory import create_llm_client
+from coevolution.utils.config import _load_yaml_file
 
 app = typer.Typer()
 console = Console()
@@ -236,8 +237,7 @@ def run(
     console.print(run_config_panel)
 
     # Load LLM Config
-    with open(llm, "r") as f:
-        llm_cfg = yaml.safe_load(f)
+    llm_cfg = _load_yaml_file(llm)
 
     llm_config_panel = Panel(
         Syntax(yaml.dump(llm_cfg), "yaml", theme="monokai", padding=1),
