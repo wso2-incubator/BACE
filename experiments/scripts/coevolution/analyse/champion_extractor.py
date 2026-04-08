@@ -29,10 +29,12 @@ def extract_champions_from_log(history_path: Path) -> Optional[Dict[str, Any]]:
                 extra = record.get("extra", {})
                 event_data = extra.get("event_data", {})
                 message = record.get("message", "UNKNOWN")
+                # Standardize event type by taking only the prefix before a colon or space
+                event_id = str(message).split(":")[0].split(" ")[0].strip().upper()
 
                 # Normalize message if it's from LIFECYCLE_EVENT
-                event_type = message
-                if message == "LIFECYCLE_EVENT":
+                event_type = event_id
+                if event_id == "LIFECYCLE_EVENT":
                     event_type = event_data.get("event", "UNKNOWN").upper()
 
                 if event_type == "SURVIVED" or event_type == "SELECTED_AS_ELITE":
@@ -47,7 +49,7 @@ def extract_champions_from_log(history_path: Path) -> Optional[Dict[str, Any]]:
                         if "snippet" in event_data:
                             snippets[iid] = event_data["snippet"]
 
-                elif message == "BELIEF_UPDATE":
+                elif event_id == "BELIEF_UPDATE":
                     ids = event_data.get("ids", [])
                     posterior = event_data.get("posterior", [])
                     for i, iid in enumerate(ids):
