@@ -3,7 +3,8 @@
 
 provider: "openai"
 model: "gpt-5-mini"
-reasoning_effort: "minimal"
+generation_params:
+  reasoning_effort: "minimal"
 
 # Token limit configuration
 max_output_tokens: 100_000_000  # 100 million tokens (100x default of 1M)

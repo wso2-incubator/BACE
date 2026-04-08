@@ -3,7 +3,8 @@
 
 provider: "transformers"
 model: "didula-wso2/exp_23_emb_grpo_checkpoint_220_16bit_vllm"
-reasoning_effort: null  # Use model default
+generation_params:
+  reasoning_effort: "minimal"
 
 # Token limit configuration - disabled
 max_output_tokens: null

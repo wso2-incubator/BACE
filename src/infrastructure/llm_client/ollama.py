@@ -19,7 +19,14 @@ class OllamaClient(LLMClient):
         workers: int = 2,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
+        self.default_gen_params = kwargs.pop("generation_params", {})
+        super().__init__(
+            model,
+            max_output_tokens,
+            enable_token_limit,
+            workers=workers,
+            default_gen_params=self.default_gen_params,
+        )
         import ollama
 
         self.ollama = ollama
@@ -29,17 +36,21 @@ class OllamaClient(LLMClient):
         logger.debug(f"OllamaClient generating with model: {self.model}")
         logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
+        # Merge priority: call-time kwargs > default_gen_params (YAML)
+        params = self.default_gen_params.copy()
+        params.update(kwargs)
+
         if isinstance(prompt, list):
             response = self.ollama.chat(
                 model=self.model,
                 messages=prompt,
-                **kwargs,
+                **params,
             )
         elif isinstance(prompt, str):
             response = self.ollama.chat(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                **kwargs,
+                **params,
             )
         else:
             logger.error(f"Unsupported prompt type: {type(prompt)}")

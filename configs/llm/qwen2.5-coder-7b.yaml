@@ -3,7 +3,8 @@
 
 provider: "ollama"
 model: "qwen2.5-coder:7b"
-reasoning_effort: "minimal"
+generation_params:
+  reasoning_effort: "minimal"
 
 # Token limit configuration - disabled
 max_output_tokens: null

@@ -19,6 +19,7 @@ class LLMClient(ABC):
         max_output_tokens: Optional[int] = None,
         enable_token_limit: bool = True,
         workers: int = 1,
+        default_gen_params: Optional[dict[str, Any]] = None,
     ) -> None:
         """Initialize LLM client with token tracking.
 
@@ -32,6 +33,7 @@ class LLMClient(ABC):
         """
         self.model = model
         self.workers = workers
+        self.default_gen_params = default_gen_params or {}
         self._total_input_tokens = 0
         self._total_output_tokens = 0
         self._max_output_tokens = max_output_tokens or self.DEFAULT_TOKEN_LIMIT

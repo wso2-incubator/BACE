@@ -23,7 +23,14 @@ class OpenAIChatClient(LLMClient):
         workers: int = 32,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
+        self.default_gen_params = kwargs.pop("generation_params", {})
+        super().__init__(
+            model,
+            max_output_tokens,
+            enable_token_limit,
+            workers=workers,
+            default_gen_params=self.default_gen_params,
+        )
         from openai import OpenAI
 
         # Handle Vertex AI Authentication if requested
@@ -45,7 +52,7 @@ class OpenAIChatClient(LLMClient):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            credentials.refresh(Request())
+            credentials.refresh(Request())  # type: ignore[no-untyped-call]
             token = credentials.token
             if not token:
                 raise ValueError("Failed to retrieve access token from Google Auth.")
@@ -59,10 +66,14 @@ class OpenAIChatClient(LLMClient):
         logger.debug(f"OpenAIChatClient generating with model: {self.model}")
         logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
 
+        # Merge priority: call-time kwargs > default_gen_params (YAML)
+        params = self.default_gen_params.copy()
+        params.update(kwargs)
+
         response: ChatCompletion = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            **kwargs,
+            **params,
         )
         content = response.choices[0].message.content
         if content is None:
@@ -97,7 +108,14 @@ class OpenAIClient(LLMClient):
         workers: int = 32,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
+        self.default_gen_params = kwargs.pop("generation_params", {})
+        super().__init__(
+            model,
+            max_output_tokens,
+            enable_token_limit,
+            workers=workers,
+            default_gen_params=self.default_gen_params,
+        )
         from openai import OpenAI
 
         self.reasoning_effort = reasoning_effort
@@ -132,8 +150,12 @@ class OpenAIClient(LLMClient):
             self._add_output_tokens(self._estimate_tokens(response.output_text))
 
     def generate(self, prompt: Union[str, "ResponseInputParam"], **kwargs: Any) -> str:
-        # Allow overriding reasoning effort for this specific call
-        reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
+        # Merge priority: call-time kwargs > default_gen_params (YAML)
+        params = self.default_gen_params.copy()
+        params.update(kwargs)
+
+        # Allow overriding reasoning effort specifically
+        reasoning_effort = params.pop("reasoning_effort", self.reasoning_effort)
 
         logger.debug(
             f"OpenAIClient generating with model: {self.model}, "
@@ -145,7 +167,7 @@ class OpenAIClient(LLMClient):
             model=self.model,
             input=prompt,
             reasoning={"effort": reasoning_effort},
-            **kwargs,
+            **params,
         )
 
         content = response.output_text if hasattr(response, "output_text") else None

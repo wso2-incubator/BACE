@@ -8,3 +8,9 @@ max_output_tokens: 100_000_000
 workers: 32
 
 
+generation_params:
+  reasoning_effort: "low"
+  temperature: 1.0
+  top_p: 1.0
+
+

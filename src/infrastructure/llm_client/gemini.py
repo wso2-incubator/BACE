@@ -37,7 +37,14 @@ class GeminiLLMClient(LLMClient):
             workers: Max workers allowed.
             **kwargs: Additional arguments passed to the genai.Client.
         """
-        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
+        self.default_gen_params = kwargs.pop("generation_params", {})
+        super().__init__(
+            model,
+            max_output_tokens,
+            enable_token_limit,
+            workers=workers,
+            default_gen_params=self.default_gen_params,
+        )
 
         # Use api_key from kwargs if provided, otherwise from environment
         api_key = kwargs.pop("api_key", os.environ.get("GEMINI_API_KEY"))
@@ -85,8 +92,12 @@ class GeminiLLMClient(LLMClient):
         Returns:
             Generated text content.
         """
+        # Merge priority: call-time kwargs > default_gen_params (YAML)
+        params = self.default_gen_params.copy()
+        params.update(kwargs)
+
         # Extract reasoning_effort if provided, otherwise use default
-        reasoning_effort = kwargs.pop("reasoning_effort", self.reasoning_effort)
+        reasoning_effort = params.pop("reasoning_effort", self.reasoning_effort)
         thinking_level = self._map_reasoning_effort(reasoning_effort)
 
         logger.debug(
@@ -103,9 +114,9 @@ class GeminiLLMClient(LLMClient):
         # Build generation config
         gen_config = types.GenerateContentConfig(
             thinking_config=thinking_config,
-            # Pass max_output_tokens if specified (conversion might be needed if they naming is different)
+            # Pass max_output_tokens if specified
             # max_output_tokens=self.max_output_tokens,
-            **kwargs,
+            **params,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),
