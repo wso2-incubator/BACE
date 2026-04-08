@@ -3,12 +3,10 @@
 
 provider: "ollama"
 model: "qwen2.5-coder:7b"
-generation_params:
-  reasoning_effort: "minimal"
 
 # Token limit configuration - disabled
 max_output_tokens: null
-workers: 4
+workers: 8
 
 # Optional: API configuration (uses environment variables by default)
 # api_key: "${OLLAMA_API_KEY}"
