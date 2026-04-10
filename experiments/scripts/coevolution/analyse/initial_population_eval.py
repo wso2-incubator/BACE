@@ -306,7 +306,6 @@ def main(
     print("\n")
 
     solved_rows = [r for r in summary_data if r["passed_private"]]
-    failed_rows = [r for r in summary_data if not r["passed_private"]]
     no_candidate_rows = [r for r in summary_data if not r["passed_public"]]
 
     table = Table(
@@ -348,7 +347,7 @@ def main(
     total_no_candidate = len(no_candidate_rows)
     total_with_candidate = total_problems - total_no_candidate
     total_passed = len(solved_rows)
-    pass_rate = (total_passed / total_with_candidate * 100) if total_with_candidate else 0.0
+    pass_rate = (total_passed / total_problems * 100) if total_problems else 0.0
 
     stats_text = Text.assemble(
         ("Total Problems:             ", "bold"),
@@ -359,8 +358,9 @@ def main(
         (f"{total_with_candidate}\n", "cyan"),
         ("Passed Private Tests:       ", "bold"),
         (f"{total_passed}\n", "green" if total_passed > 0 else "red"),
-        ("Pass Rate (w/ candidate):   ", "bold"),
-        (f"{pass_rate:.2f}%", "bold yellow"),
+        ("Pass Rate:                  ", "bold"),
+        (f"{pass_rate:.2f}%  ", "bold yellow"),
+        (f"({total_passed}/{total_problems})", "dim"),
     )
     console.print(
         "\n",
