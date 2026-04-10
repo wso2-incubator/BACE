@@ -27,7 +27,7 @@ experiment:
 # COMPONENT REFERENCES
 # ============================================================================
 
-llm: "llm/gpt-5-mini.yaml"
+llm: "llm/groq-gpt-oss-120b.yaml"
 code_profile: "profiles/code/standard.yaml"
 unittest_profile: "profiles/unittest/standard.yaml"
 differential_profile: "profiles/differential/standard.yaml"
