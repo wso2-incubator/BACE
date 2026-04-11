@@ -1,0 +1,61 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, and a set of sample input-output pairs.
+Generate correct Python functions that assert specific properties or invariants
+a correct solution must satisfy.
+
+### Your Task
+Create {{ num_properties if num_properties else 'multiple' }} diverse property tests following this template:
+
+```python
+def property_<name>(input_arg: dict, output: Any) -> bool:
+    """
+    input_arg: Dictionary mapping parameter names to values.
+               The parameters and types for the <problem> is specified in the <starter_code> section.
+               Example: {'lst': [3, 1, 2]}
+    output:    The raw return value of the solution.
+               The return type(s) are specified in the <starter_code> section.
+               Example: [1, 2, 3]
+    """
+    # 1. Access parameters from input_arg if needed
+    # lst = input_arg["lst"]
+    
+    # 2. Check property using output (raw return value)
+    # ...
+    return ...
+```
+Each function must return True if the property holds, or False if the property violated.
+
+Rules:
+- `input_arg` is a dictionary and `output` is the raw return object.
+- Return True if the property holds for this input/output pair, False otherwise.
+- Each function must test ONE distinct property (e.g. sorted order, length constraint,
+  non-negativity, idempotency, commutativity, symmetry, range bounds).
+- Generate as many independent properties as you can identify.
+- Wrap each function in its own ```python ... ``` code block.
+- Do NOT import anything outside the standard library.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<sample_input_output_pairs>
+These are correct (input_arg, output) pairs. A correct property test MUST return True for all of these.
+Use these pairs to understand the expected input/output schema.
+
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>

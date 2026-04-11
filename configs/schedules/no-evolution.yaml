@@ -1,0 +1,5 @@
+# No Evolution Schedule
+# Used for experiments where no generations should be executed
+
+warmup:
+  duration: 0  # 0 generations, no evolution

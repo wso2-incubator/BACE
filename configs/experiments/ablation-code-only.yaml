@@ -1,0 +1,56 @@
+# Ablation Study: Code-Only Evolution (No Test Coevolution)
+#
+# This configuration tests whether test coevolution is necessary by:
+# - Evolving ONLY code against public tests
+# - NO test evolution 
+# - NO unittest evolution
+# - NO differential testing
+# - NO alternating phases
+#
+# Purpose: Measure the core hypothesis of coevolution:
+# - Does coevolving tests improve code quality vs fixed tests?
+# - Is test-code coevolution better than code-only evolution?
+# - How much does test evolution contribute to final solution quality?
+#
+# Expected Results:
+# - If coevolution helps: This should perform WORSE than full coevolution
+# - If coevolution unnecessary: This should match full coevolution performance
+#
+# This is a CRITICAL ablation to validate the entire coevolution approach.
+
+experiment:
+  name: "ablation-code-only"
+  description: "Ablation study: code evolution against fixed public tests (no test coevolution)"
+
+# ============================================================================
+# COMPONENT REFERENCES
+# ============================================================================
+
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/standard.yaml"
+
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+
+# Code-only schedule (no test evolution phases)
+schedule: "schedules/code-only-5gen.yaml"
+
+# ============================================================================
+# DATASET CONFIGURATION
+# ============================================================================
+
+dataset:
+  config_path: "datasets/lcb.yaml"
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  console_level: "DEBUG"
+  file_level: "TRACE"
+  log_file_base_name: "ablation_code_with_public_"

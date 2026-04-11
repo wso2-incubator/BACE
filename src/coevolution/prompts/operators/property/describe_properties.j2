@@ -1,0 +1,52 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, and a set of sample input-output pairs.
+Your goal is to brainstorm a set of diverse property tests (invariants) that a correct solution must satisfy.
+
+For example, for a sorting function:
+1. The length of the output must equal the length of the input.
+2. The output must be in non-decreasing order.
+3. The output must contain the same elements as the input (permutation).
+
+List {{ num_properties if num_properties else '' }} distinct and diverse properties.
+- Each property should be checkable given only the input and output of the solution.
+- Focus on properties that can be checked given (input_data, output).
+- The properties should be agnostic to specific implementation details and should hold for any correct solution in any programming language.
+- All the properties combined should be strong enough to differentiate a correct solution from an incorrect one.
+- Format your output as a list of brief descriptions wrapped in `<property_description>` tags.
+
+Example:
+<property_description>The length of the returned list is identical to the length of the input list.</property_description>
+<property_description>The elements in the returned list are sorted in ascending order.</property_description>
+
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<sample_input_output_pairs>
+These are correct (input_arg, output) pairs according to the problem description.
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<output_format>
+# Reasoning steps: ... 
+# Property descriptions:
+<property_description>...</property_description>
+<property_description>...</property_description>
+...
+</output_format>

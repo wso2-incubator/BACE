@@ -1,0 +1,76 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, a set of sample input-output pairs, existing property tests, and a selected property test that has been identified as incorrect.
+You will also be provided with the reasoning explaining why the original property test is flawed and descriptions of valid scenarios it incorrectly rejects.
+
+Your goal is to refine the property test implementation so that it correctly handles these scenarios while still checking the intended property for other cases.
+
+### Your Task
+1. Analyze why the original property test was identified as incorrect based on the provided reasoning.
+2. Implement a refined version of the property function `property_<name>(input_arg: dict, output: Any) -> bool`.
+3. Ensure it would return `True` for valid solutions described in the reasoning.
+4. Ensure it still returns `False` for incorrect solutions that violate the core property.
+5. Ensure your refined property is distinct and addresses behavior not already covered by existing property tests listed below.
+
+Rules:
+- Follow the same signature: `property_<name>(input_arg: dict, output: Any) -> bool`.
+- `input_arg` is a dictionary of arguments, and `output` is the raw returned object.
+- Include a descriptive docstring explaining the property's intent.
+- Wrap the function in a ```python ... ``` code block.
+- Do NOT import anything outside the standard library.
+</task>
+
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<sample_input_output_pairs>
+These are correct (input_arg, output) pairs according to the problem description.
+Use them to understand the expected input/output schema.
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<current_properties>
+These are the other properties that are already checked.
+{% for explanation in current_explanations %}
+Property {{ loop.index }}: {{ explanation }}
+
+{% endfor %}
+</current_properties>
+
+
+<original_property_test>
+This is the property test that is identified as incorrect.
+```python
+{{ snippet }}
+```
+</original_property_test>
+
+<reasoning_from_falsifier>
+{{ reasoning }}
+</reasoning_from_falsifier>
+
+<output_format>
+```python
+def property_<name>(input_arg: dict, output: Any) -> bool:
+    """
+    Refined property description.
+    """
+    ...
+```
+</output_format>
+

@@ -1,0 +1,8 @@
+# Public Test Profile
+# Very reliable ground-truth tests from dataset
+
+# Bayesian parameters (very high reliability)
+alpha: 0.0   # Very low false positive rate
+beta: 0.2
+gamma: 0.0
+learning_rate: 0.1

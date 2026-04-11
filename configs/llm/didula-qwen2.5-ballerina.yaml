@@ -1,0 +1,11 @@
+# Qwen2.5-Coder 7B Configuration
+# Transformers based local-hosted model for codevolution experiments
+
+provider: "transformers"
+model: "didula-wso2/exp_23_emb_grpo_checkpoint_220_16bit_vllm"
+generation_params:
+  reasoning_effort: "minimal"
+
+# Token limit configuration - disabled
+max_output_tokens: null
+workers: 2

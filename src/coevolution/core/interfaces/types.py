@@ -1,0 +1,37 @@
+# coevolution/core/interfaces/types.py
+"""
+Type aliases, enums, and constants for the coevolution framework.
+"""
+
+from enum import Enum
+from typing import Literal, TypeAlias
+
+# Type alias for genetic operations
+type Operation = str
+
+# Type alias for parent lineage tracking (grouped by type)
+type ParentDict = dict[Literal["code", "test"], list[str]]
+
+# Standard operation names (for convenience, not exhaustive)
+OPERATION_INITIAL: Literal["initial"] = "initial"
+OPERATION_CROSSOVER: Literal["crossover"] = "crossover"
+OPERATION_EDIT: Literal["edit"] = "edit"
+OPERATION_REPRODUCTION: Literal["reproduction"] = "reproduction"
+OPERATION_MUTATION: Literal["mutation"] = "mutation"
+OPERATION_GENERIC_EDIT: Literal["generic_edit"] = "generic_edit"
+
+
+class LifecycleEvent(Enum):
+    """Enumeration of lifecycle events for individuals."""
+
+    CREATED = "created"
+    BECAME_PARENT = "became_parent"
+    SELECTED_AS_ELITE = "selected_as_elite"
+    PROBABILITY_UPDATED = "probability_updated"
+    DIED = "died"
+    SURVIVED = "survived"
+
+
+type ParentProbabilities = list[float]
+
+InteractionKey: TypeAlias = tuple[str, str, str, str]

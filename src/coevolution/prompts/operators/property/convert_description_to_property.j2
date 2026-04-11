@@ -1,0 +1,63 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, set of input output pairs, and a specific property description.
+Your goal is to implement a Python function that checks this property.
+
+Implement the function `property_<name>(input_arg: dict, output: Any) -> bool` following this template:
+
+```python
+def property_<name>(input_arg: dict, output: Any) -> bool:
+    """
+    {{ description }}
+    """
+    # 1. Access parameters from input_arg if needed
+    # ...
+    
+    # 2. Check property using output (raw return value)
+    # ...
+    return ...
+```
+
+Rules:
+- `input_arg` is a dictionary of function arguments.
+- `output` is the raw object (int, list, dict, etc.) returned by the solution.
+- Return True if the property holds, False otherwise.
+- Wrap the function in a ```python ... ``` code block.
+- Do NOT import anything outside the standard library.
+- Give a concise <name> for the property.
+</task>
+
+<property_to_check>
+{{ description }}
+</property_to_check>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<sample_input_output_pairs>
+These are correct (input_arg, output) pairs. A correct property test MUST return True for all of these.
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<input/output format>
+If input is via stdin/json, each entry will be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry will be of the form:
+{"param1": value1, "param2": value2, ...}
+
+Output format will be a JSON-encoded string of the solution's return value.
+</input/output format>

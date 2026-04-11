@@ -1,0 +1,37 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.tester_role() }}
+
+<problem>
+{{ question_content }}
+</problem>
+
+<current_test>
+```{{ language }}
+{{ current_test_snippet }}
+```
+</current_test>
+
+<passing_code>
+```{{ language }}
+{{ passing_code_snippet }}
+```
+</passing_code>
+
+<failing_code>
+```{{ language }}
+{{ failing_code_snippet }}
+```
+</failing_code>
+
+<failing_code_trace>
+{{ failing_code_trace }}
+</failing_code_trace>
+
+<task>
+The <current_test> passes for the <passing_code> but fails for the <failing_code>.
+The <current_test> could not find the bug in the <passing_code>. However, the <passing_code> has a bug that the test did not catch.
+Your goals is to edit the <current_test> so that it can find bugs in both <passing_code> and <failing_code>.
+</task>
+{{ fmt.test_method_format(language) }}

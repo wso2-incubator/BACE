@@ -1,0 +1,46 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/starter_code.j2' as starter %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.coder_role() }}
+
+<problem>
+{{ question_content }}
+</problem>
+
+<current_solution>
+```{{ language }}
+{{ individual }}
+```
+</current_solution>
+
+<failing_tests_feedback>
+{% for test in failing_tests %}
+Failing Test #{{ loop.index }}:
+{{ test.snippet }}
+
+Error Trace:
+{{ test.trace }}
+{% if not loop.last %}
+
+{{ "=" * 80 }}
+
+{% endif %}
+{% endfor %}
+</failing_tests_feedback>
+
+<task>
+The current solution fails multiple test cases. Your task is to analyze ALL the failing tests and their error traces provided above, identify the root causes of the failures, and generate an improved code solution that addresses ALL the issues.
+
+Important guidelines:
+- Focus on making the code pass ALL the failing test cases shown above.
+- Look for common patterns across the failures to identify the core issues.
+- Ensure your revised solution maintains the starter code structure.
+- Write a concise docstring for the solution with a clear explanation of its approach and reasoning.
+</task>
+
+{{ starter.starter_code_block(starter_code, language) }}
+
+{{ starter.starter_code_note() }}
+
+{{ fmt.code_format(language) }}

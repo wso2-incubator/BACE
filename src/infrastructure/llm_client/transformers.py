@@ -1,0 +1,71 @@
+"""Transformers LLM client implementation."""
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+from loguru import logger
+from transformers.pipelines.text_generation import TextGenerationPipeline
+
+from .base import LLMClient
+from .exceptions import LLMInputFormatError
+
+if TYPE_CHECKING:
+    from transformers.pipelines.text_generation import TextGenerationPipeline
+
+
+class TransformersClient(LLMClient):
+    """Transformers LLM client implementation."""
+
+    def __init__(
+        self,
+        model: str,
+        max_output_tokens: Optional[int] = None,
+        enable_token_limit: bool = False,
+        workers: int = 1,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(model, max_output_tokens, enable_token_limit, workers=workers)
+        from transformers import pipeline
+
+        # Type as Callable[..., Any] to keep mypy satisfied for the dynamic
+        # pipeline object from the transformers library.
+        self.pipe: TextGenerationPipeline = pipeline("text-generation", model=model)
+        logger.debug(f"Initialized TransformersClient pipe with model: {model}")
+
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], **kwargs: Any) -> str:
+        logger.debug(f"TransformersClient generating with model: {self.model}")
+        if isinstance(prompt, str):
+            logger.trace(f"Prompt (first 200 chars): {prompt[:200]}...")
+        elif isinstance(prompt, list):
+            logger.trace(f"Prompt is a list with length: {len(prompt)}")
+        else:
+            logger.trace(f"Prompt type: {type(prompt)}")
+
+        if isinstance(prompt, list):
+            messages: List[Dict[str, str]] = prompt
+        elif isinstance(prompt, str):
+            messages = [{"role": "user", "content": prompt}]
+        else:
+            logger.error(f"Unsupported prompt type: {type(prompt)}")
+            raise LLMInputFormatError(f"Unsupported prompt type: {type(prompt)}")
+
+        response: Any = self.pipe(messages, max_new_tokens=2048, **kwargs)
+        content: str = response[0]["generated_text"][-1]["content"]
+
+        logger.debug(f"Generated {len(content)} characters")
+        logger.trace(f"Response (first 200 chars): {content[:200]}...")
+
+        # Track usage
+        tokenizer = getattr(self.pipe, "tokenizer", None)
+        if tokenizer:
+            prompt_str = str(prompt) if not isinstance(prompt, str) else prompt
+            input_tokens = len(tokenizer.encode(prompt_str))
+            output_tokens = len(tokenizer.encode(content))
+            self._add_input_tokens(input_tokens)
+            self._add_output_tokens(output_tokens)
+        else:
+            # Fallback to estimation
+            prompt_str = str(prompt) if not isinstance(prompt, str) else prompt
+            self._add_input_tokens(self._estimate_tokens(prompt_str))
+            self._add_output_tokens(self._estimate_tokens(content))
+
+        return content

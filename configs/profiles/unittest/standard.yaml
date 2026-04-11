@@ -1,0 +1,25 @@
+# Standard Unittest Profile
+# Settings for discrimination-driven unit test evolution
+
+initial_prior: 0.2
+initial_population_size: 20
+max_population_size: 20
+offspring_rate: 0.8
+elitism_rate: 0.4
+
+# Operation rates
+mutation_rate: 0.3
+crossover_rate: 0.2
+edit_rate: 0.5
+
+# Bayesian reliability parameters
+alpha: 0.1  # P(pass | code correct, test incorrect)
+beta: 0.2    # P(pass | code incorrect, test correct)
+gamma: 0.25 # P(pass | both incorrect)
+learning_rate: 0.1
+
+# Performance
+diversity_enabled: true
+
+# Probability assigner strategy: one of ["min", "mean", "max", "init"]
+prob_assigner_strategy: "min"

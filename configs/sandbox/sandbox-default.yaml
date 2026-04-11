@@ -1,0 +1,19 @@
+# Default Sandbox Configuration
+
+# Differential test execution sandbox
+differential:
+  timeout: 10
+  max_memory_mb: 2048
+  max_output_size: 10000000
+  test_method_timeout: 10
+
+# Main execution sandbox
+execution:
+  timeout: 30
+  max_memory_mb: 2048
+  max_output_size: 10000000
+  test_method_timeout: 30
+
+# Worker configuration
+workers:
+  cpu_count: 4  # Can be overridden by COEVOLUTION_WORKERS env var

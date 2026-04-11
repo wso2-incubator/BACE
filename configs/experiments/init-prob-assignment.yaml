@@ -1,0 +1,44 @@
+# Experiment config using 'init' probability assignment strategy
+# Based on quick-test but uses 'init' for probability assignment
+
+experiment:
+  name: "init-prob-assignment"
+  description: "Quick experiment where offspring probabilities are set to the initial prior ('init' strategy)."
+
+llm: "llm/gpt-5-mini.yaml"
+
+# Use the standard code profile, only override the probability assigner
+code_profile: "profiles/code/standard.yaml"
+code_profile_overrides:
+  prob_assigner_strategy: "init"
+  initial_prior: 0.2
+  learning_rate: 0.05
+
+unittest_profile: "profiles/unittest/standard.yaml"
+unittest_profile_overrides:
+  prob_assigner_strategy: "init"
+  initial_prior: 0.2
+  learning_rate: 0.05
+
+differential_profile: "profiles/differential/standard.yaml"
+differential_profile_overrides:
+  prob_assigner_strategy: "init"
+  initial_prior: 0.2
+  learning_rate: 0.05
+
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+
+# Use an existing schedule config and dataset reference (keep defaults)
+schedule: "schedules/alternating-20gen.yaml"
+
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+logging:
+  console_level: "DEBUG"
+  file_level: "DEBUG"
+  log_file_base_name: "init_prob_assignment"

@@ -1,0 +1,5 @@
+# Simultaneous Evolution Schedule - 5 Generations
+# Both populations evolve together for the entire duration.
+
+simultaneous:
+  duration: 5

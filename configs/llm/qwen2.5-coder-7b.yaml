@@ -1,0 +1,14 @@
+# Qwen2.5-Coder 7B Configuration
+# Ollama-hosted model for codevolution experiments
+
+provider: "ollama"
+model: "qwen2.5-coder:7b"
+
+# Token limit configuration - disabled
+max_output_tokens: null
+workers: 8
+
+# Optional: API configuration (uses environment variables by default)
+# api_key: "${OLLAMA_API_KEY}"
+# base_url: "${OLLAMA_BASE_URL}"
+# organization: "${OLLAMA_ORG_ID}"

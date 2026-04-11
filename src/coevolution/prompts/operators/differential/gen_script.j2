@@ -1,0 +1,53 @@
+<task>
+- You are an expert {{ language }} programmer.
+- You are given a programming problem described in a <problem> block. 
+- You are also given two {{ language }} code snippets in <solution variant='P'> and <solution variant='Q'> blocks that are intended to solve the same programming problem. 
+- You are also given the current test inputs and the corresponding equivalent outputs they produce for both P and Q solutions in a <current_tests> block.
+- The current tests fail to differentiate between the two code snippets as they produce the same outputs for both.
+- Your task is to write a {{ language }} script that generates test inputs that can differentiate between the two code snippets.
+- Your generator must be a pure Python function `generate_test_inputs(n)`.
+- It should return a list of `n` dictionaries. Each dictionary maps parameter names to values.
+- These dictionaries will be handled as JSON data.
+- The script should be able to generate multiple diverse test inputs as much as required by the user in a single execution. 
+- You should prefer smaller and simpler test inputs over larger and complex ones, as long as they can differentiate between the two code snippets.
+- You are allowed to use standard {{ language }} libraries to implement the script.
+- You are NOT allowed to manually hardcode any test inputs within the script.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<solution variant='P'>
+```{{ language }}
+{{ code_snippet_P }}
+```
+</solution>
+
+<solution variant='Q'>
+```{{ language }}
+{{ code_snippet_Q }}
+```
+</solution>
+
+<current_tests>
+{{ current_tests }}
+</current_tests>
+
+<output_format>
+Provide only the {{ language }} script inside a code block as follows:
+```{{ language }}
+{% if language == 'python' %}
+def generate_test_inputs(num_inputs: int) -> list[dict]:
+    # Your code to generate test inputs
+{% elif language == 'ballerina' %}
+public function generate_test_inputs(int num_inputs) returns map<json>[] {
+    // Your code to generate test inputs
+}
+{% endif %}
+```
+If input is via stdin/json, each entry should be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry should be of the form:
+{"param1": value1, "param2": value2, ...}
+</output_format>

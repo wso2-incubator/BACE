@@ -1,0 +1,32 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.tester_role() }}
+
+<problem>
+{{ question_content }}
+</problem>
+
+<current_test>
+```{{ language }}
+{{ current_test_snippet }}
+```
+</current_test>
+
+<passing_code version='P'>
+```{{ language }}
+{{ passing_code_snippet_P }}
+```
+</passing_code>
+
+<passing_code version='Q'>
+```{{ language }}
+{{ passing_code_snippet_Q }}
+```
+</passing_code>
+
+<task>
+The <current_test> could not discriminate between the two passing code versions <passing_code version='P'> and <passing_code version='Q'>.
+Your goal is to edit the <current_test> so that it can discriminate between the two passing code versions.
+</task>
+{{ fmt.test_method_format(language) }}

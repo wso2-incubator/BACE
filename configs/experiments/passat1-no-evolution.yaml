@@ -1,0 +1,38 @@
+# pass@1 - No Evolution Experiment
+# Generates a single code candidate per problem and evaluates pass@1.
+
+experiment:
+  name: "passat1-no-evolution"
+  description: "pass@1 checking: generate one candidate per problem, no evolution (0 generations)"
+
+# Components
+llm: "llm/gpt-5-mini.yaml"
+code_profile: "profiles/code/passat1.yaml"
+public_profile: "profiles/public/standard.yaml"
+sandbox: "sandbox/sandbox-default.yaml"
+schedule: "schedules/no-evolution.yaml"
+
+# Execution control
+run_settings:
+  evaluation_mode: "pass@1"
+  num_generations: 0
+  code_population_size: 1
+
+# Dataset configuration
+dataset:
+  version: "release_v6"
+  start_date: "2025-03-01"
+  end_date: "2025-05-10"
+  difficulty: "hard"
+
+# Problem selection
+subset:
+  start_index: 0
+  end_index: null
+  problem_ids: null
+
+# Logging configuration
+logging:
+  console_level: "INFO"
+  file_level: "DEBUG"
+  log_file_base_name: "passat1_no_evolution"

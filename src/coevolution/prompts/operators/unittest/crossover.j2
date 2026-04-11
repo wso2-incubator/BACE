@@ -1,0 +1,29 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.tester_role() }}
+
+<problem>
+{{ question_content }}
+</problem>
+
+<context>
+The following two test cases were identified to be good tests.
+</context>
+
+<test_case_1>
+```{{ language }}
+{{ parent1 }}
+```
+</test_case_1>
+
+<test_case_2>
+```{{ language }}
+{{ parent2 }}
+```
+</test_case_2>
+
+<task>
+Create a new test case that covers the gaps in the existing tests.
+</task>
+{{ fmt.test_method_format(language) }}

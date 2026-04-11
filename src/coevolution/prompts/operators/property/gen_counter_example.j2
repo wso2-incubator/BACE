@@ -1,0 +1,59 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+You will be given a programming problem, a starter code template, a set of input-output pairs, and a candidate property test.
+Your goal is to determine if the candidate property test is **correct** or **incorrect**. A property test is incorrect if it would return `False` for a correct solution.
+
+1. Analyze the property test and the problem description carefully.
+2. Brainstorm scenarios, edge cases, or valid inputs where this property test might incorrectly return `False`.
+3. You do NOT need to provide a concrete input/output pair. Instead, provide detailed reasoning explaining why the property is flawed.
+4. Indicate your conclusion using the `<is_valid>` tag.
+
+Rules:
+- Wrap your detailed reasoning and descriptions of counter-example scenarios in `<reasoning>` tags.
+- If the property test seems correct and robust, include `<is_valid>True</is_valid>`.
+- If the property test is incorrect (i.e., it would fail a valid solution), include `<is_valid>False</is_valid>`.
+- **Always provide reasoning.**
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+{{ starter_code }}
+</starter_code>
+
+<candidate_property_test>
+{{ snippet }}
+</candidate_property_test>
+
+<sample_input_output_pairs>
+These are correct (input_arg, output) pairs according to the problem description.
+They are known to pass the candidate property test.
+
+{% for test in public_tests %}
+
+Example {{ loop.index }}:
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<instructions>
+1. Analyze the candidate property test.
+2. Think about valid solutions to the problem. Are there any that would violate this property?
+3. Describe such scenarios in your reasoning.
+4. Conclude whether the property is correct or incorrect and set <is_valid> accordingly.
+</instructions>
+
+<output_format>
+<reasoning>
+[Describe why the property might be incorrect, mentioning specific input/output scenarios that would be incorrectly rejected.]
+</reasoning>
+<is_valid>True or False</is_valid>
+</output_format>
+

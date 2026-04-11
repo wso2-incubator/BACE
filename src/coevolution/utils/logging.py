@@ -1,0 +1,751 @@
+"""
+Logging utilities for the coevolution project.
+
+Provides a standardized setup function for Loguru and helper functions
+for logging formatted section headers and individual/generation logging.
+
+Functions:
+    setup_logging: Configures console and file logging with context support.
+    log_section_header: Logs a prominent "==== SECTION ====" style header.
+    log_subsection_header: Logs a "---- Subsection ----" style header.
+    log_generation_summary: Logs lightweight generation statistics for code and test populations.
+    log_individual_complete: Logs a single individual's complete lifecycle.
+    log_final_survivors: Logs all surviving individuals at evolution end.
+"""
+
+import dataclasses
+import json
+import multiprocessing
+import os
+import sys
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+import pandas as pd
+from loguru import logger
+
+from coevolution.utils.paths import sanitize_id
+
+if TYPE_CHECKING:
+    from loguru import Record
+
+    from coevolution.core.interfaces import Problem
+    from coevolution.core.interfaces.data import ExecutionResults
+    from coevolution.core.population import CodePopulation, TestPopulation
+
+
+def setup_logging(
+    console_level: str = "DEBUG",
+    file_level: str = "DEBUG",
+    log_file_base_name: str = "coevolution_run",
+    run_id: str | None = None,
+    problem_id: str = "SETUP",
+    resume: bool = False,
+) -> str:
+    """
+    Architecturally robust logging setup that prevents multiprocessing corruption.
+
+    Args:
+        console_level: Log level for console output (default: "DEBUG")
+        file_level: Log level for file output (default: "DEBUG")
+        log_file_base_name: Base name for log files (default: "coevolution_run")
+        run_id: Unique identifier for this run, included in log file names (default: generates UUID)
+        problem_id: ID of the problem being processed (default: SETUP)
+        resume: If True, allows reusing an existing run_id directory without renaming (default: False)
+    """
+    logger.remove()
+
+    # ------------------------------------------------------------------
+    # 1. PROCESS IDENTIFICATION
+    # ------------------------------------------------------------------
+    # Detect if we are the Main Process or a Child Worker
+    current_process = multiprocessing.current_process()
+    is_main_process = current_process.name == "MainProcess"
+    pid = os.getpid()
+
+    # Generate/Resolve run_id (fallback to env for multiprocess workers)
+    if run_id is None:
+        run_id = os.getenv("COEV_RUN_ID", uuid.uuid4().hex[:8])
+
+    # Ensure run_id is path-safe before any existence checks or log setup
+
+    run_id = sanitize_id(run_id)
+
+    if problem_id == "SETUP":
+        problem_id = os.getenv("COEV_PROBLEM_ID", "SETUP")
+
+    # Detect if we should check for collisions (only in MainProcess and for NEW runs)
+    if is_main_process and run_id != os.getenv("COEV_RUN_ID") and not resume:
+        # If run_id directory exists, append timestamp until unique
+        base_run_id = run_id
+        while os.path.exists(f"logs/{run_id}"):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # If we are hitting collisions in the same second, add more precision
+            run_id = f"{base_run_id}_{timestamp}"
+            if os.path.exists(f"logs/{run_id}"):
+                time.sleep(1)  # Wait a bit if we collision exactly on the same second
+
+        if run_id != base_run_id:
+            # Print to stderr immediately as logger isn't fully set up yet
+            sys.stderr.write(
+                f"\n[WARNING] Run ID collision: 'logs/{base_run_id}' already exists.\n"
+                f"[WARNING] Renaming current run to: '{run_id}'\n\n"
+            )
+
+    # Lock these into the environment so child processes inherit them automatically
+    if is_main_process:
+        os.environ["COEV_RUN_ID"] = str(run_id)
+        os.environ["COEV_PROBLEM_ID"] = str(problem_id)
+
+    # ------------------------------------------------------------------
+    # 2. CONTEXT CONFIGURATION
+    # ------------------------------------------------------------------
+    # Standardize context to ensure every log line has traceable metadata
+    default_context = {
+        "run_id": run_id,
+        "problem_id": problem_id,
+        "proc_type": "MAIN" if is_main_process else "WORKER",
+    }
+
+    # Console Format (Concise)
+    console_format = (
+        "<green>{time:HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>[{extra[proc_type]}:{extra[problem_id]}]</cyan> | "
+        "<cyan>{name}:{function}:{line}</cyan> - "
+        "<level>{message}</level>"
+    )
+
+    # File Format (Detailed with PID)
+    file_format = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+        "{level: <8} | "
+        "[{extra[run_id]}:{extra[problem_id]}] | "
+        "PID:{process} | "  # Crucial for debugging distributed systems
+        "{name}:{function}:{line} - {message}"
+    )
+
+    # ------------------------------------------------------------------
+    # 3. HANDLER REGISTRATION
+    # ------------------------------------------------------------------
+
+    # A. Console Handler (Safe for all processes to write to stderr)
+    logger.add(
+        sys.stderr,
+        level=console_level.upper(),
+        format=console_format,
+        colorize=True,
+        enqueue=True,  # Ensure thread safety for console output
+    )
+
+    # B. File Handlers
+    def is_evo_event(record: "Record") -> bool:
+        return bool(record["extra"].get("is_evolution_event", False))
+
+    def is_trace_event(record: "Record") -> bool:
+        return not bool(record["extra"].get("is_evolution_event", False))
+
+    if is_main_process:
+        sanitized_run_id = sanitize_id(run_id)
+
+        # MAIN PROCESS: Writes to the master trace log
+        trace_path = f"logs/{sanitized_run_id}/trace.jsonl"
+        logger.add(
+            trace_path,
+            level=file_level.upper(),
+            format=file_format,
+            rotation="1 GB",
+            retention="10 days",
+            compression=None,
+            enqueue=True,
+            serialize=True,
+            filter=is_trace_event,
+        )
+
+        # Evolutionary history log (only if an actual problem is being processed)
+        if problem_id != "SETUP":
+            sanitized_pid = sanitize_id(problem_id)
+            history_path = (
+                f"logs/{sanitized_run_id}/{sanitized_pid}/evolutionary_history.jsonl"
+            )
+            logger.add(
+                history_path,
+                level="INFO",
+                format="{message}",
+                rotation="1 GB",
+                retention="10 days",
+                compression=None,
+                enqueue=True,
+                serialize=True,
+                filter=is_evo_event,
+            )
+    else:
+        # WORKER PROCESS: Writes to a shared trace file for all workers
+        log_file_path = f"logs/{run_id}/workers.jsonl"
+
+        logger.add(
+            log_file_path,
+            level=file_level.upper(),
+            format=file_format,
+            rotation="500 MB",
+            retention="5 days",
+            compression=None,
+            enqueue=True,
+            serialize=True,
+            filter=is_trace_event,
+        )
+
+    # Apply context
+    logger.configure(extra=default_context)
+
+    if is_main_process:
+        logger.info(f"Logging Initialized. Trace logs in logs/{run_id}/")
+    else:
+        logger.debug(f"Worker Logging Initialized. PID: {pid}")
+
+    if run_id is None:
+        raise ValueError("Run ID could not be determined")
+
+    return run_id
+
+
+def is_problem_completed(run_id: str, problem_id: str) -> bool:
+    """
+    Check if a problem has successfully completed evolution.
+    A problem is considered completed if the 'survived' event exists in the history log.
+
+    Args:
+        run_id: The ID of the run
+        problem_id: The ID of the problem
+
+    Returns:
+        bool: True if 'survived' event is found and verified in the history log
+    """
+    sanitized_run_id = sanitize_id(run_id)
+    sanitized_pid = sanitize_id(problem_id)
+    history_path = (
+        Path("logs") / sanitized_run_id / sanitized_pid / "evolutionary_history.jsonl"
+    )
+
+    if not history_path.exists():
+        return False
+
+    # Check the last 64KB of the file for the structured "survived" event
+    # Survival events are logged during finalization at the very end of the run.
+    try:
+        with open(history_path, "rb") as f:
+            f.seek(0, 2)
+            file_size = f.tell()
+            # If file is empty or very small, it's definitely not completed
+            if file_size < 10:
+                return False
+
+            # A 64KB buffer is plenty to capture the final survival records
+            read_size = min(file_size, 64 * 1024)
+            f.seek(max(0, file_size - read_size))
+            chunk = f.read(read_size).decode("utf-8", errors="ignore")
+
+            # Parse lines in reverse to find the last logged events
+            lines = chunk.strip().split("\n")
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    # Extract event type from the Loguru record structure
+                    record = data.get("record", {})
+                    extra = record.get("extra", {})
+                    event_data = extra.get("event_data", {})
+                    if event_data.get("event") == "survived":
+                        return True
+                except (json.JSONDecodeError, KeyError):
+                    # Skip malformed lines (like the first partial line of our chunk)
+                    continue
+
+            return False
+    except Exception:
+        # If we can't read it, assume not complete
+        return False
+
+
+def log_section_header(level: str, message: str) -> None:
+    """
+    Logs a prominent, centered section header surrounded by '='.
+
+    Args:
+        message: The text to display in the header.
+        level: The log level to use (e.g., "INFO", "DEBUG").
+    """
+    width = 80
+    logger.log(level, "=" * width)
+    logger.log(level, f" {message.upper()} ".center(width, "="))
+    logger.log(level, "=" * width)
+
+
+def log_subsection_header(level: str, message: str) -> None:
+    """
+    Logs a centered subsection header surrounded by '-'.
+
+    Args:
+        message: The text to display in the header.
+        level: The log level to use (e.g., "INFO", "DEBUG").
+    """
+    width = 80
+    logger.log(level, f" {message} ".center(width, "-"))
+
+
+def log_generation_summary(
+    code_population: "CodePopulation",
+    test_populations: dict[str, "TestPopulation"],
+) -> None:
+    """
+    Logs lightweight summary statistics for the current generation.
+    This logs aggregate information without full individual details,
+    reducing redundancy since individuals are logged once when their lifecycle ends.
+
+    Args:
+        code_population: The current code population
+        test_populations: Dictionary mapping test type to test population (e.g., {"unittest": pop, "differential": pop})
+    """
+
+    code_gen_num = code_population.generation
+
+    # Collect newly born individuals (created this generation)
+    new_code_ids = [
+        ind.id for ind in code_population if ind.generation_born == code_gen_num
+    ]
+
+    # Calculate code statistics
+    code_probs = [ind.probability for ind in code_population]
+
+    summary = {
+        "code_generation": code_gen_num,
+        "code_pop_size": len(code_population),
+        "avg_code_prob": round(sum(code_probs) / len(code_probs), 4),
+        "min_code_prob": round(min(code_probs), 4),
+        "max_code_prob": round(max(code_probs), 4),
+        "new_code_count": len(new_code_ids),
+        "new_code_ids": new_code_ids,
+    }
+
+    # Add statistics for each test population type
+    for test_type, test_pop in test_populations.items():
+        new_test_ids = [
+            ind.id for ind in test_pop if ind.generation_born == test_pop.generation
+        ]
+        test_probs = [ind.probability for ind in test_pop]
+
+        summary[f"{test_type}_generation"] = test_pop.generation
+        summary[f"{test_type}_pop_size"] = len(test_pop)
+        # Handle empty populations (avoid division by zero)
+        if test_probs:
+            summary[f"{test_type}_avg_prob"] = round(
+                sum(test_probs) / len(test_probs), 4
+            )
+            summary[f"{test_type}_min_prob"] = round(min(test_probs), 4)
+            summary[f"{test_type}_max_prob"] = round(max(test_probs), 4)
+        else:
+            summary[f"{test_type}_avg_prob"] = 0.0
+            summary[f"{test_type}_min_prob"] = 0.0
+            summary[f"{test_type}_max_prob"] = 0.0
+        summary[f"{test_type}_new_count"] = len(new_test_ids)
+        summary[f"{test_type}_new_ids"] = new_test_ids
+
+    # Log structured summary
+    logger.bind(is_evolution_event=True).info(
+        "GENERATION_SUMMARY",
+        event_data=summary,
+    )
+
+
+def log_belief_update_start(
+    population_type: str, num_items: int, num_observations: int
+) -> None:
+    """
+    Log the start of a belief update operation.
+
+    Args:
+        population_type: Either "code" or "test"
+        num_items: Number of items in the population being updated
+        num_observations: Number of observations used for the update
+    """
+    logger.info(
+        f"Updating {population_type} beliefs: {num_items} {population_type}s x "
+        f"{num_observations} observations"
+    )
+
+
+def log_prior_statistics(population_type: str, probs: "np.ndarray") -> None:
+    """Logs statistics about the prior probabilities."""
+
+    # Guard clause for empty arrays
+    if probs.size == 0:
+        logger.debug(f"Prior {population_type} beliefs: [Empty Population]")
+        return
+
+    mean_prob = np.mean(probs)
+    logger.debug(
+        f"Prior {population_type} beliefs: mean={mean_prob:.4f}, "
+        f"min={np.min(probs):.4f}, "
+        f"max={np.max(probs):.4f}"
+    )
+
+
+def log_posterior_statistics(
+    population_type: str, prior_probs: "np.ndarray", posterior_probs: "np.ndarray"
+) -> None:
+    """
+    Log statistics about posterior beliefs and the change from prior.
+
+    Args:
+        population_type: Either "code" or "test"
+        prior_probs: Array of prior probabilities
+        posterior_probs: Array of posterior probabilities
+    """
+    # add guard clause for empty arrays
+    if prior_probs.size == 0 or posterior_probs.size == 0:
+        logger.debug(f"Posterior {population_type} beliefs: [Empty Population]")
+        return
+
+
+    prior_mean = np.mean(prior_probs)
+    posterior_mean = np.mean(posterior_probs)
+    delta = posterior_mean - prior_mean
+
+    logger.debug(
+        f"Posterior {population_type} beliefs: mean={posterior_mean:.4f}, "
+        f"min={np.min(posterior_probs):.4f}, "
+        f"max={np.max(posterior_probs):.4f}"
+    )
+    logger.info(
+        f"{population_type.capitalize()} belief update complete: avg Δ={delta:+.4f}"
+    )
+
+
+def log_belief_changes(
+    population_type: str, prior_probs: "np.ndarray", posterior_probs: "np.ndarray"
+) -> None:
+    """
+    Log detailed statistics about individual belief changes at trace level.
+
+    Args:
+        population_type: Either "code" or "test"
+        prior_probs: Array of prior probabilities
+        posterior_probs: Array of posterior probabilities
+    """
+    # guard clause for empty arrays
+    if prior_probs.size == 0 or posterior_probs.size == 0:
+        logger.debug(
+            f"{population_type.capitalize()} belief changes: [Empty Population]"
+        )
+        return
+
+
+    deltas = posterior_probs - prior_probs
+    logger.trace(
+        f"{population_type.capitalize()} belief changes: mean={np.mean(deltas):+.4f}, "
+        f"std={np.std(deltas):.4f}, "
+        f"max_increase={np.max(deltas):+.4f}, "
+        f"max_decrease={np.min(deltas):+.4f}"
+    )
+
+
+def _compute_pass_rates(matrix: "np.ndarray") -> "np.ndarray":
+    """
+    Compute the pass rate for each row in the matrix.
+
+    Args:
+        matrix: Binary numpy array, 1 if passed, else 0
+
+    Returns:
+        1D numpy array of pass rates for each row (fraction of columns that are 1)
+    """
+
+
+    # add guard clause for empty matrix
+    if matrix.size == 0:
+        logger.warning("Matrix is empty. Returning empty pass rates.")
+        return np.array([], dtype=float)
+
+    num_rows, num_cols = matrix.shape
+
+    if num_cols == 0:
+        logger.warning(
+            f"Matrix has 0 columns. Returning zero pass rates for {num_rows} rows."
+        )
+        return np.zeros(num_rows, dtype=float)
+
+    pass_rates = np.sum(matrix, axis=1) / float(num_cols)
+    return np.asarray(pass_rates)
+
+
+def _compute_test_discriminations(observation_matrix: "np.ndarray") -> "np.ndarray":
+    """
+    Compute discrimination for each test (column) in the observation matrix.
+
+    Discrimination measures how well a test separates good from bad code using entropy.
+    Uses the entropy of the test pass rate:
+    - High entropy (near 1.0): test clearly distinguishes correct from incorrect code (pass rate near 0.5)
+    - Low entropy (near 0.0): test doesn't discriminate (all pass or all fail, pass rate near 0 or 1)
+
+    Formula: entropy = -p*log2(p) - (1-p)*log2(1-p) where p is the test pass rate
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+
+    Returns:
+        1D numpy array of discrimination values for each test (entropy of pass rate)
+    """
+
+    num_codes, num_tests = observation_matrix.shape
+
+    if num_codes == 0 or num_tests == 0:
+        logger.warning(
+            f"Cannot compute discrimination for empty matrix ({num_codes}, {num_tests})"
+        )
+        return np.zeros(num_tests, dtype=float)
+
+    # Compute pass rate for each test (fraction of codes that pass)
+    test_pass_rates = _compute_pass_rates(observation_matrix.T)
+
+    # Compute binary entropy: H(p) = -p*log2(p) - (1-p)*log2(1-p)
+    # Handle edge cases where p=0 or p=1 (entropy should be 0)
+    eps = 1e-10  # Small epsilon to avoid log(0)
+    p = np.clip(test_pass_rates, eps, 1 - eps)
+
+    entropy = -(p * np.log2(p) + (1 - p) * np.log2(1 - p))
+
+    return np.asarray(entropy)
+
+
+def log_code_pass_rates(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about code pass rates.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+
+    code_pass_rates = _compute_pass_rates(observation_matrix)
+
+    if len(code_pass_rates) == 0:
+        logger.warning("No codes to compute pass rates for")
+        return
+
+    logger.trace(f"Code pass rates: {code_pass_rates}")
+    logger.info(
+        f"Code pass rates: mean={np.mean(code_pass_rates):.3f}, "
+        f"min={np.min(code_pass_rates):.3f}, "
+        f"max={np.max(code_pass_rates):.3f}, "
+        f"std={np.std(code_pass_rates):.3f}"
+    )
+
+    # Log distribution
+    num_perfect = np.sum(code_pass_rates == 1.0)
+    num_zero = np.sum(code_pass_rates == 0.0)
+    logger.debug(
+        f"Code distribution: {num_perfect} perfect (100%), {num_zero} failed all (0%)"
+    )
+
+
+def log_test_pass_rates(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about test pass rates.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+
+    # Transpose to compute pass rates for tests (columns become rows)
+    test_pass_rates = _compute_pass_rates(observation_matrix.T)
+
+    if len(test_pass_rates) == 0:
+        logger.warning("No tests to compute pass rates for")
+        return
+    logger.trace(f"Test pass rates: {test_pass_rates}")
+    logger.info(
+        f"Test pass rates: mean={np.mean(test_pass_rates):.3f}, "
+        f"min={np.min(test_pass_rates):.3f}, "
+        f"max={np.max(test_pass_rates):.3f}, "
+        f"std={np.std(test_pass_rates):.3f}"
+    )
+
+    # Log distribution
+    num_all_pass = np.sum(test_pass_rates == 1.0)
+    num_all_fail = np.sum(test_pass_rates == 0.0)
+    logger.debug(
+        f"Test distribution: {num_all_pass} all codes pass, "
+        f"{num_all_fail} all codes fail"
+    )
+
+
+def log_test_discriminations(observation_matrix: "np.ndarray") -> None:
+    """
+    Log statistics about test discrimination values.
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+
+    test_discriminations = _compute_test_discriminations(observation_matrix)
+
+    if len(test_discriminations) == 0:
+        logger.warning("No tests to compute discriminations for")
+        return
+
+    logger.trace(f"Test discriminations: {test_discriminations}")
+    logger.info(
+        f"Test discriminations: mean={np.mean(test_discriminations):.3f}, "
+        f"min={np.min(test_discriminations):.3f}, "
+        f"max={np.max(test_discriminations):.3f}"
+    )
+
+    # Identify highly discriminating tests
+    high_disc_threshold = 0.4  # Tests with std > 0.4 are good discriminators
+    num_good_tests = np.sum(test_discriminations > high_disc_threshold)
+    num_tests = len(test_discriminations)
+    logger.debug(
+        f"Highly discriminating tests (disc > {high_disc_threshold}): "
+        f"{num_good_tests}/{num_tests} ({100 * num_good_tests / num_tests:.1f}%)"
+    )
+
+
+def _log_observation_matrix_statistics(observation_matrix: "np.ndarray") -> None:
+    """
+    Log comprehensive statistics about the observation matrix.
+
+    This includes:
+    - Matrix dimensions and sparsity
+    - Code pass rates (how many tests each code passes)
+    - Test pass rates (how many codes pass each test)
+    - Test discriminations (how well each test separates codes)
+
+    Args:
+        observation_matrix: Binary numpy array (codes x tests), 1 if code passed test, else 0
+    """
+
+    num_codes, num_tests = observation_matrix.shape
+    total_cells = num_codes * num_tests
+
+    if total_cells == 0:
+        logger.warning("Observation matrix is empty")
+        return
+
+    num_passes = np.sum(observation_matrix)
+    sparsity = 1.0 - (num_passes / total_cells)
+
+    logger.info(
+        f"Observation Matrix: {num_codes} codes × {num_tests} tests "
+        f"= {total_cells} evaluations"
+    )
+    logger.info(
+        f"Total passes: {num_passes}/{total_cells} ({100 * num_passes / total_cells:.1f}%), "
+        f"sparsity: {sparsity:.3f}"
+    )
+
+    # Use individual logging functions
+    log_code_pass_rates(observation_matrix)
+    log_test_pass_rates(observation_matrix)
+    log_test_discriminations(observation_matrix)
+
+
+def log_observation_matrix(
+    generation: int,
+    observation_matrix: "np.ndarray",
+    code_population: "CodePopulation",
+    test_population: "TestPopulation",
+    test_type: str,
+) -> None:
+    code_ids = [ind.id for ind in code_population]
+    test_ids = [ind.id for ind in test_population]
+
+    logger.bind(is_evolution_event=True).info(
+        "OBSERVATION_MATRIX",
+        event_data={
+            "generation": generation,
+            "test_type": test_type,
+            "matrix": observation_matrix.tolist(),
+            "code_ids": code_ids,
+            "test_ids": test_ids,
+        },
+    )
+
+    _log_observation_matrix_statistics(observation_matrix)
+
+    # Log as pandas DataFrame for better readability in trace logs
+    try:
+        df = pd.DataFrame(
+            observation_matrix,
+            index=[f"{cid[:8]}" for cid in code_ids],
+            columns=[f"{tid[:8]}" for tid in test_ids],
+        )
+        logger.info(f"Observation Matrix ({test_type}):\n{df}")
+    except Exception as e:
+        logger.warning(f"Could not log observation matrix as DataFrame: {e}")
+
+    return
+
+
+def log_evaluation_failures(
+    generation: int, test_type: str, execution_results: "ExecutionResults"
+) -> None:
+    """
+    Logs comprehensive stack traces / error logs for evaluations that failed.
+    """
+    for code_id, test_results in execution_results.items():
+        for test_id, result in test_results.items():
+            if result.status in ["failed", "error"] and result.error_log:
+                logger.bind(is_evolution_event=True).info(
+                    f"EVALUATION_FAILED: {code_id} failed {test_type} test {test_id}",
+                    event_data={
+                        "generation": generation,
+                        "test_type": test_type,
+                        "code_id": code_id,
+                        "test_id": test_id,
+                        "error_log": result.error_log,
+                    },
+                )
+
+
+def log_problem(problem: "Problem") -> None:
+    logger.info(f"Loaded problem: {problem.question_title}")
+    logger.info(f"Problem ID: {problem.question_id}")
+    logger.info(f"Public tests: {len(problem.public_test_cases)}")
+    logger.info(f"Private tests: {len(problem.private_test_cases)}")
+    logger.debug(f"Problem content:\n{problem.question_content}")
+    logger.debug(f"Starter code:\n{problem.starter_code}")
+
+
+def save_run_config(run_id: str, config: dict[str, Any]) -> None:
+    """
+    Saves the experiment configuration to a JSON file in the run directory.
+
+    Supports both dictionaries and dataclasses (via recursion).
+
+    Args:
+        run_id: The ID of the run (used to locate the directory)
+        config: The configuration object or dictionary to save.
+    """
+
+    class DataclassEncoder(json.JSONEncoder):
+        def default(self, obj: dict[str, Any]) -> Any:
+            if dataclasses.is_dataclass(obj):
+                return dataclasses.asdict(obj)
+            if isinstance(obj, (set, frozenset)):
+                return list(obj)
+            return super().default(obj)
+
+    config_path = f"logs/{run_id}/run_config.json"
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=4, cls=DataclassEncoder)
+        logger.info(f"Run configuration saved to {config_path}")
+    except Exception as e:
+        logger.error(f"Failed to save run configuration: {e}")
+        logger.error(f"Failed to save run configuration: {e}")

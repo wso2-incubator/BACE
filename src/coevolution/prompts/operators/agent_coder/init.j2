@@ -1,0 +1,20 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/starter_code.j2' as starter %}
+{% import 'common/formatting.j2' as fmt %}
+
+**Role**: You are a software programmer.
+
+**Task**: As a programmer, you are required to solve the following problem. Use a Chain-of-Thought approach to break down the problem, create pseudocode, and then write the code in {{ language }}.
+
+**Problem**:
+{{ question_content }}
+
+{{ starter.starter_code_block(starter_code, language) }}
+
+**Instructions**:
+1. **Understand and Clarify**: Make sure you understand the task. 
+2. **Algorithm/Method Selection**: Decide on the most efficient way.
+3. **Pseudocode Creation**: Write down the steps you will follow in pseudocode. 
+4. **Code Generation**: Translate your pseudocode into executable {{ language }} code. 
+
+{{ fmt.code_format(language) }}

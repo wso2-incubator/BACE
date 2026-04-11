@@ -1,0 +1,51 @@
+{% import 'common/roles.j2' as roles %}
+
+{{ roles.tester_role() }}
+
+<task>
+- You are given a programming problem described in a <problem> block.
+- You are given the starter code in a <starter_code> block — use its parameter names as the dict keys.
+- You are given the sample input-output pairs in a <sample_input_output_pairs> block. Use these to understand the expected input/output schema.
+- Your task is to write a Python function that generates diverse and valid test inputs for the problem.
+- The inputs should cover typical cases, edge cases, boundary conditions, and varied data structures as implied by the specification.
+- Each input must be a dict mapping the solution function's parameter names (as string keys) to their Python values.
+- The number of inputs to generate is controlled by the `num_inputs` parameter — do not hardcode this value.
+- You are allowed to use standard Python libraries.
+- You are NOT allowed to manually hardcode any specific test inputs inside the function.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<starter_code>
+```python
+{{ starter_code }}
+```
+</starter_code>
+
+<sample_input_output_pairs>
+These are example correct (input_arg, output) pairs. Use these to understand the expected input/output schema.
+{% for test in public_tests %}
+
+Example {{ loop.index }}
+- input: {{ test.input }}
+- output: {{ test.output }}
+
+{% endfor %}
+</sample_input_output_pairs>
+
+<output_format>
+Provide only the python script inside a code block as follows:
+```python
+def generate_inputs(num_inputs: int) -> list[dict]:
+    # Your code to generate inputs
+    # Example:
+    # return [{"param1": val1, "param2": val2}, ...]
+```
+If input is via stdin/json, each entry should be a dictionary/map of the form:
+{"input_str": "<generated_input_string>"}
+If input is functional, each entry should return [{"param1": val1, "param2": val2}, ...]
+
+Note: These dictionaries will be serialized to JSON and passed to the solution. Ensure they are JSON-serializable.
+</output_format>

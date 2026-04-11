@@ -1,0 +1,32 @@
+{% import 'common/roles.j2' as roles %}
+{% import 'common/starter_code.j2' as starter %}
+{% import 'common/formatting.j2' as fmt %}
+
+{{ roles.coder_role() }}
+
+<task>
+- Create a new solution that intelligently combines the best aspects of two candidate solutions provided in <candidate_solution_1> and <candidate_solution_2>.
+- Write a concise docstring for the solution with a clear explanation of its approach and reasoning.
+</task>
+
+<problem>
+{{ question_content }}
+</problem>
+
+<candidate_solution_1>
+```{{ language }}
+{{ parent1 }}
+```
+</candidate_solution_1>
+
+<candidate_solution_2>
+```{{ language }}
+{{ parent2 }}
+```
+</candidate_solution_2>
+
+{{ starter.starter_code_block(starter_code, language) }}
+
+{{ starter.starter_code_note() }}
+
+{{ fmt.code_format(language) }}
