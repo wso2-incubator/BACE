@@ -151,14 +151,9 @@ def setup_logging(
 
     if is_main_process:
         sanitized_run_id = sanitize_id(run_id)
-        sanitized_pid = sanitize_id(problem_id)
 
-        # MAIN PROCESS: Writes to the master trace log and the evolutionary history
+        # MAIN PROCESS: Writes to the master trace log
         trace_path = f"logs/{sanitized_run_id}/trace.jsonl"
-        history_path = (
-            f"logs/{sanitized_run_id}/{sanitized_pid}/evolutionary_history.jsonl"
-        )
-
         logger.add(
             trace_path,
             level=file_level.upper(),
@@ -170,17 +165,24 @@ def setup_logging(
             serialize=True,
             filter=is_trace_event,
         )
-        logger.add(
-            history_path,
-            level="INFO",
-            format="{message}",
-            rotation="1 GB",
-            retention="10 days",
-            compression=None,
-            enqueue=True,
-            serialize=True,
-            filter=is_evo_event,
-        )
+
+        # Evolutionary history log (only if an actual problem is being processed)
+        if problem_id != "SETUP":
+            sanitized_pid = sanitize_id(problem_id)
+            history_path = (
+                f"logs/{sanitized_run_id}/{sanitized_pid}/evolutionary_history.jsonl"
+            )
+            logger.add(
+                history_path,
+                level="INFO",
+                format="{message}",
+                rotation="1 GB",
+                retention="10 days",
+                compression=None,
+                enqueue=True,
+                serialize=True,
+                filter=is_evo_event,
+            )
     else:
         # WORKER PROCESS: Writes to a shared trace file for all workers
         log_file_path = f"logs/{run_id}/workers.jsonl"
